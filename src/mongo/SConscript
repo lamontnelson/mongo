@@ -323,6 +323,9 @@ if env.TargetOSIs('windows'):
     env.Alias('generated-sources', generatedDbManifest)
     env.Depends("db/db.res", generatedDbManifest)
 
+env = env.Clone()
+env.InjectThirdParty(libraries=['opentracing-cpp'])
+
 mongod = env.Program(
     target="mongod",
     source=[
@@ -330,6 +333,7 @@ mongod = env.Program(
     ] + env.WindowsResourceFile("db/db.rc"),
     LIBDEPS=[
         '$BUILD_DIR/third_party/shim_snappy',
+        '$BUILD_DIR/third_party/shim_opentracing_cpp',
         'base',
         'db/auth/auth_op_observer',
         'db/auth/authmongod',

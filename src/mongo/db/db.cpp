@@ -37,8 +37,11 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <opentracing/noop.h>
+#include <opentracing/tracer.h>
 #include <signal.h>
 #include <string>
+
 
 #include "mongo/base/init.h"
 #include "mongo/base/initializer.h"
@@ -1065,6 +1068,10 @@ int mongoDbMain(int argc, char* argv[], char** envp) {
         severe(LogComponent::kControl) << "Failed to create service context: " << redact(cause);
         quickExit(EXIT_FAILURE);
     }
+
+    opentracing::Tracer::InitGlobal(opentracing::MakeNoopTracer());
+    auto tracer = opentracing::Tracer::Global();
+    tracer->StartSpan("mongod");
 
     auto service = getGlobalServiceContext();
     setUpCatalog(service);
