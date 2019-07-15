@@ -4,7 +4,7 @@
 set -vxeuo pipefail
 
 OT_GIT_URL="https://github.com/mongodb-forks/opentracing-cpp.git"
-OT_GIT_REV=
+OT_GIT_REV=v1.5.1
 OT_GIT_DIR=$(mktemp -d /tmp/import-ot.XXXXXX)
 trap "rm -rf $OT_GIT_DIR" EXIT
 

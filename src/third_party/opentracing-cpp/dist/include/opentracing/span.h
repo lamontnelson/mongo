@@ -7,7 +7,6 @@
 #include <opentracing/version.h>
 #include <chrono>
 #include <functional>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -27,11 +26,6 @@ class SpanContext {
   virtual void ForeachBaggageItem(
       std::function<bool(const std::string& key, const std::string& value)> f)
       const = 0;
-
-  // Clone creates a copy of SpanContext.
-  //
-  // Returns nullptr on failure.
-  virtual std::unique_ptr<SpanContext> Clone() const noexcept = 0;
 };
 
 struct LogRecord {
