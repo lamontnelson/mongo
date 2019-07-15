@@ -15,6 +15,7 @@ env.SConscript(
         'cmdline_utils',
         'concurrency',
         'net',
+        'opentracing',
         'options_parser',
     ],
     exports=[
