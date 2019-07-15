@@ -31,6 +31,7 @@ a notice will be included in
 | [ICU4]                     | ICU               | 64.2             | 57.1              |          ✗           |                ✗                |
 | [Intel Decimal FP Library] | BSD-3-Clause      | 2.0 Update 2     | 2.0 Update 1      |                      |                ✗                |
 | [JSON-Schema-Test-Suite]   | MIT               |                  | 728066f9c5        |                      |                                 |
+| [jaeger-client-cpp]        | Apache-2.0        | v0.4.2           | v0.4.2            |                      |                ✗                |
 | [kms-message]              |                   |                  | 75e391a037        |                      |                ✗                |
 | [libstemmer]               | BSD-3-Clause      |                  | Unknown           |          ✗           |                ✗                |
 | [linenoise]                | BSD-3-Clause      |                  | Unknown + changes |                      |                ✗                |
