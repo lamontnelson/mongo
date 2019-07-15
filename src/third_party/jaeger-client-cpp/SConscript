@@ -19,6 +19,7 @@ env.Substfile(
 
 env.InjectThirdParty(
     libraries=[
+        'boost',
         'opentracing-cpp',
         'thrift',
         'yaml'
