@@ -323,10 +323,9 @@ if env.TargetOSIs('windows'):
     env.Alias('generated-sources', generatedDbManifest)
     env.Depends("db/db.res", generatedDbManifest)
 
-env = env.Clone()
-env.InjectThirdParty(libraries=['opentracing-cpp'])
-
-mongod = env.Program(
+mongodEnv = env.Clone()
+mongodEnv.InjectThirdParty(libraries=['opentracing-cpp'])
+mongod = mongodEnv.Program(
     target="mongod",
     source=[
         "db/db.cpp",
