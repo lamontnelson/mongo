@@ -37,6 +37,8 @@ thirdPartyEnvironmentModifications = {
    },
    'opentracing-cpp' : {
    },
+   'thrift' : {
+   }
 }
 
 def injectMozJS(thisEnv):
@@ -634,6 +636,36 @@ kmsEnv.Library(
     target="shim_kms_message",
     source=[
         'shim_kms_message.cpp',
+    ])
+
+
+thriftEnv = None
+if False: #use_system_version_of_library("thrift"):
+    thriftEnv = env.Clone(
+        SYSLIBDEPS=[
+            env['LIBDEPS_THRIFT_SYSLIBDEP'],
+        ])
+else:
+    thriftEnv = env.Clone()
+    thriftEnv.InjectThirdParty(libraries=['thrift'])
+    thriftEnv.InjectMongoIncludePaths()
+
+    def registerConsumerModifications(env, **kwargs):
+        for k,v in kwargs.items():
+            thirdPartyEnvironmentModifications['thrift'][k] = v
+
+    thriftEnv.AddMethod(registerConsumerModifications, 'RegisterConsumerModifications')
+    thriftEnv.SConscript('thrift/SConscript', exports={'env' : thriftEnv})
+
+    thriftEnv = thriftEnv.Clone(
+        LIBDEPS_INTERFACE=[
+            'thrift-cpp/thrift-cpp',
+        ])
+
+thriftEnv.Library(
+    target="shim_thrift_cpp",
+    source=[
+        'shim_thrift_cpp.cpp',
     ])
 
 opentracingEnv = None

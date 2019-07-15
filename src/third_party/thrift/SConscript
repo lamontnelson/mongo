@@ -1,0 +1,76 @@
+# -*- mode: python -*-
+
+Import("env")
+
+env = env.Clone()
+
+env.InjectThirdParty(libraries=['boost'])
+
+env.RegisterConsumerModifications(
+    CPPPATH=[
+        '$BUILD_DIR/third_party/thrift/dist/lib/cpp/src',
+    ],
+)
+
+env.AppendUnique(
+    CPPPATH=[
+        '$BUILD_DIR/third_party/thrift/dist/lib/cpp/src',
+    ],
+)
+
+env.Substfile(
+    source='dist/build/cmake/config.h.in',
+    target='dist/lib/cpp/src/thrift/config.h',
+
+    # Order matters here, so use a list of tuples, not a dictionary.
+    SUBST_DICT=[
+        ('#cmakedefine AI_ADDRCONFIG 0', '/* #define AIADDRCONFIG 0 */'),
+        ('#cmakedefine USE_BOOST_THREAD 1', '#define USE_BOOST_THREAD 0'),
+        ('#cmakedefine HAVE_STRERROR 1', '/* #undef HAVE_STRERROR */'),
+        ('#cmakedefine STRERROR_R_CHAR_P 1', '/* #undef STRERROR_R_CHAR_P */'),
+        ('#cmakedefine', '#define'),
+        ('\${PACKAGE}', 'thrift'),
+        ('\${PACKAGE_BUGREPORT}', 'none'),
+        ('\${PACKAGE_NAME}', 'thrift'),
+        ('\${PACKAGE_TARNAME}', 'none'),
+        ('\${PACKAGE_URL}', 'none'),
+        ('\${PACKAGE_VERSION}', 'v0.12.0'),
+        ('\${PACKAGE_STRING}', 'thrift-0.12.0'),
+    ],
+)
+
+env.Library(
+    target='thrift',
+    source=env.File([
+        'TApplicationException.cpp',
+        'TOutput.cpp',
+        'async/TAsyncChannel.cpp',
+        'async/TAsyncProtocolProcessor.cpp',
+        'async/TConcurrentClientSyncInfo.cpp',
+        'concurrency/ThreadManager.cpp',
+        'concurrency/TimerManager.cpp',
+        'concurrency/Monitor.cpp',
+        'concurrency/Mutex.cpp',
+        'concurrency/Util.cpp',
+        'processor/PeekProcessor.cpp',
+        'protocol/TBase64Utils.cpp',
+        'protocol/TDebugProtocol.cpp',
+        'protocol/TJSONProtocol.cpp',
+        'protocol/TMultiplexedProtocol.cpp',
+        'protocol/TProtocol.cpp',
+        'transport/TTransportException.cpp',
+        'transport/TFDTransport.cpp',
+        'transport/TSimpleFileTransport.cpp',
+        'transport/THttpTransport.cpp',
+        'transport/THttpClient.cpp',
+        'transport/THttpServer.cpp',
+        'transport/TSocket.cpp',
+        'transport/TSocketPool.cpp',
+        'transport/TServerSocket.cpp',
+        'transport/TTransportUtils.cpp',
+        'transport/TBufferTransports.cpp',
+    ], 'dist/lib/cpp/src/thrift'),
+    LIBDEPS=[
+        '$BUILD_DIR/third_party/shim_boost',
+    ]
+)
