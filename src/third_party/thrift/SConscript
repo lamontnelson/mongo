@@ -26,7 +26,7 @@ env.Substfile(
     SUBST_DICT=[
         ('#cmakedefine AI_ADDRCONFIG 0', '/* #define AIADDRCONFIG 0 */'),
         ('#cmakedefine USE_BOOST_THREAD 1', '#define USE_BOOST_THREAD 0'),
-        ('#cmakedefine HAVE_STRERROR 1', '/* #undef HAVE_STRERROR */'),
+        ('#cmakedefine HAVE_STRERROR_R 1', '/* #undef HAVE_STRERROR_R */'),
         ('#cmakedefine STRERROR_R_CHAR_P 1', '/* #undef STRERROR_R_CHAR_P */'),
         ('#cmakedefine', '#define'),
         ('\${PACKAGE}', 'thrift'),
