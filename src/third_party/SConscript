@@ -34,7 +34,9 @@ thirdPartyEnvironmentModifications = {
    },
    'timelib' : {
         'CPPPATH' : ['#/src/third_party/timelib' + timelibSuffix],
-   }
+   },
+   'opentracing-cpp' : {
+   },
 }
 
 def injectMozJS(thisEnv):
@@ -634,3 +636,31 @@ kmsEnv.Library(
         'shim_kms_message.cpp',
     ])
 
+opentracingEnv = None
+if False: #use_system_version_of_library("opentracing"):
+    opentracingEnv = env.Clone(
+        SYSLIBDEPS=[
+            env['LIBDEPS_OPENTRACING_CPP_SYSLIBDEP'],
+        ])
+else:
+    opentracingEnv = env.Clone()
+    opentracingEnv.InjectThirdParty(libraries=['opentracing-cpp'])
+    opentracingEnv.InjectMongoIncludePaths()
+
+    def registerConsumerModifications(env, **kwargs):
+        for k,v in kwargs.items():
+            thirdPartyEnvironmentModifications['opentracing-cpp'][k] = v
+
+    opentracingEnv.AddMethod(registerConsumerModifications, 'RegisterConsumerModifications')
+    opentracingEnv.SConscript('opentracing-cpp/SConscript', exports={'env' : opentracingEnv})
+
+    opentracingEnv = opentracingEnv.Clone(
+        LIBDEPS_INTERFACE=[
+            'opentracing-cpp/opentracing-cpp',
+        ])
+
+opentracingEnv.Library(
+    target="shim_opentracing_cpp",
+    source=[
+        'shim_opentracing_cpp.cpp',
+    ])

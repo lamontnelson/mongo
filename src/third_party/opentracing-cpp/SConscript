@@ -1,0 +1,57 @@
+Import("env")
+Import("has_option")
+Import("debugBuild")
+
+env = env.Clone()
+
+env.RegisterConsumerModifications(
+    CPPPATH=[
+        '$BUILD_DIR/third_party/opentracing-cpp/dist/3rd_party/include',
+        '$BUILD_DIR/third_party/opentracing-cpp/dist/include',
+    ],
+)
+
+env.AppendUnique(
+    CPPPATH=[
+        '$BUILD_DIR/third_party/opentracing-cpp/dist/3rd_party/include',
+        '$BUILD_DIR/third_party/opentracing-cpp/dist/include',
+    ],
+)
+
+env.Substfile(
+    source='dist/version.h.in',
+    target='dist/include/opentracing/version.h',
+    SUBST_DICT=[
+        ('\${OPENTRACING_VERSION_STRING}', '1.5.1'),
+        ('\${OPENTRACING_ABI_VERSION}', '2'),
+    ],
+)
+
+env.Substfile(
+    source='dist/config.h.in',
+    target='dist/include/opentracing/config.h',
+    SUBST_DICT=[
+        ('#cmakedefine OPENTRACING_BUILD_DYNAMIC_LOADING', "#define OPENTRACING_BUILD_DYNAMIC_LOADING 1"),
+    ],
+)
+
+sources=[
+    'dynamic_load.cpp',
+    'ext/tags.cpp',
+    'noop.cpp',
+    'propagation.cpp',
+    'tracer.cpp',
+    'tracer_factory.cpp',
+]
+
+if env.TargetOSIs('windows'):
+    sources.append('dynamic_load_windows.cpp')
+elif env.TargetOSIs('posix'):
+    sources.append('dynamic_load_unix.cpp')
+else:
+    sources.append('dynamic_load_unsupported.cpp')
+
+env.Library(
+    target='opentracing-cpp',
+    source=env.File(sources, 'dist/src'),
+)
