@@ -43,6 +43,7 @@ a notice will be included in
 | [scons]                    | MIT               | 3.0.4            | 3.0.4             |                      |                                 |
 | [Snappy]                   | BSD-3-Clause      | 1.1.7            | 1.1.7             |          ✗           |                ✗                |
 | [sqlite]                   | Public Domain     | 3280000          | 3260000           |          ✗           |                ✗                |
+| [thrift]                   | Apache-2.0        | v0.12.0          | v0.12.0           |                      |                ✗                |
 | [timelib]                  | MIT               | 2018.01          | 2018.01           |                      |                ✗                |
 | [TomCrypt]                 | Public Domain     | 1.18.2           | 1.18.2            |          ✗           |                ✗                |
 | [Unicode]                  | Unicode-DFS-2015  | 12.0.0           | 8.0.0             |          ✗           |                ✗                |
@@ -74,6 +75,7 @@ a notice will be included in
 [scons]: https://github.com/SCons/scons
 [Snappy]: https://github.com/google/snappy/releases
 [sqlite]: https://sqlite.org/
+[thrift]: https://github.com/apache/thrift
 [timelib]: https://github.com/derickr/timelib
 [TomCrypt]: https://github.com/libtom/libtomcrypt/releases
 [Unicode]: http://www.unicode.org/versions/enumeratedversions.html
