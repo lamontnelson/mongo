@@ -659,13 +659,13 @@ else:
 
     thriftEnv = thriftEnv.Clone(
         LIBDEPS_INTERFACE=[
-            'thrift-cpp/thrift-cpp',
+            'thrift/thrift',
         ])
 
 thriftEnv.Library(
-    target="shim_thrift_cpp",
+    target="shim_thrift",
     source=[
-        'shim_thrift_cpp.cpp',
+        'shim_thrift.cpp',
     ])
 
 opentracingEnv = None
@@ -696,3 +696,8 @@ opentracingEnv.Library(
     source=[
         'shim_opentracing_cpp.cpp',
     ])
+
+
+# Note that we don't need to do the shimming or anything else because *nobody links to this*.
+jaegerClientEnv = env.Clone()
+jaegerClientEnv.SConscript('jaeger-client-cpp/SConscript', exports={'env' : jaegerClientEnv})
