@@ -36,6 +36,7 @@ a notice will be included in
 | [linenoise]                | BSD-3-Clause      |                  | Unknown + changes |                      |                ✗                |
 | [MozJS]                    | MPL-2.0           | ESR 60.7         | ESR 60.3.0        |                      |                ✗                |
 | [MurmurHash3]              | Public Domain     |                  | Unknown + changes |          ✗           |                ✗                |
+| [opentracing-cpp]          | Apache-2.0        | 1.5.1            | 1.5.              |                      |                                 |
 | [Pcre]                     | BSD-3-Clause      | 8.43             | 8.42              |                      |                ✗                |
 | [S2]                       | Apache-2.0        |                  | Unknown           |          ✗           |                ✗                |
 | [SafeInt]                  | MIT               | 3.0.20p          | 3.0.20p           |                      |                                 |
@@ -66,6 +67,7 @@ a notice will be included in
 [linenoise]: https://github.com/antirez/linenoise
 [MozJS]: https://www.mozilla.org/en-US/security/known-vulnerabilities/firefox-esr
 [MurmurHash3]: https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp
+[opentracing-cpp]: https://github.com/opentracing/opentracing-cpp
 [Pcre]: http://www.pcre.org/
 [S2]: https://github.com/google/s2geometry
 [SafeInt]: https://github.com/dcleblanc/SafeInt
