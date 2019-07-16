@@ -31,27 +31,73 @@
 
 #include "mongo/platform/basic.h"
 
+#include <opentracing/dynamic_load.h>
+
 #include "mongo/db/operation_context.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/tracing/tracing.h"
 #include "mongo/util/decorable.h"
+#include "mongo/util/log.h"
 
 namespace mongo {
-namespace tracing {
 namespace {
-const auto getServiceDecoration = ServiceContext::declareDecoration<std::unique_ptr<Span>>();
-const auto getOperationDecoration = OperationContext::declareDecoration<std::unique_ptr<Span>>();
+const auto kJaegerLibraryName = "libjaegertracing.so";
+const auto kTracerConfig = R"(
+service_name: MongoDB
+disabled: false
+reporter:
+    logSpans: true
+    localAgentHostPort: 10.1.2.24:6831 # JBR's workstation for testing only!
+sampler:
+  type: const
+  param: 1)"_sd;
+
+const auto getServiceDecoration =
+    ServiceContext::declareDecoration<std::unique_ptr<tracing::Span>>();
+const auto getOperationDecoration =
+    OperationContext::declareDecoration<std::unique_ptr<tracing::Span>>();
 }  // namespace
 
+namespace tracing {
 Tracer& getTracer() {
     return *Tracer::Global();
 }
 
-std::unique_ptr<Span>& getServiceSpan(mongo::ServiceContext* service) {
+std::unique_ptr<Span>& getServiceSpan(ServiceContext* service) {
     return getServiceDecoration(service);
-};
-std::unique_ptr<Span>& getOperationSpan(mongo::OperationContext* opCtx) {
+}
+
+std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx) {
     return getOperationDecoration(opCtx);
+}
 }  // namespace tracing
-}  // namespace tracing
+
+void setupTracing(ServiceContext* service, std::string rootName) {
+    std::string errorMessage;
+
+    auto handleMaybe = opentracing::DynamicallyLoadTracingLibrary(kJaegerLibraryName, errorMessage);
+    if (!handleMaybe) {
+        severe() << "Failed to load tracer library " << kJaegerLibraryName << ": " << errorMessage;
+        fassertFailed(31184);
+    }
+
+    auto& factory = handleMaybe->tracer_factory();
+    auto tracer = factory.MakeTracer(kTracerConfig.rawData(), errorMessage);
+    if (!tracer) {
+        severe() << "Error creating tracer: " << errorMessage;
+        fassertFailed(31185);
+    }
+
+    opentracing::Tracer::InitGlobal(*tracer);
+
+    tracing::getServiceSpan(service) = (*tracer)->StartSpan(rootName);
+    log() << "initialized opentracing";
+}
+
+void shutdownTracing(ServiceContext* service) {
+    auto serviceSpan = std::move(tracing::getServiceSpan(service));
+    serviceSpan->Log({{"msg", "shutting down"}});
+    serviceSpan->Finish();
+    tracing::getTracer().Close();
+}
 }  // namespace mongo

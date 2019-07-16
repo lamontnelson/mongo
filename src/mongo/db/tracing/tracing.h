@@ -35,6 +35,10 @@
 namespace mongo {
 class ServiceContext;
 class OperationContext;
+
+void setupTracing(ServiceContext* service, std::string rootName);
+void shutdownTracing(ServiceContext* service);
+
 namespace tracing {
 using Tracer = opentracing::Tracer;
 using Span = opentracing::Span;
@@ -42,5 +46,6 @@ using Span = opentracing::Span;
 Tracer& getTracer();
 std::unique_ptr<Span>& getServiceSpan(ServiceContext* service);
 std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx);
+
 }  // namespace tracing
 }  // namespace mongo

@@ -37,8 +37,6 @@
 #include <iostream>
 #include <limits>
 #include <memory>
-#include <opentracing/noop.h>
-#include <opentracing/tracer.h>
 #include <signal.h>
 #include <string>
 
@@ -1007,8 +1005,8 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     if (auto svcExec = serviceContext->getServiceExecutor()) {
         Status status = svcExec->shutdown(Seconds(10));
         if (!status.isOK()) {
-            log(LogComponent::kNetwork) << "Service executor failed to shutdown within timelimit: "
-                                        << status.reason();
+            log(LogComponent::kNetwork)
+                << "Service executor failed to shutdown within timelimit: " << status.reason();
         }
     }
 #endif
@@ -1044,6 +1042,8 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     // the memory and makes leak sanitizer happy.
     ScriptEngine::dropScopeCache();
 
+    shutdownTracing(serviceContext);
+
     log(LogComponent::kControl) << "now exiting";
 
     audit::logShutdown(client);
@@ -1070,10 +1070,8 @@ int mongoDbMain(int argc, char* argv[], char** envp) {
         quickExit(EXIT_FAILURE);
     }
 
-    opentracing::Tracer::InitGlobal(opentracing::MakeNoopTracer());
-
     auto service = getGlobalServiceContext();
-    tracing::getServiceSpan(service) = tracing::getTracer().StartSpan("mongod");
+    setupTracing(service, "mongod");
     setUpCatalog(service);
     setUpReplication(service);
     service->setServiceEntryPoint(std::make_unique<ServiceEntryPointMongod>(service));
