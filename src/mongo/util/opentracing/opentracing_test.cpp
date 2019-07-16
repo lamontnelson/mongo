@@ -29,10 +29,15 @@
 
 #include "mongo/platform/basic.h"
 
+#include <string>
+
+#include <opentracing/dynamic_load.h>
 #include <opentracing/noop.h>
 
 #include "mongo/unittest/unittest.h"
+#include "mongo/util/str.h"
 
+namespace mongo {
 namespace {
 
 TEST(SimpleTests, MakeNoopTracer) {
@@ -45,4 +50,13 @@ TEST(SimpleTests, MakeSpan) {
     span->Finish();
 }
 
+TEST(SimpleTests, LoadJaegerLibrary) {
+    // Load the tracer library.
+    std::string error_message;
+    auto handle_maybe =
+        opentracing::DynamicallyLoadTracingLibrary("libjaegertracing.so", error_message);
+    invariant(handle_maybe,
+              str::stream() << "Failed to load tracer library " << error_message << "\n");
+}
 }  // namespace
+}  // namespace mongo
