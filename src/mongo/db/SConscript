@@ -33,6 +33,7 @@ env.SConscript(
         'sorter',
         'stats',
         'storage',
+        'tracing',
         'update',
         'views',
     ],

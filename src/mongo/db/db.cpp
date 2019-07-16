@@ -141,6 +141,7 @@
 #include "mongo/db/storage/storage_engine_lock_file.h"
 #include "mongo/db/storage/storage_options.h"
 #include "mongo/db/system_index.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/db/transaction_participant.h"
 #include "mongo/db/ttl.h"
 #include "mongo/db/wire_version.h"
@@ -1070,10 +1071,9 @@ int mongoDbMain(int argc, char* argv[], char** envp) {
     }
 
     opentracing::Tracer::InitGlobal(opentracing::MakeNoopTracer());
-    auto tracer = opentracing::Tracer::Global();
-    tracer->StartSpan("mongod");
 
     auto service = getGlobalServiceContext();
+    tracing::getServiceSpan(service) = tracing::getTracer().StartSpan("mongod");
     setUpCatalog(service);
     setUpReplication(service);
     service->setServiceEntryPoint(std::make_unique<ServiceEntryPointMongod>(service));

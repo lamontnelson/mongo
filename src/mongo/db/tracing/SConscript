@@ -1,0 +1,14 @@
+# -*- mode: python -*-
+
+Import("env")
+
+env.Library(
+    target='tracing',
+    source=[
+        'tracing.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/third_party/shim_opentracing_cpp',
+        '$BUILD_DIR/mongo/db/service_context',
+    ],
+)
