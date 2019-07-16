@@ -129,4 +129,7 @@ env.Library(
         '$BUILD_DIR/third_party/shim_yaml',
     ],
     AIB_COMPONENT='jaeger-client',
+    AIB_COMPONENTS_EXTRA=[
+        'opentracing',
+    ]
 )

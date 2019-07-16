@@ -2,6 +2,8 @@
 
 Import('env')
 
+env = env.Clone()
+
 env.CppUnitTest(
     target='util_opentracing_test',
     source=[
@@ -9,5 +11,6 @@ env.CppUnitTest(
     ],
     LIBDEPS=[
         '$BUILD_DIR/third_party/shim_opentracing_cpp',
-    ]
+    ],
+    AIB_COMPONENT='opentracing',
 )
