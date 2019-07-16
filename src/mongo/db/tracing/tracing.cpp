@@ -42,8 +42,8 @@
 namespace mongo {
 namespace {
 const auto kJaegerLibraryName = "libjaegertracing.so";
-const auto kTracerConfig = R"(
-service_name: MongoDB
+const auto kTracerConfigFormat = R"(
+service_name: {}
 disabled: false
 reporter:
     logSpans: true
@@ -72,7 +72,7 @@ std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx) {
 }
 }  // namespace tracing
 
-void setupTracing(ServiceContext* service, std::string rootName) {
+void setupTracing(ServiceContext* service, std::string serviceName) {
     std::string errorMessage;
 
     auto handleMaybe = opentracing::DynamicallyLoadTracingLibrary(kJaegerLibraryName, errorMessage);
@@ -82,7 +82,8 @@ void setupTracing(ServiceContext* service, std::string rootName) {
     }
 
     auto& factory = handleMaybe->tracer_factory();
-    auto tracer = factory.MakeTracer(kTracerConfig.rawData(), errorMessage);
+    auto config = fmt::format(kTracerConfigFormat, serviceName);
+    auto tracer = factory.MakeTracer(config.data(), errorMessage);
     if (!tracer) {
         severe() << "Error creating tracer: " << errorMessage;
         fassertFailed(31185);
@@ -90,8 +91,8 @@ void setupTracing(ServiceContext* service, std::string rootName) {
 
     opentracing::Tracer::InitGlobal(*tracer);
 
-    tracing::getServiceSpan(service) = (*tracer)->StartSpan(rootName);
-    log() << "initialized opentracing";
+    tracing::getServiceSpan(service) = (*tracer)->StartSpan(serviceName);
+    LOG(1) << "initialized opentracing for " << serviceName;
 }
 
 void shutdownTracing(ServiceContext* service) {
@@ -99,5 +100,6 @@ void shutdownTracing(ServiceContext* service) {
     serviceSpan->Log({{"msg", "shutting down"}});
     serviceSpan->Finish();
     tracing::getTracer().Close();
+    LOG(1) << "shut down opentracing";
 }
 }  // namespace mongo

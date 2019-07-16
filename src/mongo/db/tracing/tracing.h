@@ -36,7 +36,7 @@ namespace mongo {
 class ServiceContext;
 class OperationContext;
 
-void setupTracing(ServiceContext* service, std::string rootName);
+void setupTracing(ServiceContext* service, std::string serviceName);
 void shutdownTracing(ServiceContext* service);
 
 namespace tracing {
