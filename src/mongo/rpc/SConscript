@@ -74,7 +74,9 @@ env.Library(
     ],
 )
 
-env.Library(
+metadataEnv = env.Clone()
+metadataEnv.InjectThirdParty(libraries=['opentracing-cpp'])
+metadataEnv.Library(
     target=[
         'metadata',
     ],
@@ -86,11 +88,13 @@ env.Library(
         'metadata/sharding_metadata.cpp',
         'metadata/repl_set_metadata.cpp',
         'metadata/oplog_query_metadata.cpp',
+        'metadata/tracer_metadata.cpp',
         'metadata/tracking_metadata.cpp',
     ],
     LIBDEPS=[
         'client_metadata',
         'metadata_impersonated_user',
+        '$BUILD_DIR/third_party/shim_opentracing_cpp',
         '$BUILD_DIR/mongo/base',
         '$BUILD_DIR/mongo/bson/util/bson_extract',
         '$BUILD_DIR/mongo/client/read_preference',
