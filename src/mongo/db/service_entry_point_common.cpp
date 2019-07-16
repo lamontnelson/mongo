@@ -78,6 +78,7 @@
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/server_read_concern_metrics.h"
 #include "mongo/db/stats/top.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/db/transaction_participant.h"
 #include "mongo/db/transaction_validation.h"
 #include "mongo/rpc/factory.h"
@@ -931,9 +932,11 @@ DbResponse receivedCommands(OperationContext* opCtx,
                             const ServiceEntryPointCommon::Hooks& behaviors) {
     auto replyBuilder = rpc::makeReplyBuilder(rpc::protocolForMessage(message));
     OpMsgRequest request;
+
     [&] {
         try {  // Parse.
             request = rpc::opMsgRequestFromAnyProtocol(message);
+            tracing::configureOperationSpan(opCtx, request);
         } catch (const DBException& ex) {
             // If this error needs to fail the connection, propagate it out.
             if (ErrorCodes::isConnectionFatalMessageParseError(ex.code()))
@@ -1378,6 +1381,10 @@ DbResponse ServiceEntryPointCommon::handleRequest(OperationContext* opCtx,
     }
 
     recordCurOpMetrics(opCtx);
+
+    if (tracing::getOperationSpan(opCtx)) {
+        tracing::getOperationSpan(opCtx)->Finish();
+    }
     return dbresponse;
 }
 

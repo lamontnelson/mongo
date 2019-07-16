@@ -58,6 +58,7 @@
 #include "mongo/db/query/getmore_request.h"
 #include "mongo/db/query/query_request.h"
 #include "mongo/db/stats/counters.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/db/transaction_validation.h"
 #include "mongo/db/views/resolved_view.h"
 #include "mongo/rpc/factory.h"
@@ -745,6 +746,7 @@ DbResponse Strategy::clientCommand(OperationContext* opCtx, const Message& m) {
                 throw;
             }
         }();
+        tracing::configureOperationSpan(opCtx, request);
 
         // Execute.
         std::string db = request.getDatabase().toString();
@@ -784,8 +786,8 @@ DbResponse Strategy::clientCommand(OperationContext* opCtx, const Message& m) {
             dbResponse.exhaustCursorId = cursorObj.getField("id").numberLong();
         }
     }
-    dbResponse.response = reply->done();
 
+    tracing::getOperationSpan(opCtx)->Finish();
     return dbResponse;
 }
 

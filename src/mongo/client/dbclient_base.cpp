@@ -53,6 +53,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/query/killcursors_request.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/db/wire_version.h"
 #include "mongo/executor/remote_command_request.h"
 #include "mongo/executor/remote_command_response.h"
@@ -208,6 +209,9 @@ std::pair<rpc::UniqueReply, DBClientBase*> DBClientBase::runCommandWithTarget(
     if (_metadataWriter) {
         BSONObjBuilder metadataBob(std::move(request.body));
         uassertStatusOK(_metadataWriter(opCtx, &metadataBob));
+        if (opCtx && tracing::getOperationSpan(opCtx)) {
+            tracing::injectSpanContext(tracing::getOperationSpan(opCtx), &metadataBob);
+        }
         request.body = metadataBob.obj();
     }
 

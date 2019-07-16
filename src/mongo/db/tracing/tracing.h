@@ -29,6 +29,8 @@
 
 #pragma once
 
+#include "mongo/rpc/op_msg.h"
+
 #include <opentracing/span.h>
 #include <opentracing/tracer.h>
 
@@ -42,10 +44,25 @@ void shutdownTracing(ServiceContext* service);
 namespace tracing {
 using Tracer = opentracing::Tracer;
 using Span = opentracing::Span;
+using SpanContext = opentracing::v2::SpanContext;
+using SpanReference = opentracing::SpanReference;
+
+inline SpanReference ChildOf(const SpanContext* span_context) noexcept {
+    return opentracing::ChildOf(span_context);
+}
+
+inline SpanReference FollowsFrom(const SpanContext* span_context) noexcept {
+    return opentracing::FollowsFrom(span_context);
+}
 
 Tracer& getTracer();
 std::unique_ptr<Span>& getServiceSpan(ServiceContext* service);
 std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx);
+
+void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request);
+
+boost::optional<std::unique_ptr<SpanContext>> extractSpanContext(const BSONObj& body);
+void injectSpanContext(const std::unique_ptr<Span>& span, BSONObjBuilder* out);
 
 }  // namespace tracing
 }  // namespace mongo

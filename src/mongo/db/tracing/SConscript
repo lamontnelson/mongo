@@ -9,6 +9,8 @@ env.Library(
     ],
     LIBDEPS=[
         '$BUILD_DIR/third_party/shim_opentracing_cpp',
+        '$BUILD_DIR/mongo/base',
+        '$BUILD_DIR/mongo/base/system_error',
         '$BUILD_DIR/mongo/db/service_context',
     ],
 )

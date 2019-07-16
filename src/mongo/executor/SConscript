@@ -124,6 +124,7 @@ env.Library(
     ],
     LIBDEPS_PRIVATE=[
         '$BUILD_DIR/mongo/db/commands/test_commands_enabled',
+        '$BUILD_DIR/mongo/db/tracing/tracing',
         '$BUILD_DIR/mongo/transport/transport_layer_manager',
         'connection_pool_executor',
         'network_interface',

@@ -32,7 +32,9 @@
 #include "mongo/platform/basic.h"
 
 #include <opentracing/dynamic_load.h>
+#include <opentracing/propagation.h>
 
+#include "mongo/base/system_error.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/tracing/tracing.h"
@@ -56,6 +58,51 @@ const auto getServiceDecoration =
     ServiceContext::declareDecoration<std::unique_ptr<tracing::Span>>();
 const auto getOperationDecoration =
     OperationContext::declareDecoration<std::unique_ptr<tracing::Span>>();
+
+class BSONCarrierReader : public opentracing::TextMapReader {
+public:
+    explicit BSONCarrierReader(BSONObj obj) : _obj(obj) {}
+
+    opentracing::expected<void> ForeachKey(
+        std::function<opentracing::expected<void>(
+            opentracing::string_view key, opentracing::string_view value)> func) const override
+        try {
+        for (const auto& kv : _obj) {
+            func(fromStringData(kv.fieldNameStringData()),
+                 fromStringData(kv.checkAndGetStringData().rawData()));
+        }
+
+        return {};
+    } catch (const DBException& e) {
+        return opentracing::make_unexpected(std::error_code(e.code(), mongoErrorCategory()));
+    }
+
+private:
+    opentracing::string_view fromStringData(StringData data) const {
+        return opentracing::string_view(data.rawData(), data.size());
+    }
+    BSONObj _obj;
+};
+
+class BSONCarrierWriter : public opentracing::TextMapWriter {
+public:
+    opentracing::expected<void> Set(opentracing::string_view key,
+                                    opentracing::string_view value) const override {
+        _bob.append(fromStringView(key), fromStringView(value));
+        return {};
+    }
+
+    BSONObj obj() {
+        return _bob.obj();
+    }
+
+private:
+    StringData fromStringView(opentracing::string_view view) const {
+        return StringData(view.data(), view.size());
+    }
+
+    mutable BSONObjBuilder _bob;
+};
 }  // namespace
 
 namespace tracing {
@@ -70,7 +117,6 @@ std::unique_ptr<Span>& getServiceSpan(ServiceContext* service) {
 std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx) {
     return getOperationDecoration(opCtx);
 }
-}  // namespace tracing
 
 void setupTracing(ServiceContext* service, std::string serviceName) {
     std::string errorMessage;
@@ -102,4 +148,42 @@ void shutdownTracing(ServiceContext* service) {
     tracing::getTracer().Close();
     LOG(1) << "shut down opentracing";
 }
+
+void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request) {
+    // setup open tracing
+    auto spanContext = tracing::extractSpanContext(request.body);
+    auto& tracer = tracing::getTracer();
+    auto svcCtx = opCtx->getServiceContext();
+    if (spanContext) {
+        auto opSpan =
+            tracer.StartSpan(request.getCommandName().rawData(),
+                             {tracing::ChildOf(spanContext->get()),
+                              tracing::ChildOf(&tracing::getServiceSpan(svcCtx)->context())});
+        getOperationSpan(opCtx).swap(opSpan);
+    } else {
+        auto opSpan =
+            tracer.StartSpan(request.getCommandName().rawData(),
+                             {tracing::ChildOf(&tracing::getServiceSpan(svcCtx)->context())});
+        getOperationSpan(opCtx).swap(opSpan);
+    }
+}
+
+boost::optional<std::unique_ptr<SpanContext>> extractSpanContext(const BSONObj& body) {
+    auto elem = body.getField("$spanContext");
+    if (elem.eoo()) {
+        return boost::none;
+    }
+
+    auto expectedSpanContext = getTracer().Extract(BSONCarrierReader(elem.Obj()));
+    uassert(51243, "Failed to extract span context", expectedSpanContext);
+    return std::move(*expectedSpanContext);
+}
+
+void injectSpanContext(const std::unique_ptr<Span>& span, BSONObjBuilder* out) {
+    BSONCarrierWriter carrier;
+    uassert(51242, "Failed to inject span context", getTracer().Inject(span->context(), carrier));
+    out->append("$spanContext", carrier.obj());
+}
+
+}  // namespace tracing
 }  // namespace mongo

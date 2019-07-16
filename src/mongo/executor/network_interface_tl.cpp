@@ -35,6 +35,7 @@
 
 #include "mongo/db/commands/test_commands_enabled.h"
 #include "mongo/db/server_options.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/executor/connection_pool_tl.h"
 #include "mongo/transport/transport_layer_manager.h"
 #include "mongo/util/concurrency/idle_thread_block.h"
@@ -223,6 +224,10 @@ Status NetworkInterfaceTL::startCommand(const TaskExecutor::CallbackHandle& cbHa
         auto status = _metadataHook->writeRequestMetadata(request.opCtx, &newMetadata);
         if (!status.isOK()) {
             return status;
+        }
+
+        if (request.opCtx && tracing::getOperationSpan(request.opCtx)) {
+            tracing::injectSpanContext(tracing::getOperationSpan(request.opCtx), &newMetadata);
         }
 
         request.metadata = newMetadata.obj();

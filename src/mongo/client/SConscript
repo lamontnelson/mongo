@@ -123,6 +123,7 @@ clientDriverEnv.Library(
         'connection_string',
     ],
     LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/tracing/tracing',
         '$BUILD_DIR/mongo/util/net/ssl_manager',
     ],
 )
