@@ -2,10 +2,6 @@
 
 Import('env')
 
-env = env.Clone()
-
-env = env.Clone()
-env.InjectThirdParty(libraries=['opentracing-cpp'])
 env.CppUnitTest(
     target='util_opentracing_test',
     source=[

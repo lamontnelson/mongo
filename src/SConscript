@@ -21,6 +21,7 @@ env.InjectThirdParty(libraries=[
     'fmt',
     'pcre',
     'safeint',
+    'opentracing-cpp',
 ])
 
 # Run the core mongodb SConscript.
