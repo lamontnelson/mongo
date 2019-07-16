@@ -27,6 +27,8 @@
  *    it in the license file.
  */
 
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kDefault
+
 #include "mongo/platform/basic.h"
 
 #include <string>
@@ -35,6 +37,7 @@
 #include <opentracing/noop.h>
 
 #include "mongo/unittest/unittest.h"
+#include "mongo/util/log.h"
 #include "mongo/util/str.h"
 
 namespace mongo {
@@ -58,5 +61,55 @@ TEST(SimpleTests, LoadJaegerLibrary) {
     invariant(handle_maybe,
               str::stream() << "Failed to load tracer library " << error_message << "\n");
 }
+
+class JaegerFixture : public unittest::Test {
+public:
+    void setUp() {
+        static auto jaegerHandle = [] {
+            std::string error_message;
+            auto handle_maybe =
+                opentracing::DynamicallyLoadTracingLibrary("libjaegertracing.so", error_message);
+            invariant(handle_maybe,
+                      str::stream() << "Failed to load tracer library " << error_message << "\n");
+            return handle_maybe;
+        }();
+        
+        _tracerFactory = &jaegerHandle->tracer_factory();
+    }
+
+protected:
+    const opentracing::v2::TracerFactory* tracerFactory() const {
+        return _tracerFactory;
+    }
+
+private:
+    mutable const opentracing::v2::TracerFactory* _tracerFactory;
+};
+
+TEST_F(JaegerFixture, MakeJaegerTracer) {
+    std::string errmsg;
+    const auto config = R"(
+service_name: jaegerTextFixture
+disabled: false
+reporter:
+    logSpans: true
+    localAgentHostPort: 10.1.2.24:6831 # JBR's workstation for testing only!
+sampler:
+  type: const
+  param: 1)"_sd;
+    auto expectedTracer = tracerFactory()->MakeTracer(config.rawData(), errmsg);
+    invariant(expectedTracer, str::stream() << "Error making factory: " << errmsg);
+
+    auto tracer = std::move(*expectedTracer);
+    opentracing::Tracer::InitGlobal(tracer);
+    auto rootSpan = tracer->StartSpan("root");
+    auto childSpan = tracer->StartSpan("child", { opentracing::ChildOf(&rootSpan->context()) });
+    childSpan->Log({{"msg", "Hello, world!"}});
+    childSpan->Finish();
+    rootSpan->Finish();
+
+    tracer->Close(); 
+}
+
 }  // namespace
 }  // namespace mongo
