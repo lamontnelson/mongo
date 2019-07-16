@@ -44,7 +44,7 @@ void shutdownTracing(ServiceContext* service);
 namespace tracing {
 using Tracer = opentracing::Tracer;
 using Span = opentracing::Span;
-using SpanContext = opentracing::v2::SpanContext;
+using SpanContext = opentracing::SpanContext;
 using SpanReference = opentracing::SpanReference;
 
 inline SpanReference ChildOf(const SpanContext* span_context) noexcept {

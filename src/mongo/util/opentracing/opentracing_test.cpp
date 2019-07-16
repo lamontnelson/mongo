@@ -36,6 +36,7 @@
 #include <opentracing/dynamic_load.h>
 #include <opentracing/noop.h>
 
+#include "mongo/stdx/thread.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/log.h"
 #include "mongo/util/str.h"
@@ -78,12 +79,12 @@ public:
     }
 
 protected:
-    const opentracing::v2::TracerFactory* tracerFactory() const {
+    const opentracing::v3_unstable::TracerFactory* tracerFactory() const {
         return _tracerFactory;
     }
 
 private:
-    mutable const opentracing::v2::TracerFactory* _tracerFactory;
+    mutable const opentracing::v3_unstable::TracerFactory* _tracerFactory;
 };
 
 TEST_F(JaegerFixture, MakeJaegerTracer) {
@@ -106,8 +107,22 @@ sampler:
     auto childSpan = tracer->StartSpan("child", {opentracing::ChildOf(&rootSpan->context())});
     childSpan->Log({{"msg", "Hello, world!"}});
     childSpan->Finish();
-    rootSpan->Finish();
 
+    for (int i = 0; i < 100; i++) {
+        stdx::thread thread([&tracer, &rootSpan, i] {
+            std::string spanName = str::stream() << "child_" << i;
+            std::ostringstream threadIdStr;
+            threadIdStr << stdx::this_thread::get_id();
+
+            auto myChildSpan = tracer->StartSpan(spanName, { opentracing::ChildOf(&rootSpan->context())});
+            myChildSpan->SetTag("threadId", threadIdStr.str());
+            myChildSpan->Finish();
+        });
+
+        thread.join();
+    }
+
+    rootSpan->Finish();
     tracer->Close();
 }
 

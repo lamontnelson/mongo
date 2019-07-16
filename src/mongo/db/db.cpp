@@ -1071,7 +1071,6 @@ int mongoDbMain(int argc, char* argv[], char** envp) {
     }
 
     auto service = getGlobalServiceContext();
-    setupTracing(service, "mongod");
     setUpCatalog(service);
     setUpReplication(service);
     service->setServiceEntryPoint(std::make_unique<ServiceEntryPointMongod>(service));
@@ -1091,6 +1090,7 @@ int mongoDbMain(int argc, char* argv[], char** envp) {
     // initializeServerGlobalState) and before the creation of any other threads
     startSignalProcessingThread();
 
+    setupTracing(service, "mongod");
 #if defined(_WIN32)
     if (ntservice::shouldStartService()) {
         ntservice::startService();

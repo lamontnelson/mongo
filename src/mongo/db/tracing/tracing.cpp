@@ -117,53 +117,23 @@ std::unique_ptr<Span>& getServiceSpan(ServiceContext* service) {
 std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx) {
     return getOperationDecoration(opCtx);
 }
-
-void setupTracing(ServiceContext* service, std::string serviceName) {
-    std::string errorMessage;
-
-    auto handleMaybe = opentracing::DynamicallyLoadTracingLibrary(kJaegerLibraryName, errorMessage);
-    if (!handleMaybe) {
-        severe() << "Failed to load tracer library " << kJaegerLibraryName << ": " << errorMessage;
-        fassertFailed(31184);
-    }
-
-    auto& factory = handleMaybe->tracer_factory();
-    auto config = fmt::format(kTracerConfigFormat, serviceName);
-    auto tracer = factory.MakeTracer(config.data(), errorMessage);
-    if (!tracer) {
-        severe() << "Error creating tracer: " << errorMessage;
-        fassertFailed(31185);
-    }
-
-    opentracing::Tracer::InitGlobal(*tracer);
-
-    tracing::getServiceSpan(service) = (*tracer)->StartSpan(serviceName);
-    LOG(1) << "initialized opentracing for " << serviceName;
-}
-
-void shutdownTracing(ServiceContext* service) {
-    auto serviceSpan = std::move(tracing::getServiceSpan(service));
-    serviceSpan->Log({{"msg", "shutting down"}});
-    serviceSpan->Finish();
-    tracing::getTracer().Close();
-    LOG(1) << "shut down opentracing";
-}
-
 void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request) {
-    // setup open tracing
+    invariant(opCtx && !request.body.isEmpty());
     auto spanContext = tracing::extractSpanContext(request.body);
     auto& tracer = tracing::getTracer();
-    auto svcCtx = opCtx->getServiceContext();
+
+    const auto& serviceSpan = getServiceSpan(opCtx->getServiceContext());
+    invariant(serviceSpan);
     if (spanContext) {
         auto opSpan =
             tracer.StartSpan(request.getCommandName().rawData(),
                              {tracing::ChildOf(spanContext->get()),
-                              tracing::ChildOf(&tracing::getServiceSpan(svcCtx)->context())});
+                              tracing::FollowsFrom(&serviceSpan->context())});
         getOperationSpan(opCtx).swap(opSpan);
     } else {
         auto opSpan =
             tracer.StartSpan(request.getCommandName().rawData(),
-                             {tracing::ChildOf(&tracing::getServiceSpan(svcCtx)->context())});
+                             {tracing::FollowsFrom(&serviceSpan->context())});
         getOperationSpan(opCtx).swap(opSpan);
     }
 }
@@ -186,4 +156,36 @@ void injectSpanContext(const std::unique_ptr<Span>& span, BSONObjBuilder* out) {
 }
 
 }  // namespace tracing
+
+void setupTracing(ServiceContext* service, std::string serviceName) {
+    std::string errorMessage;
+
+    static auto handleMaybe = opentracing::DynamicallyLoadTracingLibrary(kJaegerLibraryName, errorMessage);
+    if (!handleMaybe) {
+        severe() << "Failed to load tracer library " << kJaegerLibraryName << ": " << errorMessage;
+        fassertFailed(31184);
+    }
+
+    auto& factory = handleMaybe->tracer_factory();
+    auto config = fmt::format(kTracerConfigFormat, serviceName);
+    auto tracer = factory.MakeTracer(config.data(), errorMessage);
+    if (!tracer) {
+        severe() << "Error creating tracer: " << errorMessage;
+        fassertFailed(31185);
+    }
+
+    opentracing::Tracer::InitGlobal(*tracer);
+
+    tracing::getServiceSpan(service) = (*tracer)->StartSpan(serviceName);
+
+    log() << "initialized opentracing";
+}
+
+void shutdownTracing(ServiceContext* service) {
+    auto serviceSpan = std::move(tracing::getServiceSpan(service));
+    serviceSpan->Log({{"msg", "shutting down"}});
+    serviceSpan->Finish();
+    tracing::getTracer().Close();
+}
+
 }  // namespace mongo
