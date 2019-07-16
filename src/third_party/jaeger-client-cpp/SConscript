@@ -6,6 +6,9 @@ env.AppendUnique(
     CPPPATH=[
         '$BUILD_DIR/third_party/jaeger-client-cpp/dist/src'
     ],
+    CXXFLAGS=[
+        '-Wno-overloaded-virtual'
+    ],
 )
 
 env.Substfile(
