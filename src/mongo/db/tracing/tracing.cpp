@@ -31,17 +31,17 @@
 
 #include "mongo/platform/basic.h"
 
-#include "mongo/db/tracing/tracing.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/service_context.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/util/decorable.h"
 
 namespace mongo {
 namespace tracing {
 namespace {
-    const auto getServiceDecoration = ServiceContext::declareDecoration<std::unique_ptr<Span>>();
-    const auto getOperationDecoration =OperationContext::declareDecoration<std::unique_ptr<Span>>();
-}
+const auto getServiceDecoration = ServiceContext::declareDecoration<std::unique_ptr<Span>>();
+const auto getOperationDecoration = OperationContext::declareDecoration<std::unique_ptr<Span>>();
+}  // namespace
 
 Tracer& getTracer() {
     return *Tracer::Global();
@@ -53,5 +53,5 @@ std::unique_ptr<Span>& getServiceSpan(mongo::ServiceContext* service) {
 std::unique_ptr<Span>& getOperationSpan(mongo::OperationContext* opCtx) {
     return getOperationDecoration(opCtx);
 }  // namespace tracing
+}  // namespace tracing
 }  // namespace mongo
-}  // 

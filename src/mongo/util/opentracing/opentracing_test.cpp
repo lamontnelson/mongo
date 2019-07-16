@@ -73,7 +73,7 @@ public:
                       str::stream() << "Failed to load tracer library " << error_message << "\n");
             return handle_maybe;
         }();
-        
+
         _tracerFactory = &jaegerHandle->tracer_factory();
     }
 
@@ -103,12 +103,12 @@ sampler:
     auto tracer = std::move(*expectedTracer);
     opentracing::Tracer::InitGlobal(tracer);
     auto rootSpan = tracer->StartSpan("root");
-    auto childSpan = tracer->StartSpan("child", { opentracing::ChildOf(&rootSpan->context()) });
+    auto childSpan = tracer->StartSpan("child", {opentracing::ChildOf(&rootSpan->context())});
     childSpan->Log({{"msg", "Hello, world!"}});
     childSpan->Finish();
     rootSpan->Finish();
 
-    tracer->Close(); 
+    tracer->Close();
 }
 
 }  // namespace

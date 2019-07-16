@@ -82,4 +82,4 @@ private:
 
     mutable BSONObjBuilder _bob;
 };
-}
+}  // namespace mongo
