@@ -1005,8 +1005,8 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     if (auto svcExec = serviceContext->getServiceExecutor()) {
         Status status = svcExec->shutdown(Seconds(10));
         if (!status.isOK()) {
-            log(LogComponent::kNetwork)
-                << "Service executor failed to shutdown within timelimit: " << status.reason();
+            log(LogComponent::kNetwork) << "Service executor failed to shutdown within timelimit: "
+                                        << status.reason();
         }
     }
 #endif
@@ -1091,6 +1091,9 @@ int mongoDbMain(int argc, char* argv[], char** envp) {
     startSignalProcessingThread();
 
     setupTracing(service, "mongod");
+
+    const auto& serviceSpan = tracing::getServiceSpan(service);
+    serviceSpan->SetTag("port", serverGlobalParams.port);
 #if defined(_WIN32)
     if (ntservice::shouldStartService()) {
         ntservice::startService();

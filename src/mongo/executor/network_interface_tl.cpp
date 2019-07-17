@@ -202,6 +202,10 @@ auto NetworkInterfaceTL::CommandState::make(NetworkInterfaceTL* interface,
 NetworkInterfaceTL::CommandState::~CommandState() {
     invariant(interface);
 
+    if (span) {
+        span->Finish();
+    }
+
     {
         stdx::lock_guard lk(interface->_inProgressMutex);
         interface->_inProgress.erase(cbHandle);
@@ -218,25 +222,27 @@ Status NetworkInterfaceTL::startCommand(const TaskExecutor::CallbackHandle& cbHa
 
     LOG(3) << "startCommand: " << redact(request.toString());
 
+    BSONObjBuilder newMetadata(std::move(request.metadata));
     if (_metadataHook) {
-        BSONObjBuilder newMetadata(std::move(request.metadata));
-
         auto status = _metadataHook->writeRequestMetadata(request.opCtx, &newMetadata);
         if (!status.isOK()) {
             return status;
         }
-
-        if (request.opCtx && tracing::getOperationSpan(request.opCtx)) {
-            tracing::injectSpanContext(tracing::getOperationSpan(request.opCtx), &newMetadata);
-        }
-
-        request.metadata = newMetadata.obj();
     }
 
+    std::unique_ptr<tracing::Span> commandSpan;
+    if (const auto& currentSpan = tracing::getCurrentSpan(request.opCtx); currentSpan) {
+        commandSpan = tracing::getTracer().StartSpan("acquireConn",
+                                                     {tracing::ChildOf(&currentSpan->context())});
+        tracing::injectSpanContext(commandSpan, &newMetadata);
+    }
+
+    request.metadata = newMetadata.obj();
     auto cmdPF = makePromiseFuture<RemoteCommandOnAnyResponse>();
 
     auto cmdState = CommandState::make(this, request, cbHandle, std::move(cmdPF.promise));
     cmdState->start = now();
+    cmdState->span = std::move(commandSpan);
     if (cmdState->requestOnAny.timeout != cmdState->requestOnAny.kNoTimeout) {
         cmdState->deadline = cmdState->start + cmdState->requestOnAny.timeout;
     }
@@ -313,6 +319,18 @@ Status NetworkInterfaceTL::startCommand(const TaskExecutor::CallbackHandle& cbHa
             if (swConn.isOK()) {
                 if (connState->finishLine.arriveStrongly()) {
                     cmdState->request.emplace(cmdState->requestOnAny, idx);
+                    if (cmdState->span) {
+                        cmdState->span->Finish();
+                        auto commandSpan = tracing::getTracer().StartSpan(
+                            "startCommand", {tracing::FollowsFrom(&cmdState->span->context())});
+                        commandSpan->SetTag("peerAddress",
+                                            swConn.getValue()->getHostAndPort().toString());
+                        commandSpan->SetTag("commandName",
+                                            cmdState->request->cmdObj.firstElementFieldName());
+
+                        cmdState->span = std::move(commandSpan);
+                    }
+
                     connState->promise.emplaceValue(std::move(swConn.getValue()));
                 } else {
                     swConn.getValue()->indicateSuccess();

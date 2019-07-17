@@ -46,6 +46,7 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/config.h"
 #include "mongo/db/server_options.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/idl/server_parameter.h"
 #include "mongo/logger/log_component.h"
 #include "mongo/logger/message_event_utf8_encoder.h"
@@ -445,6 +446,13 @@ Status storeBaseOptions(const moe::Environment& params) {
 
     if (params.count("operationProfiling.slowOpSampleRate")) {
         serverGlobalParams.sampleRate = params["operationProfiling.slowOpSampleRate"].as<double>();
+    }
+
+    if (params.count("tracingSpanRoot")) {
+        if (auto status = setProcessParentSpan(params["tracingSpanRoot"].as<string>());
+            !status.isOK()) {
+            return status;
+        }
     }
 
     return Status::OK();

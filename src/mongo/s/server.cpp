@@ -66,6 +66,7 @@
 #include "mongo/db/session_killer.h"
 #include "mongo/db/sessions_collection_sharded.h"
 #include "mongo/db/startup_warnings_common.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/db/wire_version.h"
 #include "mongo/executor/task_executor_pool.h"
 #include "mongo/platform/process_id.h"
@@ -271,6 +272,8 @@ void cleanupTask(ServiceContext* serviceContext) {
         stopMongoSFTDC();
     }
 
+    shutdownTracing(serviceContext);
+
     audit::logShutdown(Client::getCurrent());
 }
 
@@ -400,6 +403,8 @@ ExitCode runMongosServer(ServiceContext* serviceContext) {
     initWireSpec();
 
     serviceContext->setServiceEntryPoint(std::make_unique<ServiceEntryPointMongos>(serviceContext));
+
+    setupTracing(serviceContext, "mongos");
 
     auto tl =
         transport::TransportLayerManager::createWithConfig(&serverGlobalParams, serviceContext);

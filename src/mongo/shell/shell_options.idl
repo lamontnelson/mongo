@@ -208,3 +208,8 @@ configs:
     arg_vartype: Int
     default: 0
     validator: {gte: 0}
+
+  tracingSpanRoot:
+    description: 'EXPERIMENTAL (UNSUPPORTED). Sets the tracing span root for open tracing'
+    arg_vartype: String
+    hidden: true

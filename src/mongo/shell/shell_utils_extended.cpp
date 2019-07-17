@@ -39,6 +39,7 @@
 #include <boost/filesystem.hpp>
 #include <fstream>
 
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/shell/shell_utils.h"
 #include "mongo/shell/shell_utils_launcher.h"
@@ -372,6 +373,22 @@ BSONObj getFileMode(const BSONObj& a, void* data) {
     return BSON("" << fileStatus.permissions());
 }
 
+BSONObj getServiceSpanContextForShell(const BSONObj& a, void* data) {
+    if (!hasGlobalServiceContext()) {
+        return BSONObj();
+    }
+
+    const auto& serviceSpan = tracing::getServiceSpan(getGlobalServiceContext());
+    if (!serviceSpan) {
+        return BSONObj();
+    }
+
+    BSONObjBuilder bob;
+    tracing::injectSpanContext(serviceSpan, &bob);
+
+    return bob.obj();
+}
+
 void installShellUtilsExtended(Scope& scope) {
     scope.injectNative("getHostName", getHostName);
     scope.injectNative("removeFile", removeFile);
@@ -388,6 +405,7 @@ void installShellUtilsExtended(Scope& scope) {
     scope.injectNative("passwordPrompt", passwordPrompt);
     scope.injectNative("umask", changeUmask);
     scope.injectNative("getFileMode", getFileMode);
+    scope.injectNative("getServiceSpanContext", getServiceSpanContextForShell);
 }
 }
 }

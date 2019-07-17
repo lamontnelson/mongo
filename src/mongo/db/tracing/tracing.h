@@ -38,6 +38,7 @@ namespace mongo {
 class ServiceContext;
 class OperationContext;
 
+Status setProcessParentSpan(const std::string& value);
 void setupTracing(ServiceContext* service, std::string serviceName);
 void shutdownTracing(ServiceContext* service);
 
@@ -55,9 +56,14 @@ inline SpanReference FollowsFrom(const SpanContext* span_context) noexcept {
     return opentracing::FollowsFrom(span_context);
 }
 
+inline opentracing::string_view fromStringData(StringData sd) noexcept {
+    return opentracing::string_view(sd.rawData(), sd.size());
+}
+
 Tracer& getTracer();
 std::unique_ptr<Span>& getServiceSpan(ServiceContext* service);
 std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx);
+const std::unique_ptr<Span>& getCurrentSpan(OperationContext* opCtx);
 
 void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request);
 

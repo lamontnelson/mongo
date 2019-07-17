@@ -523,6 +523,7 @@ mongos = env.Program(
         'db/sessions_collection_sharded',
         'db/startup_warnings_common',
         'db/stats/counters',
+        'db/tracing/tracing',
         'db/windows_options' if env.TargetOSIs('windows') else [],
         's/commands/cluster_commands',
         's/commands/shared_cluster_commands',

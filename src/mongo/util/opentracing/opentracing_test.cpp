@@ -114,7 +114,8 @@ sampler:
             std::ostringstream threadIdStr;
             threadIdStr << stdx::this_thread::get_id();
 
-            auto myChildSpan = tracer->StartSpan(spanName, { opentracing::ChildOf(&rootSpan->context())});
+            auto myChildSpan =
+                tracer->StartSpan(spanName, {opentracing::ChildOf(&rootSpan->context())});
             myChildSpan->SetTag("threadId", threadIdStr.str());
             myChildSpan->Finish();
         });

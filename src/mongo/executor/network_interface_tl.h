@@ -33,6 +33,7 @@
 
 #include "mongo/client/async_client.h"
 #include "mongo/db/service_context.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/executor/connection_pool.h"
 #include "mongo/executor/network_interface.h"
 #include "mongo/rpc/metadata/metadata_hook.h"
@@ -111,6 +112,7 @@ private:
 
         AtomicWord<bool> done;
         Promise<RemoteCommandOnAnyResponse> promise;
+        std::unique_ptr<tracing::Span> span;
     };
 
     struct AlarmState {

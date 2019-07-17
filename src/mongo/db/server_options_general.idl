@@ -169,3 +169,9 @@ configs:
         arg_vartype: Switch
         source: [ cli, ini ]
         hidden: true
+
+    tracingSpanRoot:
+        description: 'EXPERIMENTAL (UNSUPPORTED). Sets the tracing span root for open tracing'
+        arg_vartype: String
+        source: [ cli ]
+        hidden: true

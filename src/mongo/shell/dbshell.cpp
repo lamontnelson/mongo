@@ -686,6 +686,7 @@ int _main(int argc, char* argv[], char** envp) {
     // TODO This should use a TransportLayerManager or TransportLayerFactory
     auto serviceContext = getGlobalServiceContext();
     setupTracing(serviceContext, "mongo");
+    const auto tracingGuard = makeGuard([&] { shutdownTracing(serviceContext); });
     transport::TransportLayerASIO::Options opts;
     opts.enableIPv6 = shellGlobalParams.enableIPv6;
     opts.mode = transport::TransportLayerASIO::Options::kEgress;
@@ -1058,8 +1059,6 @@ int _main(int argc, char* argv[], char** envp) {
         }
 
         shellHistoryDone();
-        if (auto serviceContext = getGlobalServiceContext())
-            shutdownTracing(serviceContext);
     }
 
     return (lastLineSuccessful ? 0 : 1);

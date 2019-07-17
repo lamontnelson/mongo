@@ -206,14 +206,37 @@ std::pair<rpc::UniqueReply, DBClientBase*> DBClientBase::runCommandWithTarget(
     auto host = getServerAddress();
 
     auto opCtx = haveClient() ? cc().getOperationContext() : nullptr;
+    auto svcCtx = hasGlobalServiceContext() ? getGlobalServiceContext() : nullptr;
+
+    const std::string commandName = request.getCommandName().toString();
+    BSONObjBuilder metadataBob(std::move(request.body));
     if (_metadataWriter) {
-        BSONObjBuilder metadataBob(std::move(request.body));
         uassertStatusOK(_metadataWriter(opCtx, &metadataBob));
-        if (opCtx && tracing::getOperationSpan(opCtx)) {
-            tracing::injectSpanContext(tracing::getOperationSpan(opCtx), &metadataBob);
-        }
-        request.body = metadataBob.obj();
     }
+
+    tracing::Span* parentSpan = nullptr;
+    if (opCtx) {
+        parentSpan = tracing::getOperationSpan(opCtx).get();
+    } else if (svcCtx) {
+        parentSpan = tracing::getServiceSpan(svcCtx).get();
+    }
+
+    std::unique_ptr<tracing::Span> cmdSpan;
+    if (parentSpan) {
+        cmdSpan = tracing::getTracer().StartSpan("runCommandWithTarget",
+                                                 {tracing::ChildOf(&parentSpan->context())});
+        tracing::injectSpanContext(cmdSpan, &metadataBob);
+        cmdSpan->SetTag("peerAddress", host);
+        cmdSpan->SetTag("commandName", tracing::fromStringData(commandName));
+    }
+
+    auto cmdSpanGuard = makeGuard([&] {
+        if (cmdSpan) {
+            cmdSpan->Finish();
+        }
+    });
+
+    request.body = metadataBob.obj();
 
     auto requestMsg =
         rpc::messageFromOpMsgRequest(getClientRPCProtocols(), getServerRPCProtocols(), request);

@@ -651,8 +651,10 @@ var MongoRunner, _startMongod, startMongoProgram, runMongoProgram, startMongoPro
             opts.auditDestination = jsTestOptions().auditDestination;
         }
 
-        if (opts.noReplSet)
-            opts.replSet = null;
+        const shellSpan = getServiceSpanContext();
+        opts.tracingSpanRoot = tojson(shellSpan)
+
+                                   if (opts.noReplSet) opts.replSet = null;
         if (opts.arbiter)
             opts.oplogSize = 1;
 
@@ -708,7 +710,10 @@ var MongoRunner, _startMongod, startMongoProgram, runMongoProgram, startMongoPro
             delete opts.noAutoSplit;
         }
 
-        return opts;
+        const shellSpan = getServiceSpanContext();
+        opts.tracingSpanRoot = tojson(shellSpan)
+
+            return opts;
     };
 
     /**
@@ -1349,6 +1354,9 @@ var MongoRunner, _startMongod, startMongoProgram, runMongoProgram, startMongoPro
             args.unshift(progName, '--useLegacyWriteOps');
         }
 
+        if (progName == 'mongo') {
+            args.push("--tracingSpanRoot", tojson(getServiceSpanContext()));
+        }
         return _runMongoProgram.apply(null, args);
     };
 
@@ -1373,6 +1381,10 @@ var MongoRunner, _startMongod, startMongoProgram, runMongoProgram, startMongoPro
         if (progName == 'mongo' && !_useWriteCommandsDefault()) {
             args = args.slice(1);
             args.unshift(progName, '--useLegacyWriteOps');
+        }
+
+        if (progName == 'mongo') {
+            args.push("--tracingSpanRoot", tojson(getServiceSpanContext()));
         }
 
         return _startMongoProgram.apply(null, args);

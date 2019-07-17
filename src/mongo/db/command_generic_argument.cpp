@@ -51,7 +51,7 @@ struct SpecialArgRecord {
 // If that changes, it should be added. When you add to this list, consider whether you
 // should also change the filterCommandRequestForPassthrough() function.
 // clang-format off
-static constexpr std::array<SpecialArgRecord, 26> specials{{
+static constexpr std::array<SpecialArgRecord, 27> specials{{
     //                                       /-isGeneric
     //                                       |  /-stripFromRequest
     //                                       |  |  /-stripFromReply
@@ -65,6 +65,7 @@ static constexpr std::array<SpecialArgRecord, 26> specials{{
     {"$readPreference"_sd,                   1, 1, 0},
     {"$replData"_sd,                         1, 1, 1},
     {"$clusterTime"_sd,                      1, 1, 1},
+    {"$spanContext"_sd,                      1, 1, 0},
     {"maxTimeMS"_sd,                         1, 0, 0},
     {"readConcern"_sd,                       1, 0, 0},
     {"databaseVersion"_sd,                   1, 1, 0},

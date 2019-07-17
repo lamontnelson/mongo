@@ -35,6 +35,7 @@
 #include <opentracing/propagation.h>
 
 #include "mongo/base/system_error.h"
+#include "mongo/bson/json.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/tracing/tracing.h"
@@ -45,7 +46,7 @@ namespace mongo {
 namespace {
 const auto kJaegerLibraryName = "libjaegertracing.so";
 const auto kTracerConfigFormat = R"(
-service_name: {}
+service_name: MongoDB JBR Messing About 3
 disabled: false
 reporter:
     logSpans: true
@@ -58,6 +59,7 @@ const auto getServiceDecoration =
     ServiceContext::declareDecoration<std::unique_ptr<tracing::Span>>();
 const auto getOperationDecoration =
     OperationContext::declareDecoration<std::unique_ptr<tracing::Span>>();
+BSONObj processParentSpan = BSONObj();
 
 class BSONCarrierReader : public opentracing::TextMapReader {
 public:
@@ -117,6 +119,21 @@ std::unique_ptr<Span>& getServiceSpan(ServiceContext* service) {
 std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx) {
     return getOperationDecoration(opCtx);
 }
+
+const std::unique_ptr<Span>& getCurrentSpan(OperationContext* opCtx) {
+    if (opCtx) {
+        if (getOperationSpan(opCtx)) {
+            return getOperationSpan(opCtx);
+        } else if (getServiceSpan(opCtx->getServiceContext())) {
+            return getServiceSpan(opCtx->getServiceContext());
+        }
+    } else if (hasGlobalServiceContext() && getServiceSpan(getGlobalServiceContext())) {
+        return getServiceSpan(getGlobalServiceContext());
+    }
+
+    const static std::unique_ptr<Span> emptySpan = nullptr;
+    return emptySpan;
+}
 void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request) {
     invariant(opCtx && !request.body.isEmpty());
     auto spanContext = tracing::extractSpanContext(request.body);
@@ -125,16 +142,21 @@ void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request
     const auto& serviceSpan = getServiceSpan(opCtx->getServiceContext());
     invariant(serviceSpan);
     if (spanContext) {
-        auto opSpan =
-            tracer.StartSpan(request.getCommandName().rawData(),
-                             {tracing::ChildOf(spanContext->get()),
-                              tracing::FollowsFrom(&serviceSpan->context())});
+        auto opSpan = tracer.StartSpan(
+            "handleRequest",
+            {tracing::ChildOf(spanContext->get()), tracing::FollowsFrom(&serviceSpan->context())});
         getOperationSpan(opCtx).swap(opSpan);
     } else {
         auto opSpan =
-            tracer.StartSpan(request.getCommandName().rawData(),
-                             {tracing::FollowsFrom(&serviceSpan->context())});
+            tracer.StartSpan("handleRequest", {tracing::FollowsFrom(&serviceSpan->context())});
         getOperationSpan(opCtx).swap(opSpan);
+    }
+
+    const auto& opSpan = getOperationSpan(opCtx);
+    opSpan->SetTag("commandName", fromStringData(request.getCommandName()));
+    auto client = opCtx->getClient();
+    if (client->hasRemote()) {
+        opSpan->SetTag("peerAddress", client->getRemote().toString());
     }
 }
 
@@ -152,7 +174,8 @@ boost::optional<std::unique_ptr<SpanContext>> extractSpanContext(const BSONObj& 
 void injectSpanContext(const std::unique_ptr<Span>& span, BSONObjBuilder* out) {
     BSONCarrierWriter carrier;
     uassert(51242, "Failed to inject span context", getTracer().Inject(span->context(), carrier));
-    out->append("$spanContext", carrier.obj());
+    auto obj = carrier.obj();
+    out->append("$spanContext", std::move(obj));
 }
 
 }  // namespace tracing
@@ -160,14 +183,15 @@ void injectSpanContext(const std::unique_ptr<Span>& span, BSONObjBuilder* out) {
 void setupTracing(ServiceContext* service, std::string serviceName) {
     std::string errorMessage;
 
-    static auto handleMaybe = opentracing::DynamicallyLoadTracingLibrary(kJaegerLibraryName, errorMessage);
+    static auto handleMaybe =
+        opentracing::DynamicallyLoadTracingLibrary(kJaegerLibraryName, errorMessage);
     if (!handleMaybe) {
         severe() << "Failed to load tracer library " << kJaegerLibraryName << ": " << errorMessage;
         fassertFailed(31184);
     }
 
     auto& factory = handleMaybe->tracer_factory();
-    auto config = fmt::format(kTracerConfigFormat, serviceName);
+    auto config = fmt::format(kTracerConfigFormat);
     auto tracer = factory.MakeTracer(config.data(), errorMessage);
     if (!tracer) {
         severe() << "Error creating tracer: " << errorMessage;
@@ -176,16 +200,46 @@ void setupTracing(ServiceContext* service, std::string serviceName) {
 
     opentracing::Tracer::InitGlobal(*tracer);
 
-    tracing::getServiceSpan(service) = (*tracer)->StartSpan(serviceName);
+    std::unique_ptr<tracing::SpanContext> parentSpan;
+    if (!processParentSpan.isEmpty()) {
+        try {
+            auto maybeParentSpan = (*tracer)->Extract(BSONCarrierReader(processParentSpan));
+            if (maybeParentSpan) {
+                parentSpan = std::move(*maybeParentSpan);
+                log() << "Extracted parent tracing span from command line options: "
+                      << processParentSpan;
+            }
+        } catch (const DBException& e) {
+            fassertFailedWithStatus(
+                51244, e.toStatus().withContext("Failed to extract process parent span"));
+        }
+    }
+
+    if (parentSpan) {
+        tracing::getServiceSpan(service) =
+            (*tracer)->StartSpan(serviceName, {FollowsFrom(parentSpan.get())});
+    } else {
+        tracing::getServiceSpan(service) = (*tracer)->StartSpan(serviceName);
+    }
 
     log() << "initialized opentracing";
 }
 
 void shutdownTracing(ServiceContext* service) {
     auto serviceSpan = std::move(tracing::getServiceSpan(service));
+    if (!serviceSpan) {
+        return;
+    }
     serviceSpan->Log({{"msg", "shutting down"}});
     serviceSpan->Finish();
     tracing::getTracer().Close();
+}
+
+Status setProcessParentSpan(const std::string& value) try {
+    processParentSpan = fromjson(value);
+    return Status::OK();
+} catch (const DBException& e) {
+    return e.toStatus();
 }
 
 }  // namespace mongo
