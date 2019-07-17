@@ -59,6 +59,7 @@ const auto getServiceDecoration =
     ServiceContext::declareDecoration<std::unique_ptr<tracing::Span>>();
 const auto getOperationDecoration =
     OperationContext::declareDecoration<std::unique_ptr<tracing::Span>>();
+
 BSONObj processParentSpan = BSONObj();
 
 class BSONCarrierReader : public opentracing::TextMapReader {

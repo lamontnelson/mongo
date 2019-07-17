@@ -16,6 +16,9 @@ env.AppendUnique(
         '$BUILD_DIR/third_party/opentracing-cpp/dist/3rd_party/include',
         '$BUILD_DIR/third_party/opentracing-cpp/dist/include',
     ],
+    CXXFLAGS=[
+        '-Wno-overloaded-virtual'
+    ],
 )
 
 env.Substfile(
