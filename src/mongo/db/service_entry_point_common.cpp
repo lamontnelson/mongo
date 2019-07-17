@@ -1384,6 +1384,7 @@ DbResponse ServiceEntryPointCommon::handleRequest(OperationContext* opCtx,
 
     if (tracing::getOperationSpan(opCtx)) {
         tracing::getOperationSpan(opCtx)->Finish();
+        tracing::currentOpSpan = nullptr;
     }
     return dbresponse;
 }
