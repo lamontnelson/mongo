@@ -88,6 +88,8 @@ public:
     LogstreamBuilder(LogstreamBuilder&& other) = default;
     LogstreamBuilder& operator=(LogstreamBuilder&& other) = default;
 
+    void logToOpSpan(StringData message, int severity) noexcept;
+
     /**
      * Destroys a LogstreamBuilder().  If anything was written to it via stream() or operator<<,
      * constructs a MessageLogDomain::Event and appends it to the associated domain.

@@ -35,6 +35,7 @@
 
 #include "mongo/base/init.h"
 #include "mongo/base/status.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/logger/message_event_utf8_encoder.h"
 #include "mongo/logger/tee.h"
 #include "mongo/util/assert_util.h"  // TODO: remove apple dep for this in threadlocal.h
@@ -86,6 +87,12 @@ LogstreamBuilder::LogstreamBuilder(MessageLogDomain* domain,
       _tee(nullptr),
       _shouldCache(shouldCache) {}
 
+void LogstreamBuilder::logToOpSpan(StringData message, int severity) noexcept {
+    if (tracing::currentOpSpan) {
+        tracing::currentOpSpan->Log({{"severity", severity}, {"message", message.toString()}});
+    }
+}
+
 LogstreamBuilder::~LogstreamBuilder() {
     if (_os) {
         if (!_baseMessage.empty())
@@ -94,6 +101,7 @@ LogstreamBuilder::~LogstreamBuilder() {
         MessageEventEphemeral message(
             Date_t::now(), _severity, _component, _contextName, _baseMessage);
         message.setIsTruncatable(_isTruncatable);
+        logToOpSpan(message.getMessage(), message.getSeverity().toInt());
         _domain->append(message).transitional_ignore();
         if (_tee) {
             _os->str("");

@@ -79,12 +79,12 @@ public:
     }
 
 protected:
-    const opentracing::v3_unstable::TracerFactory* tracerFactory() const {
+    const opentracing::TracerFactory* tracerFactory() const {
         return _tracerFactory;
     }
 
 private:
-    mutable const opentracing::v3_unstable::TracerFactory* _tracerFactory;
+    mutable const opentracing::TracerFactory* _tracerFactory;
 };
 
 TEST_F(JaegerFixture, MakeJaegerTracer) {

@@ -48,6 +48,8 @@ using Span = opentracing::Span;
 using SpanContext = opentracing::SpanContext;
 using SpanReference = opentracing::SpanReference;
 
+extern thread_local Span* currentOpSpan;
+
 inline SpanReference ChildOf(const SpanContext* span_context) noexcept {
     return opentracing::ChildOf(span_context);
 }

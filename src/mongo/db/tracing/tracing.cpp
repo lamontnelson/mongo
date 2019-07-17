@@ -31,6 +31,8 @@
 
 #include "mongo/platform/basic.h"
 
+#include "mongo/db/tracing/tracing.h"
+
 #include <opentracing/dynamic_load.h>
 #include <opentracing/propagation.h>
 
@@ -38,7 +40,6 @@
 #include "mongo/bson/json.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/service_context.h"
-#include "mongo/db/tracing/tracing.h"
 #include "mongo/util/decorable.h"
 #include "mongo/util/log.h"
 
@@ -135,6 +136,7 @@ const std::unique_ptr<Span>& getCurrentSpan(OperationContext* opCtx) {
     const static std::unique_ptr<Span> emptySpan = nullptr;
     return emptySpan;
 }
+
 void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request) {
     invariant(opCtx && !request.body.isEmpty());
     auto spanContext = tracing::extractSpanContext(request.body);
@@ -142,14 +144,15 @@ void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request
 
     const auto& serviceSpan = getServiceSpan(opCtx->getServiceContext());
     invariant(serviceSpan);
+    auto commandName = request.getCommandName().toString();
     if (spanContext) {
         auto opSpan = tracer.StartSpan(
-            "handleRequest",
+            commandName,
             {tracing::ChildOf(spanContext->get()), tracing::FollowsFrom(&serviceSpan->context())});
         getOperationSpan(opCtx).swap(opSpan);
     } else {
         auto opSpan =
-            tracer.StartSpan("handleRequest", {tracing::FollowsFrom(&serviceSpan->context())});
+            tracer.StartSpan(commandName, {tracing::FollowsFrom(&serviceSpan->context())});
         getOperationSpan(opCtx).swap(opSpan);
     }
 
@@ -159,6 +162,7 @@ void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request
     if (client->hasRemote()) {
         opSpan->SetTag("peerAddress", client->getRemote().toString());
     }
+    currentOpSpan = opSpan.get();
 }
 
 boost::optional<std::unique_ptr<SpanContext>> extractSpanContext(const BSONObj& body) {
