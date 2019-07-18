@@ -47,7 +47,7 @@ namespace mongo {
 namespace {
 const auto kJaegerLibraryName = "libjaegertracing.so";
 const auto kTracerConfigFormat = R"(
-service_name: MongoDB JBR Messing About 3
+service_name: {}
 disabled: false
 reporter:
     logSpans: true
@@ -196,7 +196,7 @@ void setupTracing(ServiceContext* service, std::string serviceName) {
     }
 
     auto& factory = handleMaybe->tracer_factory();
-    auto config = fmt::format(kTracerConfigFormat);
+    auto config = fmt::format(kTracerConfigFormat, serviceName);
     auto tracer = factory.MakeTracer(config.data(), errorMessage);
     if (!tracer) {
         severe() << "Error creating tracer: " << errorMessage;
