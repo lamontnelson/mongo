@@ -62,7 +62,11 @@ inline opentracing::string_view fromStringData(StringData sd) noexcept {
     return opentracing::string_view(sd.rawData(), sd.size());
 }
 
-Tracer& getTracer();
+inline Tracer& getTracer() {
+    return *Tracer::Global();
+}
+
+
 std::unique_ptr<Span>& getServiceSpan(ServiceContext* service);
 std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx);
 

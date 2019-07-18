@@ -110,10 +110,6 @@ private:
 }  // namespace
 
 namespace tracing {
-Tracer& getTracer() {
-    return *Tracer::Global();
-}
-
 std::unique_ptr<Span>& getServiceSpan(ServiceContext* service) {
     return getServiceDecoration(service);
 }

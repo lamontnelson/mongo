@@ -33,10 +33,14 @@
 #include <stdlib.h>
 #include <string>
 
+#include <opentracing/span.h>
+#include <opentracing/tracer.h>
+
 #include "mongo/base/status.h"
 #include "mongo/bson/timestamp.h"
 #include "mongo/db/repl/read_concern_level.h"
 #include "mongo/db/storage/snapshot.h"
+#include "mongo/db/tracing/tracing.h"
 
 namespace mongo {
 
@@ -380,6 +384,26 @@ public:
         kProvided
     };
 
+    std::string toString(ReadSource source) {
+        switch (source) {
+            case kUnset:
+                return "unset";
+            case kNoTimestamp:
+                return "no timestamp";
+            case kMajorityCommitted:
+                return "majority committed";
+            case kNoOverlap:
+                return "no overlap";
+            case kLastApplied:
+                return "last applied";
+            case kAllCommittedSnapshot:
+                return "all committed snapshot";
+            case kProvided:
+                return "provided timestamp";
+        }
+        MONGO_UNREACHABLE;
+    }
+
     /**
      * Sets which timestamp to use for read transactions. If 'provided' is supplied, only kProvided
      * is an acceptable input.
@@ -573,6 +597,43 @@ protected:
      * Transitions to new state.
      */
     void _setState(State newState) {
+        switch (newState) {
+            case State::kInactive:
+                if (_span) {
+                    _span->Finish();
+                    _span.reset();
+                }
+                break;
+            case State::kInactiveInUnitOfWork:
+                break;
+            case State::kActive:
+            case State::kActiveNotInUnitOfWork: {
+                auto& tracer = tracing::getTracer();
+                if (auto parentSpan = tracing::currentOpSpan)
+                    _span = tracer.StartSpan("storage read",
+                                             {tracing::FollowsFrom(&parentSpan->context())});
+                else
+                    _span = tracer.StartSpan("storage read");
+                auto readSource = getTimestampReadSource();
+                if (readSource != ReadSource::kUnset)
+                    _span->SetTag("readSource", toString(readSource));
+                break;
+            }
+            case State::kCommitting: {
+                if (_span && _state == State::kActive) {
+                    _span->SetOperationName("storage write");
+                    auto commitTimestamp = getCommitTimestamp();
+                    if (commitTimestamp != Timestamp())
+                        _span->SetTag("commitTimestamp", commitTimestamp.toStringPretty());
+                }
+                break;
+            }
+            case State::kAborting:
+                if (_span && _state == State::kActive)
+                    _span->SetOperationName("aborted write");
+                break;
+        }
+
         _state = newState;
     }
 
@@ -601,6 +662,7 @@ private:
     typedef std::vector<std::unique_ptr<Change>> Changes;
     Changes _changes;
     State _state = State::kInactive;
+    std::unique_ptr<tracing::Span> _span;
 };
 
 }  // namespace mongo
