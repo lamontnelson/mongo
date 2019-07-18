@@ -28,10 +28,5 @@
  */
 
 #include "mongo/base/init.h"
-#include <opentracing/span.h>
 
-namespace mongo {
-namespace tracing {
-thread_local opentracing::Span* currentOpSpan = nullptr;
-}
-}
+namespace mongo {}

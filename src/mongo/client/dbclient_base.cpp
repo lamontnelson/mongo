@@ -53,7 +53,7 @@
 #include "mongo/db/json.h"
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/query/killcursors_request.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/operation_span.h"
 #include "mongo/db/wire_version.h"
 #include "mongo/executor/remote_command_request.h"
 #include "mongo/executor/remote_command_response.h"
@@ -206,7 +206,6 @@ std::pair<rpc::UniqueReply, DBClientBase*> DBClientBase::runCommandWithTarget(
     auto host = getServerAddress();
 
     auto opCtx = haveClient() ? cc().getOperationContext() : nullptr;
-    auto svcCtx = hasGlobalServiceContext() ? getGlobalServiceContext() : nullptr;
 
     const std::string commandName = request.getCommandName().toString();
     BSONObjBuilder metadataBob(std::move(request.body));
@@ -214,27 +213,12 @@ std::pair<rpc::UniqueReply, DBClientBase*> DBClientBase::runCommandWithTarget(
         uassertStatusOK(_metadataWriter(opCtx, &metadataBob));
     }
 
-    tracing::Span* parentSpan = nullptr;
-    if (opCtx) {
-        parentSpan = tracing::getOperationSpan(opCtx).get();
-    } else if (svcCtx) {
-        parentSpan = tracing::getServiceSpan(svcCtx).get();
+    auto runCommandSpan = tracing::OperationSpan::makeFollowsFrom(opCtx, "runCommandWithTarget");
+    if (runCommandSpan) {
+        runCommandSpan->inject(&metadataBob);
+        runCommandSpan->setTag("peerAddress", host);
+        runCommandSpan->setTag("commandName", commandName);
     }
-
-    std::unique_ptr<tracing::Span> cmdSpan;
-    if (parentSpan) {
-        cmdSpan = tracing::getTracer().StartSpan("runCommandWithTarget",
-                                                 {tracing::ChildOf(&parentSpan->context())});
-        tracing::injectSpanContext(cmdSpan, &metadataBob);
-        cmdSpan->SetTag("peerAddress", host);
-        cmdSpan->SetTag("commandName", tracing::fromStringData(commandName));
-    }
-
-    auto cmdSpanGuard = makeGuard([&] {
-        if (cmdSpan) {
-            cmdSpan->Finish();
-        }
-    });
 
     request.body = metadataBob.obj();
 

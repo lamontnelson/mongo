@@ -46,7 +46,7 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/config.h"
 #include "mongo/db/server_options.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/tracing_setup.h"
 #include "mongo/idl/server_parameter.h"
 #include "mongo/logger/log_component.h"
 #include "mongo/logger/message_event_utf8_encoder.h"

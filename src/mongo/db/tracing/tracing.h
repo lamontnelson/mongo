@@ -29,53 +29,68 @@
 
 #pragma once
 
-#include "mongo/rpc/op_msg.h"
+#include "mongo/stdx/variant.h"
 
+#include <boost/optional.hpp>
 #include <opentracing/span.h>
 #include <opentracing/tracer.h>
 
+#include "mongo/base/string_data.h"
+#include "mongo/bson/bsonobjbuilder.h"
+#include "mongo/stdx/variant.h"
+
 namespace mongo {
-class ServiceContext;
-class OperationContext;
-
-Status setProcessParentSpan(const std::string& value);
-void setupTracing(ServiceContext* service, std::string serviceName);
-void shutdownTracing(ServiceContext* service);
-
 namespace tracing {
-using Tracer = opentracing::Tracer;
-using Span = opentracing::Span;
 using SpanContext = opentracing::SpanContext;
 using SpanReference = opentracing::SpanReference;
-
-extern thread_local Span* currentOpSpan;
 
 inline SpanReference ChildOf(const SpanContext* span_context) noexcept {
     return opentracing::ChildOf(span_context);
 }
 
 inline SpanReference FollowsFrom(const SpanContext* span_context) noexcept {
-    return opentracing::FollowsFrom(span_context);
+    return opentracing::ChildOf(span_context);
 }
 
-inline opentracing::string_view fromStringData(StringData sd) noexcept {
-    return opentracing::string_view(sd.rawData(), sd.size());
-}
+class Span {
+public:
+    explicit Span(std::unique_ptr<opentracing::Span> span) : _span(std::move(span)) {}
+    virtual ~Span();
 
-inline Tracer& getTracer() {
-    return *Tracer::Global();
-}
+    static std::unique_ptr<Span> make(StringData name,
+                                      std::initializer_list<SpanReference> references = {});
 
+    using TagValue = stdx::variant<StringData, int64_t, int32_t, uint32_t, uint64_t, bool, double>;
+    virtual void setTag(StringData tagName, const TagValue& val);
 
-std::unique_ptr<Span>& getServiceSpan(ServiceContext* service);
-std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx);
+    using LogEntry = std::pair<StringData, TagValue>;
+    void log(std::initializer_list<LogEntry> entries) {
+        for (auto& entry : entries) {
+            log(entry);
+        }
+    }
 
-const std::unique_ptr<Span>& getCurrentSpan(OperationContext* opCtx);
+    virtual void log(const LogEntry& entry);
+    virtual void finish();
+    virtual void inject(BSONObjBuilder* bob);
+    void setOperationName(StringData name);
+    virtual const SpanContext& context() const;
 
-void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request);
+protected:
+    bool finished() const {
+        return _finished;
+    }
+
+private:
+    Span() = delete;
+
+    std::unique_ptr<opentracing::Span> _span;
+    bool _finished = false;
+};
+
+extern thread_local std::shared_ptr<Span> currentOpSpan;
 
 boost::optional<std::unique_ptr<SpanContext>> extractSpanContext(const BSONObj& body);
-void injectSpanContext(const std::unique_ptr<Span>& span, BSONObjBuilder* out);
 
 }  // namespace tracing
 }  // namespace mongo

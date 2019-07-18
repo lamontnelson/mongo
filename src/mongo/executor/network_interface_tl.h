@@ -112,7 +112,7 @@ private:
 
         AtomicWord<bool> done;
         Promise<RemoteCommandOnAnyResponse> promise;
-        std::unique_ptr<tracing::Span> span;
+        std::shared_ptr<tracing::Span> span;
     };
 
     struct AlarmState {

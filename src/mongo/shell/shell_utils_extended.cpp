@@ -39,7 +39,7 @@
 #include <boost/filesystem.hpp>
 #include <fstream>
 
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/tracing_setup.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/shell/shell_utils.h"
 #include "mongo/shell/shell_utils_launcher.h"
@@ -384,7 +384,7 @@ BSONObj getServiceSpanContextForShell(const BSONObj& a, void* data) {
     }
 
     BSONObjBuilder bob;
-    tracing::injectSpanContext(serviceSpan, &bob);
+    serviceSpan->inject(&bob);
 
     return bob.obj();
 }

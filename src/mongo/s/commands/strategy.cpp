@@ -58,7 +58,7 @@
 #include "mongo/db/query/getmore_request.h"
 #include "mongo/db/query/query_request.h"
 #include "mongo/db/stats/counters.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/operation_span.h"
 #include "mongo/db/transaction_validation.h"
 #include "mongo/db/views/resolved_view.h"
 #include "mongo/rpc/factory.h"
@@ -731,7 +731,7 @@ DbResponse Strategy::clientCommand(OperationContext* opCtx, const Message& m) {
     BSONObjBuilder errorBuilder;
 
     bool propagateException = false;
-
+    std::shared_ptr<tracing::Span> cmdSpan;
     try {
         // Parse.
         OpMsgRequest request = [&] {
@@ -746,7 +746,14 @@ DbResponse Strategy::clientCommand(OperationContext* opCtx, const Message& m) {
                 throw;
             }
         }();
-        tracing::configureOperationSpan(opCtx, request);
+
+        auto contextFromClient = tracing::extractSpanContext(request.body);
+        if (contextFromClient) {
+            cmdSpan = tracing::OperationSpan::initialize(
+                opCtx, "handleRequest", tracing::FollowsFrom(contextFromClient->get()));
+        } else {
+            cmdSpan = tracing::OperationSpan::initialize(opCtx, "handleRequest");
+        }
 
         // Execute.
         std::string db = request.getDatabase().toString();
@@ -787,7 +794,6 @@ DbResponse Strategy::clientCommand(OperationContext* opCtx, const Message& m) {
         }
     }
 
-    tracing::getOperationSpan(opCtx)->Finish();
     return dbResponse;
 }
 

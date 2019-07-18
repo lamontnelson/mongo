@@ -33,35 +33,21 @@
 
 #include "mongo/db/tracing/tracing.h"
 
-#include <opentracing/dynamic_load.h>
 #include <opentracing/propagation.h>
+#include <opentracing/tracer.h>
 
-#include "mongo/base/system_error.h"
 #include "mongo/bson/json.h"
-#include "mongo/db/operation_context.h"
-#include "mongo/db/service_context.h"
-#include "mongo/util/decorable.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
 namespace {
-const auto kJaegerLibraryName = "libjaegertracing.so";
-const auto kTracerConfigFormat = R"(
-service_name: {}
-disabled: false
-reporter:
-    logSpans: true
-    localAgentHostPort: 10.1.2.24:6831 # JBR's workstation for testing only!
-sampler:
-  type: const
-  param: 1)"_sd;
+inline opentracing::string_view fromStringData(StringData data) {
+    return opentracing::string_view(data.rawData(), data.size());
+}
 
-const auto getServiceDecoration =
-    ServiceContext::declareDecoration<std::unique_ptr<tracing::Span>>();
-const auto getOperationDecoration =
-    OperationContext::declareDecoration<std::unique_ptr<tracing::Span>>();
-
-BSONObj processParentSpan = BSONObj();
+inline StringData fromStringView(opentracing::string_view view) {
+    return StringData(view.data(), view.size());
+}
 
 class BSONCarrierReader : public opentracing::TextMapReader {
 public:
@@ -69,22 +55,16 @@ public:
 
     opentracing::expected<void> ForeachKey(
         std::function<opentracing::expected<void>(
-            opentracing::string_view key, opentracing::string_view value)> func) const override
-        try {
+            opentracing::string_view key, opentracing::string_view value)> func) const override {
         for (const auto& kv : _obj) {
             func(fromStringData(kv.fieldNameStringData()),
                  fromStringData(kv.checkAndGetStringData().rawData()));
         }
 
         return {};
-    } catch (const DBException& e) {
-        return opentracing::make_unexpected(std::error_code(e.code(), mongoErrorCategory()));
     }
 
 private:
-    opentracing::string_view fromStringData(StringData data) const {
-        return opentracing::string_view(data.rawData(), data.size());
-    }
     BSONObj _obj;
 };
 
@@ -101,64 +81,80 @@ public:
     }
 
 private:
-    StringData fromStringView(opentracing::string_view view) const {
-        return StringData(view.data(), view.size());
-    }
-
     mutable BSONObjBuilder _bob;
 };
+
+opentracing::Tracer& getTracer() {
+    return *opentracing::Tracer::Global();
+}
+
 }  // namespace
 
 namespace tracing {
-std::unique_ptr<Span>& getServiceSpan(ServiceContext* service) {
-    return getServiceDecoration(service);
-}
+thread_local std::shared_ptr<Span> currentOpSpan = nullptr;
 
-std::unique_ptr<Span>& getOperationSpan(OperationContext* opCtx) {
-    return getOperationDecoration(opCtx);
-}
+std::unique_ptr<Span> Span::make(StringData name, std::initializer_list<SpanReference> references) {
 
-const std::unique_ptr<Span>& getCurrentSpan(OperationContext* opCtx) {
-    if (opCtx) {
-        if (getOperationSpan(opCtx)) {
-            return getOperationSpan(opCtx);
-        } else if (getServiceSpan(opCtx->getServiceContext())) {
-            return getServiceSpan(opCtx->getServiceContext());
-        }
-    } else if (hasGlobalServiceContext() && getServiceSpan(getGlobalServiceContext())) {
-        return getServiceSpan(getGlobalServiceContext());
+    opentracing::StartSpanOptions options;
+    for (auto& ref : references) {
+        ref.Apply(options);
     }
 
-    const static std::unique_ptr<Span> emptySpan = nullptr;
-    return emptySpan;
+    auto span = getTracer().StartSpanWithOptions(fromStringData(name), options);
+    return std::make_unique<Span>(std::move(span));
 }
 
-void configureOperationSpan(OperationContext* opCtx, const OpMsgRequest& request) {
-    invariant(opCtx && !request.body.isEmpty());
-    auto spanContext = tracing::extractSpanContext(request.body);
-    auto& tracer = tracing::getTracer();
+template <class... Ts>
+struct overloaded : Ts... {
+    using Ts::operator()...;
+};
+template <class... Ts>
+overloaded(Ts...)->overloaded<Ts...>;
 
-    const auto& serviceSpan = getServiceSpan(opCtx->getServiceContext());
-    invariant(serviceSpan);
-    auto commandName = request.getCommandName().toString();
-    if (spanContext) {
-        auto opSpan = tracer.StartSpan(
-            commandName,
-            {tracing::ChildOf(spanContext->get()), tracing::FollowsFrom(&serviceSpan->context())});
-        getOperationSpan(opCtx).swap(opSpan);
-    } else {
-        auto opSpan =
-            tracer.StartSpan(commandName, {tracing::FollowsFrom(&serviceSpan->context())});
-        getOperationSpan(opCtx).swap(opSpan);
-    }
+void Span::setTag(StringData tagName, const Span::TagValue& value) {
+    stdx::visit(overloaded{[&](auto arg) { _span->SetTag(fromStringData(tagName), arg); },
+                           [&](StringData arg) {
+                               _span->SetTag(fromStringData(tagName), fromStringData(arg));
+                           }},
+                value);
+}
 
-    const auto& opSpan = getOperationSpan(opCtx);
-    opSpan->SetTag("commandName", fromStringData(request.getCommandName()));
-    auto client = opCtx->getClient();
-    if (client->hasRemote()) {
-        opSpan->SetTag("peerAddress", client->getRemote().toString());
+void Span::log(const Span::LogEntry& item) {
+    stdx::visit(overloaded{[&](auto arg) {
+                               _span->Log({{fromStringData(item.first), arg}});
+                           },
+                           [&](StringData arg) {
+                               _span->Log({{fromStringData(item.first), fromStringData(arg)}});
+                           }},
+                item.second);
+}
+
+void Span::finish() {
+    if (_finished) {
+        return;
     }
-    currentOpSpan = opSpan.get();
+    _span->Finish();
+
+    _finished = true;
+}
+
+void Span::inject(BSONObjBuilder* out) {
+    BSONCarrierWriter carrier;
+    uassert(51242, "Failed to inject span context", getTracer().Inject(_span->context(), carrier));
+    auto obj = carrier.obj();
+    out->append("$spanContext", std::move(obj));
+}
+
+void Span::setOperationName(StringData name) {
+    _span->SetOperationName(fromStringData(name));
+}
+
+const SpanContext& Span::context() const {
+    return _span->context();
+}
+
+Span::~Span() {
+    finish();
 }
 
 boost::optional<std::unique_ptr<SpanContext>> extractSpanContext(const BSONObj& body) {
@@ -172,75 +168,5 @@ boost::optional<std::unique_ptr<SpanContext>> extractSpanContext(const BSONObj& 
     return std::move(*expectedSpanContext);
 }
 
-void injectSpanContext(const std::unique_ptr<Span>& span, BSONObjBuilder* out) {
-    BSONCarrierWriter carrier;
-    uassert(51242, "Failed to inject span context", getTracer().Inject(span->context(), carrier));
-    auto obj = carrier.obj();
-    out->append("$spanContext", std::move(obj));
-}
-
 }  // namespace tracing
-
-void setupTracing(ServiceContext* service, std::string serviceName) {
-    std::string errorMessage;
-
-    static auto handleMaybe =
-        opentracing::DynamicallyLoadTracingLibrary(kJaegerLibraryName, errorMessage);
-    if (!handleMaybe) {
-        severe() << "Failed to load tracer library " << kJaegerLibraryName << ": " << errorMessage;
-        fassertFailed(31184);
-    }
-
-    auto& factory = handleMaybe->tracer_factory();
-    auto config = fmt::format(kTracerConfigFormat, serviceName);
-    auto tracer = factory.MakeTracer(config.data(), errorMessage);
-    if (!tracer) {
-        severe() << "Error creating tracer: " << errorMessage;
-        fassertFailed(31185);
-    }
-
-    opentracing::Tracer::InitGlobal(*tracer);
-
-    std::unique_ptr<tracing::SpanContext> parentSpan;
-    if (!processParentSpan.isEmpty()) {
-        try {
-            auto maybeParentSpan = (*tracer)->Extract(BSONCarrierReader(processParentSpan));
-            if (maybeParentSpan) {
-                parentSpan = std::move(*maybeParentSpan);
-                log() << "Extracted parent tracing span from command line options: "
-                      << processParentSpan;
-            }
-        } catch (const DBException& e) {
-            fassertFailedWithStatus(
-                51244, e.toStatus().withContext("Failed to extract process parent span"));
-        }
-    }
-
-    if (parentSpan) {
-        tracing::getServiceSpan(service) =
-            (*tracer)->StartSpan(serviceName, {FollowsFrom(parentSpan.get())});
-    } else {
-        tracing::getServiceSpan(service) = (*tracer)->StartSpan(serviceName);
-    }
-
-    log() << "initialized opentracing";
-}
-
-void shutdownTracing(ServiceContext* service) {
-    auto serviceSpan = std::move(tracing::getServiceSpan(service));
-    if (!serviceSpan) {
-        return;
-    }
-    serviceSpan->Log({{"msg", "shutting down"}});
-    serviceSpan->Finish();
-    tracing::getTracer().Close();
-}
-
-Status setProcessParentSpan(const std::string& value) try {
-    processParentSpan = fromjson(value);
-    return Status::OK();
-} catch (const DBException& e) {
-    return e.toStatus();
-}
-
 }  // namespace mongo

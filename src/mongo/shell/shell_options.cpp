@@ -43,7 +43,7 @@
 #include "mongo/config.h"
 #include "mongo/db/auth/sasl_command_constants.h"
 #include "mongo/db/server_options.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/tracing_setup.h"
 #include "mongo/rpc/protocol.h"
 #include "mongo/shell/shell_utils.h"
 #include "mongo/transport/message_compressor_registry.h"

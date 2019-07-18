@@ -49,7 +49,7 @@
 #include "mongo/db/commands/test_commands_enabled.h"
 #include "mongo/db/log_process_details.h"
 #include "mongo/db/server_options.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/tracing_setup.h"
 #include "mongo/logger/console_appender.h"
 #include "mongo/logger/logger.h"
 #include "mongo/logger/message_event_utf8_encoder.h"
@@ -685,8 +685,10 @@ int _main(int argc, char* argv[], char** envp) {
     setGlobalServiceContext(ServiceContext::make());
     // TODO This should use a TransportLayerManager or TransportLayerFactory
     auto serviceContext = getGlobalServiceContext();
+
     setupTracing(serviceContext, "mongo");
     const auto tracingGuard = makeGuard([&] { shutdownTracing(serviceContext); });
+
     transport::TransportLayerASIO::Options opts;
     opts.enableIPv6 = shellGlobalParams.enableIPv6;
     opts.mode = transport::TransportLayerASIO::Options::kEgress;

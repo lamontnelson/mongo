@@ -5,12 +5,21 @@ Import("env")
 env.Library(
     target='tracing',
     source=[
-        'tracing.cpp',
     ],
     LIBDEPS=[
-        '$BUILD_DIR/third_party/shim_opentracing_cpp',
         '$BUILD_DIR/mongo/base',
-        '$BUILD_DIR/mongo/base/system_error',
-        '$BUILD_DIR/mongo/db/service_context',
     ],
+)
+
+env.Library(
+    target='operation_span',
+    source=[
+        'operation_span.cpp',
+    ],
+    LIBDEPS=[
+        'tracing',
+    ],
+    LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/service_context',
+    ]
 )

@@ -35,7 +35,7 @@
 
 #include "mongo/db/commands/test_commands_enabled.h"
 #include "mongo/db/server_options.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/operation_span.h"
 #include "mongo/executor/connection_pool_tl.h"
 #include "mongo/transport/transport_layer_manager.h"
 #include "mongo/util/concurrency/idle_thread_block.h"
@@ -104,6 +104,7 @@ void NetworkInterfaceTL::startup() {
         std::move(typeFactory), std::string("NetworkInterfaceTL-") + _instanceName, _connPoolOpts);
     _ioThread = stdx::thread([this] {
         setThreadName(_instanceName);
+
         _run();
     });
 
@@ -202,10 +203,6 @@ auto NetworkInterfaceTL::CommandState::make(NetworkInterfaceTL* interface,
 NetworkInterfaceTL::CommandState::~CommandState() {
     invariant(interface);
 
-    if (span) {
-        span->Finish();
-    }
-
     {
         stdx::lock_guard lk(interface->_inProgressMutex);
         interface->_inProgress.erase(cbHandle);
@@ -230,11 +227,9 @@ Status NetworkInterfaceTL::startCommand(const TaskExecutor::CallbackHandle& cbHa
         }
     }
 
-    std::unique_ptr<tracing::Span> commandSpan;
-    if (const auto& currentSpan = tracing::getCurrentSpan(request.opCtx); currentSpan) {
-        commandSpan = tracing::getTracer().StartSpan("acquireConn",
-                                                     {tracing::ChildOf(&currentSpan->context())});
-        tracing::injectSpanContext(commandSpan, &newMetadata);
+    auto commandSpan = tracing::OperationSpan::makeFollowsFrom(request.opCtx, "acquireConn");
+    if (commandSpan) {
+        commandSpan->inject(&newMetadata);
     }
 
     request.metadata = newMetadata.obj();
@@ -320,15 +315,15 @@ Status NetworkInterfaceTL::startCommand(const TaskExecutor::CallbackHandle& cbHa
                 if (connState->finishLine.arriveStrongly()) {
                     cmdState->request.emplace(cmdState->requestOnAny, idx);
                     if (cmdState->span) {
-                        cmdState->span->Finish();
-                        auto commandSpan = tracing::getTracer().StartSpan(
-                            "startCommand", {tracing::FollowsFrom(&cmdState->span->context())});
-                        commandSpan->SetTag("peerAddress",
-                                            swConn.getValue()->getHostAndPort().toString());
-                        commandSpan->SetTag("commandName",
-                                            cmdState->request->cmdObj.firstElementFieldName());
-
-                        cmdState->span = std::move(commandSpan);
+                        auto oldSpan = std::move(cmdState->span);
+                        oldSpan->finish();
+                        auto newSpan = tracing::OperationSpan::makeFollowsFrom(
+                            cmdState->request->opCtx, "startCommand");
+                        newSpan->setTag("peerAddress",
+                                        swConn.getValue()->getHostAndPort().toString());
+                        newSpan->setTag("commandName",
+                                        cmdState->request->cmdObj.firstElementFieldName());
+                        cmdState->span = std::move(newSpan);
                     }
 
                     connState->promise.emplaceValue(std::move(swConn.getValue()));

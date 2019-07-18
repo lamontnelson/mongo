@@ -139,7 +139,7 @@
 #include "mongo/db/storage/storage_engine_lock_file.h"
 #include "mongo/db/storage/storage_options.h"
 #include "mongo/db/system_index.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/tracing_setup.h"
 #include "mongo/db/transaction_participant.h"
 #include "mongo/db/ttl.h"
 #include "mongo/db/wire_version.h"
@@ -1092,8 +1092,8 @@ int mongoDbMain(int argc, char* argv[], char** envp) {
 
     setupTracing(service, "mongod");
 
-    const auto& serviceSpan = tracing::getServiceSpan(service);
-    serviceSpan->SetTag("port", serverGlobalParams.port);
+    auto& serviceSpan = tracing::getServiceSpan(service);
+    serviceSpan->setTag("port", serverGlobalParams.port);
 #if defined(_WIN32)
     if (ntservice::shouldStartService()) {
         ntservice::startService();

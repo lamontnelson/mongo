@@ -78,7 +78,7 @@
 #include "mongo/db/stats/counters.h"
 #include "mongo/db/stats/server_read_concern_metrics.h"
 #include "mongo/db/stats/top.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/operation_span.h"
 #include "mongo/db/transaction_participant.h"
 #include "mongo/db/transaction_validation.h"
 #include "mongo/rpc/factory.h"
@@ -933,10 +933,19 @@ DbResponse receivedCommands(OperationContext* opCtx,
     auto replyBuilder = rpc::makeReplyBuilder(rpc::protocolForMessage(message));
     OpMsgRequest request;
 
+    std::shared_ptr<tracing::Span> commandSpan;
+
     [&] {
         try {  // Parse.
             request = rpc::opMsgRequestFromAnyProtocol(message);
-            tracing::configureOperationSpan(opCtx, request);
+            auto spanContext = tracing::extractSpanContext(request.body);
+            if (spanContext) {
+                commandSpan = tracing::OperationSpan::initialize(
+                    opCtx, "handleRequest", tracing::ChildOf(spanContext->get()));
+            } else {
+                commandSpan = tracing::OperationSpan::initialize(opCtx, "handleRequest");
+            }
+
         } catch (const DBException& ex) {
             // If this error needs to fail the connection, propagate it out.
             if (ErrorCodes::isConnectionFatalMessageParseError(ex.code()))
@@ -960,6 +969,13 @@ DbResponse receivedCommands(OperationContext* opCtx,
             return;  // From lambda. Don't try executing if parsing failed.
         }
 
+        commandSpan->setTag("commandName", request.getCommandName());
+        auto client = opCtx->getClient();
+        if (client->hasRemote()) {
+            commandSpan->setTag("peerAddress", client->getRemote().toString());
+        } else {
+            commandSpan->setTag("peerAddress", "<internal client>"_sd);
+        }
         try {  // Execute.
             curOpCommandSetup(opCtx, request);
 
@@ -1381,11 +1397,6 @@ DbResponse ServiceEntryPointCommon::handleRequest(OperationContext* opCtx,
     }
 
     recordCurOpMetrics(opCtx);
-
-    if (tracing::getOperationSpan(opCtx)) {
-        tracing::getOperationSpan(opCtx)->Finish();
-        tracing::currentOpSpan = nullptr;
-    }
     return dbresponse;
 }
 

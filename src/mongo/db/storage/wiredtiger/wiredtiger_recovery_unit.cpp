@@ -40,6 +40,7 @@
 #include "mongo/db/storage/wiredtiger/wiredtiger_prepare_conflict.h"
 #include "mongo/db/storage/wiredtiger/wiredtiger_session_cache.h"
 #include "mongo/db/storage/wiredtiger/wiredtiger_util.h"
+#include "mongo/db/tracing/operation_span.h"
 #include "mongo/util/hex.h"
 #include "mongo/util/log.h"
 
@@ -777,5 +778,39 @@ std::shared_ptr<StorageStats> WiredTigerRecoveryUnit::getOperationStatistics() c
 
     return statsPtr;
 }
+
+void WiredTigerRecoveryUnit::updateSpanInfo(State oldState, State newState) {
+    switch (newState) {
+        case State::kInactive:
+            if (_span) {
+                auto span = std::move(_span);
+            }
+            break;
+        case State::kInactiveInUnitOfWork:
+            break;
+        case State::kActive:
+        case State::kActiveNotInUnitOfWork: {
+            _span = tracing::OperationSpan::makeFollowsFrom(nullptr, "storage read");
+            auto readSource = getTimestampReadSource();
+            if (readSource != ReadSource::kUnset)
+                _span->setTag("readSource", toString(readSource));
+            break;
+        }
+        case State::kCommitting: {
+            if (_span && oldState == State::kActive) {
+                _span->setOperationName("storage write");
+                auto commitTimestamp = getCommitTimestamp();
+                if (commitTimestamp != Timestamp())
+                    _span->setTag("commitTimestamp", commitTimestamp.toStringPretty());
+            }
+            break;
+        }
+        case State::kAborting:
+            if (_span && oldState == State::kActive)
+                _span->setOperationName("aborted write");
+            break;
+    }
+}
+
 
 }  // namespace mongo

@@ -123,13 +123,15 @@ env.Library(
         '$BUILD_DIR/mongo/base/environment_buffer',
         '$BUILD_DIR/mongo/client/clientdriver_network',
         '$BUILD_DIR/mongo/db/mongohasher',
-        '$BUILD_DIR/mongo/db/tracing/tracing',
         '$BUILD_DIR/mongo/db/traffic_reader',
         '$BUILD_DIR/mongo/scripting/scripting',
         '$BUILD_DIR/mongo/transport/message_compressor',
         '$BUILD_DIR/mongo/util/password',
         'shell_options_storage',
-    ]
+    ],
+    LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/service_context',
+    ],
 )
 
 kmsEnv = env.Clone()

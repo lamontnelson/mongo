@@ -66,7 +66,7 @@
 #include "mongo/db/session_killer.h"
 #include "mongo/db/sessions_collection_sharded.h"
 #include "mongo/db/startup_warnings_common.h"
-#include "mongo/db/tracing/tracing.h"
+#include "mongo/db/tracing/tracing_setup.h"
 #include "mongo/db/wire_version.h"
 #include "mongo/executor/task_executor_pool.h"
 #include "mongo/platform/process_id.h"

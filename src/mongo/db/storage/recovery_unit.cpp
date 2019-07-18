@@ -32,6 +32,7 @@
 #include "mongo/platform/basic.h"
 
 #include "mongo/db/storage/recovery_unit.h"
+#include "mongo/db/tracing/operation_span.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
@@ -65,4 +66,5 @@ void RecoveryUnit::abortRegisteredChanges() {
         std::terminate();
     }
 }
+
 }  // namespace mongo

@@ -44,6 +44,7 @@
 #include "mongo/db/storage/recovery_unit.h"
 #include "mongo/db/storage/wiredtiger/wiredtiger_begin_transaction_block.h"
 #include "mongo/db/storage/wiredtiger/wiredtiger_session_cache.h"
+#include "mongo/db/tracing/tracing.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
@@ -199,6 +200,9 @@ public:
 
     static void appendGlobalStats(BSONObjBuilder& b);
 
+protected:
+    void updateSpanInfo(State oldState, State newState) override;
+
 private:
     void _abort();
     void _commit();
@@ -253,6 +257,7 @@ private:
     std::unique_ptr<Timer> _timer;
     bool _isOplogReader = false;
     boost::optional<int64_t> _oplogVisibleTs = boost::none;
+    std::shared_ptr<tracing::Span> _span;
 };
 
 }  // namespace mongo

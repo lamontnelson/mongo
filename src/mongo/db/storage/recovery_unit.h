@@ -596,47 +596,11 @@ protected:
     /**
      * Transitions to new state.
      */
+    virtual void updateSpanInfo(State oldState, State newState) {}
     void _setState(State newState) {
-        switch (newState) {
-            case State::kInactive:
-                if (_span) {
-                    _span->Finish();
-                    _span.reset();
-                }
-                break;
-            case State::kInactiveInUnitOfWork:
-                break;
-            case State::kActive:
-            case State::kActiveNotInUnitOfWork: {
-                auto& tracer = tracing::getTracer();
-                if (auto parentSpan = tracing::currentOpSpan)
-                    _span = tracer.StartSpan("storage read",
-                                             {tracing::FollowsFrom(&parentSpan->context())});
-                else
-                    _span = tracer.StartSpan("storage read");
-                auto readSource = getTimestampReadSource();
-                if (readSource != ReadSource::kUnset)
-                    _span->SetTag("readSource", toString(readSource));
-                break;
-            }
-            case State::kCommitting: {
-                if (_span && _state == State::kActive) {
-                    _span->SetOperationName("storage write");
-                    auto commitTimestamp = getCommitTimestamp();
-                    if (commitTimestamp != Timestamp())
-                        _span->SetTag("commitTimestamp", commitTimestamp.toStringPretty());
-                }
-                break;
-            }
-            case State::kAborting:
-                if (_span && _state == State::kActive)
-                    _span->SetOperationName("aborted write");
-                break;
-        }
-
+        updateSpanInfo(_state, newState);
         _state = newState;
     }
-
     /**
      * Returns true if active.
      */
@@ -662,7 +626,7 @@ private:
     typedef std::vector<std::unique_ptr<Change>> Changes;
     Changes _changes;
     State _state = State::kInactive;
-    std::unique_ptr<tracing::Span> _span;
+    std::shared_ptr<tracing::Span> _span;
 };
 
 }  // namespace mongo

@@ -89,7 +89,7 @@ LogstreamBuilder::LogstreamBuilder(MessageLogDomain* domain,
 
 void LogstreamBuilder::logToOpSpan(StringData message, int severity) noexcept {
     if (tracing::currentOpSpan) {
-        tracing::currentOpSpan->Log({{"severity", severity}, {"message", message.toString()}});
+        tracing::currentOpSpan->log({{"severity", severity}, {"message", message.toString()}});
     }
 }
 
