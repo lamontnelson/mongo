@@ -300,6 +300,10 @@ void CurOp::reportCurrentOpForClient(OperationContext* opCtx,
             lsid->serialize(&lsidBuilder);
         }
 
+        if (auto txnNum = clientOpCtx->getTxnNumber()) {
+            infoBuilder->append("txnNumber", txnNum.get());  // TODO: revisit field name
+        }
+
         CurOp::get(clientOpCtx)->reportState(infoBuilder, truncateOps);
     }
     if (backtraceMode) {
