@@ -42,7 +42,7 @@ assert.commandWorked(coordinator.adminCommand({_flushRoutingTableCacheUpdates: n
 assert.commandWorked(st.shard1.adminCommand({_flushRoutingTableCacheUpdates: ns}));
 
 const failPoints =
-    ['hangAfterSendingCoordinateCommitTransaction'];  // 'hangBeforeWritingParticipantList'];
+    ['hangAfterSendingCoordinateCommitTransaction', 'hangBeforeWritingParticipantList'];
 
 failPoints.forEach(function(fpName) {
     assert.commandWorked(coordinator.adminCommand({
@@ -71,24 +71,31 @@ const sendCoordinatorCommitfilter = {
 printjson(sendCoordinatorCommitfilter);
 
 waitForFailpoint("Hit hangAfterSendingCoordinateCommitTransaction failpoint", 1);
-// waitForFailpoint("Hit hangBeforeWritingParticipantList failpoint", 1);
-var currentOp;
-currentOp = adminDB.aggregate([{$currentOp: {}}, {$match: sendCoordinatorCommitfilter}]).toArray();
-printjson(currentOp);
+var createCoordinateCommitTxnOp;
+createCoordinateCommitTxnOp =
+    adminDB.aggregate([{$currentOp: {}}, {$match: sendCoordinatorCommitfilter}]).toArray();
+printjson(createCoordinateCommitTxnOp);
 
-// const writeParticipantFilter = {
-//     active: true,
-//     'twoPhaseCommitCoordinator.lsid.id': session.getSessionId().id,
-//     'twoPhaseCommitCoordinator.txnNumber': NumberLong(0),
-//     'twoPhaseCommitCoordinator.action': "writingParticipantList"
-// };
-// printjson(writeParticipantFilter);
+const writeParticipantFilter = {
+    active: true,
+    'twoPhaseCommitCoordinator.lsid.id': session.getSessionId().id,
+    'twoPhaseCommitCoordinator.txnNumber': NumberLong(0),
+    'twoPhaseCommitCoordinator.action': "writingParticipantsList"
+};
+printjson(writeParticipantFilter);
+
+waitForFailpoint("Hit hangBeforeWritingParticipantList failpoint", 1);
+print("XXX: writeParticipant");
+var writeParticipantOp;
+writeParticipantOp =
+    adminDB.aggregate([{$currentOp: {}}, {$match: writeParticipantFilter}]).toArray();
+printjson(writeParticipantOp);
 
 print("XXX: UNFILTERED:");
 printjson(adminDB.aggregate([{$currentOp: {}}, {$match: {}}]).toArray());
 
-// currentOp = adminDB.aggregate([{$currentOp: {}}, {$match: writeParticipantFilter}]).toArray();
-// assert.eq(1, currentOp.length);
+assert.eq(1, createCoordinateCommitTxnOp.length);
+assert.eq(1, writeParticipantOp.length);
 
 failPoints.forEach(function(fpName) {
     assert.commandWorked(coordinator.adminCommand({
