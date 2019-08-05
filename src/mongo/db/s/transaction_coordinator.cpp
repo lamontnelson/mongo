@@ -122,6 +122,8 @@ TransactionCoordinator::TransactionCoordinator(ServiceContext* serviceContext,
             //  Input: _participants
             //         _participantsDurable (optional)
             //  Output: _participantsDurable = true
+            auto startTime = _serviceContext->getPreciseClockSource()->now();
+
             {
                 stdx::lock_guard<stdx::mutex> lg(_mutex);
                 invariant(_participants);
@@ -132,14 +134,14 @@ TransactionCoordinator::TransactionCoordinator(ServiceContext* serviceContext,
                 _transactionCoordinatorMetricsObserver->onStartWritingParticipantList(
                     ServerTransactionCoordinatorsMetrics::get(_serviceContext),
                     _serviceContext->getTickSource(),
-                    _serviceContext->getPreciseClockSource()->now());
+                    startTime);
 
                 if (_participantsDurable)
                     return Future<repl::OpTime>::makeReady(repl::OpTime());
             }
 
             return txn::persistParticipantsList(
-                *_sendPrepareScheduler, _lsid, _txnNumber, *_participants);
+                *_sendPrepareScheduler, _lsid, _txnNumber, *_participants, startTime);
         })
         .then([this](repl::OpTime opTime) {
             hangIfFailPointEnabled(_serviceContext,
