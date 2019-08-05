@@ -68,7 +68,7 @@ const sendCoordinatorCommitfilter = {
     'command.coordinator': true,
     'command.autocommit': false
 };
-printjson(sendCoordinatorCommitfilter);
+// printjson(sendCoordinatorCommitfilter);
 
 waitForFailpoint("Hit hangAfterSendingCoordinateCommitTransaction failpoint", 1);
 var createCoordinateCommitTxnOp;
@@ -80,9 +80,10 @@ const writeParticipantFilter = {
     active: true,
     'twoPhaseCommitCoordinator.lsid.id': session.getSessionId().id,
     'twoPhaseCommitCoordinator.txnNumber': NumberLong(0),
-    'twoPhaseCommitCoordinator.action': "writingParticipantsList"
+    'twoPhaseCommitCoordinator.action': "writingParticipantsList",
+    'twoPhaseCommitCoordinator.startTime': {$exists: true}
 };
-printjson(writeParticipantFilter);
+// printjson(writeParticipantFilter);
 
 waitForFailpoint("Hit hangBeforeWritingParticipantList failpoint", 1);
 print("XXX: writeParticipant");

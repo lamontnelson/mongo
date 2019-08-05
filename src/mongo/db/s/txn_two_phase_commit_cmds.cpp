@@ -45,6 +45,7 @@
 namespace mongo {
 namespace {
 
+MONGO_FAIL_POINT_DEFINE(hangAfterSendingCoordinateCommitTransaction);
 MONGO_FAIL_POINT_DEFINE(participantReturnNetworkErrorForPrepareAfterExecutingPrepareLogic);
 
 class PrepareTransactionCmd : public TypedCommand<PrepareTransactionCmd> {
@@ -221,6 +222,8 @@ public:
         using InvocationBase::InvocationBase;
 
         void typedRun(OperationContext* opCtx) {
+
+
             // Only config servers or initialized shard servers can act as transaction coordinators.
             if (serverGlobalParams.clusterRole != ClusterRole::ConfigServer) {
                 uassertStatusOK(ShardingState::get(opCtx)->canAcceptShardedCommands());
@@ -246,6 +249,12 @@ public:
             } else {
                 coordinatorDecisionFuture = tcs->recoverCommit(
                     opCtx, *opCtx->getLogicalSessionId(), *opCtx->getTxnNumber());
+            }
+
+            if (MONGO_FAIL_POINT(hangAfterSendingCoordinateCommitTransaction)) {
+                LOG(0) << "Hit hangAfterSendingCoordinateCommitTransaction failpoint";
+                MONGO_FAIL_POINT_PAUSE_WHILE_SET_OR_INTERRUPTED(
+                    opCtx, hangAfterSendingCoordinateCommitTransaction);
             }
 
             ON_BLOCK_EXIT([opCtx] {

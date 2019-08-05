@@ -238,6 +238,13 @@ public:
     bool waitingForFlowControl{false};
 };
 
+struct TwoPhaseCommitCoordinatorInfo {
+    LogicalSessionId lsid;
+    TxnNumber txnNum;
+    std::string action;
+    Date_t startTime;
+};
+
 /**
  * Container for data used to report information about an OperationContext.
  *
@@ -319,6 +326,12 @@ public:
 
     bool haveOpDescription() const {
         return !_opDescription.isEmpty();
+    }
+
+
+    void setTwoPhaseCommitCoordinatorInfo(TwoPhaseCommitCoordinatorInfo coordinatorInfo) {
+        invariant(!_twoPhaseCoordinatorInfo);
+        _twoPhaseCoordinatorInfo = coordinatorInfo;
     }
 
     /**
@@ -666,6 +679,8 @@ private:
     std::string _planSummary;
     boost::optional<SingleThreadedLockStats>
         _lockStatsBase;  // This is the snapshot of lock stats taken when curOp is constructed.
+
+    boost::optional<TwoPhaseCommitCoordinatorInfo> _twoPhaseCoordinatorInfo;
 };
 
 /**

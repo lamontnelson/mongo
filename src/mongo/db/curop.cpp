@@ -300,10 +300,6 @@ void CurOp::reportCurrentOpForClient(OperationContext* opCtx,
             lsid->serialize(&lsidBuilder);
         }
 
-        if (auto txnNum = clientOpCtx->getTxnNumber()) {
-            infoBuilder->append("txnNumber", txnNum.get());  // TODO: revisit field name
-        }
-
         CurOp::get(clientOpCtx)->reportState(infoBuilder, truncateOps);
     }
     if (backtraceMode) {
@@ -599,6 +595,18 @@ void CurOp::reportState(BSONObjBuilder* builder, bool truncateOps) {
     }
 
     builder->append("numYields", _numYields);
+
+    if (_twoPhaseCoordinatorInfo) {
+        BSONObjBuilder twoPhaseCoordinatorBuilder;
+        BSONObjBuilder lsidBuilder(twoPhaseCoordinatorBuilder.subobjStart("lsid"));
+        _twoPhaseCoordinatorInfo->lsid.serialize(&lsidBuilder);
+        lsidBuilder.doneFast();
+        twoPhaseCoordinatorBuilder.append("txnNumber", _twoPhaseCoordinatorInfo->txnNum);
+        twoPhaseCoordinatorBuilder.append("action", _twoPhaseCoordinatorInfo->action);
+        twoPhaseCoordinatorBuilder.append("startTime",
+                                          dateToISOStringUTC(_twoPhaseCoordinatorInfo->startTime));
+        builder->append("twoPhaseCommitCoordinator", twoPhaseCoordinatorBuilder.obj());
+    }
 }
 
 namespace {

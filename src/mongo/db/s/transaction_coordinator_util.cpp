@@ -36,6 +36,7 @@
 #include "mongo/client/remote_command_retry_scheduler.h"
 #include "mongo/db/commands/txn_cmds_gen.h"
 #include "mongo/db/commands/txn_two_phase_commit_cmds_gen.h"
+#include "mongo/db/curop.h"
 #include "mongo/db/dbdirectclient.h"
 #include "mongo/db/ops/write_ops.h"
 #include "mongo/db/repl/repl_client_info.h"
@@ -170,15 +171,24 @@ repl::OpTime persistParticipantListBlocking(OperationContext* opCtx,
 Future<repl::OpTime> persistParticipantsList(txn::AsyncWorkScheduler& scheduler,
                                              const LogicalSessionId& lsid,
                                              TxnNumber txnNumber,
-                                             const txn::ParticipantsList& participants) {
+                                             const txn::ParticipantsList& participants,
+                                             Date_t startTime) {
     return txn::doWhile(
         scheduler,
         boost::none /* no need for a backoff */,
         [](const StatusWith<repl::OpTime>& s) { return shouldRetryPersistingCoordinatorState(s); },
-        [&scheduler, lsid, txnNumber, participants] {
-            return scheduler.scheduleWork([lsid, txnNumber, participants](OperationContext* opCtx) {
-                return persistParticipantListBlocking(opCtx, lsid, txnNumber, participants);
-            });
+        [&scheduler, lsid, txnNumber, participants, startTime] {
+            return scheduler.scheduleWork(
+                [lsid, txnNumber, participants, startTime](OperationContext* opCtx) {
+                    printf("XXX: write 2pc info!!!\n");
+                    TwoPhaseCommitCoordinatorInfo coordinatorInfo = {.lsid = lsid,
+                                                                     .txnNum = txnNumber,
+                                                                     .action =
+                                                                         "writingParticipantsList",
+                                                                     .startTime = startTime};
+                    CurOp::get(opCtx)->setTwoPhaseCommitCoordinatorInfo(coordinatorInfo);
+                    return persistParticipantListBlocking(opCtx, lsid, txnNumber, participants);
+                });
         });
 }
 
