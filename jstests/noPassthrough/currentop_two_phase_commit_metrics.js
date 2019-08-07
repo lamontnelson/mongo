@@ -1,6 +1,6 @@
 /**
- * Tests that the time-tracking metrics in the 'transaction' object in currentOp() are being tracked
- * correctly.
+ * Tests that the transaction items in the 'twoPhaseCommitPhaseCommit' object in currentOp() are
+ * being tracked correctly.
  * @tags: [uses_transactions, uses_prepare_transaction]
  */
 
@@ -8,102 +8,177 @@
 'use strict';
 load('jstests/sharding/libs/sharded_transactions_helpers.js');
 
-function commitTxn(lsid, txnNumber) {
-    const runCommitExpectSuccessCode = "assert.commandWorked(db.adminCommand({" +
+function commitTxn(st, lsid, txnNumber, assertWorked = true) {
+    let cmd = "db.adminCommand({" +
         "commitTransaction: 1," +
         "lsid: " + tojson(lsid) + "," +
         "txnNumber: NumberLong(" + txnNumber + ")," +
         "stmtId: NumberInt(0)," +
         "autocommit: false," +
-        "}));";
-    return startParallelShell(runCommitExpectSuccessCode, st.s.port);
+        "})";
+    if (assertWorked) {
+        cmd = "assert.commandWorked(" + cmd + ");";
+    } else {
+        cmd += ";";
+    }
+    return startParallelShell(cmd, st.s.port);
 }
 
-const st = new ShardingTest({shards: 2, config: 1});
-const collName = 'currentop_two_phase';
+function afterFailpoint(fpName, fn = function() {}, fpCount = 1, disable = true) {
+    const expectedLog = "Hit " + fpName + " failpoint";
+    waitForFailpoint(expectedLog, fpCount);
+    let result = fn();
+    if (disable) {
+        assert.commandWorked(coordinator.adminCommand({
+            configureFailPoint: fpName,
+            mode: "off",
+        }));
+    }
+    return result;
+}
+
+function makeWorkerFilterWithAction(session, action) {
+    return {
+        active: true,
+        'twoPhaseCommitCoordinator.lsid.id': session.getSessionId().id,
+        'twoPhaseCommitCoordinator.txnNumber': NumberLong(0),
+        'twoPhaseCommitCoordinator.action': action,
+        'twoPhaseCommitCoordinator.startTime': {$exists: true}
+    };
+}
+
+function setupDatabase(st, dbName, collectionName) {
+    const ns = dbName + "." + collectionName;
+    testDB.runCommand({drop: collectionName, writeConcern: {w: "majority"}});
+    assert.commandWorked(testDB[collectionName].insert({x: 1}, {writeConcern: {w: "majority"}}));
+    assert.commandWorked(st.s.adminCommand({enableSharding: dbName}));
+    assert.commandWorked(st.s.adminCommand({movePrimary: dbName, to: coordinator.shardName}));
+    assert.commandWorked(st.s.adminCommand({shardCollection: ns, key: {_id: 1}}));
+    assert.commandWorked(st.s.adminCommand({split: ns, middle: {_id: 0}}));
+    assert.commandWorked(
+        st.s.adminCommand({moveChunk: ns, find: {_id: 0}, to: st.shard1.shardName}));
+    assert.commandWorked(coordinator.adminCommand({_flushRoutingTableCacheUpdates: ns}));
+    assert.commandWorked(st.shard1.adminCommand({_flushRoutingTableCacheUpdates: ns}));
+}
+
+function enableFailPoints(failPoints) {
+    failPoints.forEach(function(fpName) {
+        assert.commandWorked(coordinator.adminCommand({
+            configureFailPoint: fpName,
+            mode: "alwaysOn",
+        }));
+    });
+}
+
+function startTransaction(session, collectionName, insertValue = 1) {
+    const dbName = session.getDatabase('test');
+    session.startTransaction();
+    // insert into both shards
+    assert.commandWorked(dbName[collectionName].insert({_id: -1 * insertValue}));
+    assert.commandWorked(dbName[collectionName].insert({_id: insertValue}));
+}
+
+// Setup test
+const numShards = 2;
+const st = new ShardingTest({shards: numShards, config: 1});
+const dbName = "test";
+const collectionName = 'currentop_two_phase';
 const testDB = st.getDB('test');
 const adminDB = st.getDB('admin');
-const dbName = "test";
-const ns = dbName + "." + collName;
 const coordinator = st.shard0;
-testDB.runCommand({drop: collName, writeConcern: {w: "majority"}});
-assert.commandWorked(testDB[collName].insert({x: 1}, {writeConcern: {w: "majority"}}));
+const participant = st.shard1;
+const failPoints = [
+    'hangAfterSendingCoordinateCommitTransaction',
+    'hangBeforeWritingParticipantList',
+    'hangBeforeSendingPrepare',
+    'hangBeforeWritingDecision',
+    'hangBeforeSendingCommit',
+    'hangBeforeDeletingCoordinatorDoc',
+    'hangBeforeSendingAbort'
+];
 
-const session = adminDB.getMongo().startSession({causalConsistency: false});
-const sessionDB = session.getDatabase('test');
-
-assert.commandWorked(st.s.adminCommand({enableSharding: dbName}));
-assert.commandWorked(st.s.adminCommand({movePrimary: dbName, to: coordinator.shardName}));
-assert.commandWorked(st.s.adminCommand({shardCollection: ns, key: {_id: 1}}));
-assert.commandWorked(st.s.adminCommand({split: ns, middle: {_id: 0}}));
-assert.commandWorked(st.s.adminCommand({moveChunk: ns, find: {_id: 0}, to: st.shard1.shardName}));
-
-assert.commandWorked(coordinator.adminCommand({_flushRoutingTableCacheUpdates: ns}));
-assert.commandWorked(st.shard1.adminCommand({_flushRoutingTableCacheUpdates: ns}));
-
-const failPoints =
-    ['hangAfterSendingCoordinateCommitTransaction', 'hangBeforeWritingParticipantList'];
-
-failPoints.forEach(function(fpName) {
-    assert.commandWorked(coordinator.adminCommand({
-        configureFailPoint: fpName,
-        mode: "alwaysOn",
-    }));
-});
-
-session.startTransaction();
-// Run a few operations so that the transaction goes through several active/inactive periods.
-assert.commandWorked(sessionDB[collName].insert({_id: -1}));
-assert.commandWorked(sessionDB[collName].insert({_id: 1}));
-
-print("XXX: before commit");
-print("session: ", tojson(session.getSessionId()));
-const commitJoin = commitTxn(session.getSessionId(), session.getTxnNumber_forTesting());
+var session = adminDB.getMongo().startSession({causalConsistency: false});
 
 const sendCoordinatorCommitfilter = {
     active: true,
-    "command.coordinateCommitTransaction": 1,
+    'command.coordinateCommitTransaction': 1,
     'command.lsid.id': session.getSessionId().id,
     'command.txnNumber': NumberLong(0),
     'command.coordinator': true,
     'command.autocommit': false
 };
-// printjson(sendCoordinatorCommitfilter);
+const writeParticipantFilter = makeWorkerFilterWithAction(session, "writingParticipantList");
+const sendPrepareFilter = makeWorkerFilterWithAction(session, "sendingPrepare");
+const sendCommitFilter = makeWorkerFilterWithAction(session, "sendingCommit");
+const writingDecisionFilter = makeWorkerFilterWithAction(session, "writingDecision");
+const deletingCoordinatorFilter = makeWorkerFilterWithAction(session, "deletingCoordinatorDoc");
 
-waitForFailpoint("Hit hangAfterSendingCoordinateCommitTransaction failpoint", 1);
-var createCoordinateCommitTxnOp;
-createCoordinateCommitTxnOp =
-    adminDB.aggregate([{$currentOp: {}}, {$match: sendCoordinatorCommitfilter}]).toArray();
-printjson(createCoordinateCommitTxnOp);
+// Execute Test
 
-const writeParticipantFilter = {
-    active: true,
-    'twoPhaseCommitCoordinator.lsid.id': session.getSessionId().id,
-    'twoPhaseCommitCoordinator.txnNumber': NumberLong(0),
-    'twoPhaseCommitCoordinator.action': "writingParticipantList",
-    'twoPhaseCommitCoordinator.startTime': {$exists: true}
-};
-// printjson(writeParticipantFilter);
+// commit path
+setupDatabase(st, dbName, collectionName);
+enableFailPoints(failPoints);
+startTransaction(session, collectionName);
+let txnNumber = session.getTxnNumber_forTesting();
+let lsid = session.getSessionId();
+let commitJoin = commitTxn(st, lsid, txnNumber);
 
-waitForFailpoint("Hit hangBeforeWritingParticipantList failpoint", 1);
-print("XXX: writeParticipant");
-var writeParticipantOp;
-writeParticipantOp =
-    adminDB.aggregate([{$currentOp: {}}, {$match: writeParticipantFilter}]).toArray();
-printjson(writeParticipantOp);
+let createCoordinateCommitTxnOp =
+    afterFailpoint("hangAfterSendingCoordinateCommitTransaction", function() {
+        return adminDB.aggregate([{$currentOp: {}}, {$match: sendCoordinatorCommitfilter}])
+            .toArray();
+    });
 
-print("XXX: UNFILTERED:");
-printjson(adminDB.aggregate([{$currentOp: {}}, {$match: {}}]).toArray());
+let writeParticipantOp = afterFailpoint('hangBeforeWritingParticipantList', function() {
+    return adminDB.aggregate([{$currentOp: {}}, {$match: writeParticipantFilter}]).toArray();
+});
+
+let sendPrepareOp = afterFailpoint('hangBeforeSendingPrepare', function() {
+    return adminDB.aggregate([{$currentOp: {}}, {$match: sendPrepareFilter}]).toArray();
+}, numShards);
+
+let writeDecisionOp = afterFailpoint('hangBeforeWritingDecision', function() {
+    return adminDB.aggregate([{$currentOp: {}}, {$match: writingDecisionFilter}]).toArray();
+});
+
+let sendCommitOp = afterFailpoint('hangBeforeSendingCommit', function() {
+    return adminDB.aggregate([{$currentOp: {}}, {$match: sendCommitFilter}]).toArray();
+}, numShards);
+
+let deletingCoordinatorDocOp = afterFailpoint('hangBeforeDeletingCoordinatorDoc', function() {
+    return adminDB.aggregate([{$currentOp: {}}, {$match: deletingCoordinatorFilter}]).toArray();
+});
 
 assert.eq(1, createCoordinateCommitTxnOp.length);
 assert.eq(1, writeParticipantOp.length);
+assert.eq(numShards, sendPrepareOp.length);
+assert.eq(1, writeDecisionOp.length);
+assert.eq(numShards, sendCommitOp.length);
+assert.eq(1, deletingCoordinatorDocOp.length);
 
-failPoints.forEach(function(fpName) {
-    assert.commandWorked(coordinator.adminCommand({
-        configureFailPoint: fpName,
-        mode: "off",
-    }));
-});
+commitJoin();
+
+// abort path
+session = adminDB.getMongo().startSession({causalConsistency: false});
+startTransaction(session, collectionName, 2);
+txnNumber = session.getTxnNumber_forTesting();
+lsid = session.getSessionId();
+// Manually abort the transaction on one of the participants, so that the participant fails to
+// prepare and failpoint is triggered on the coordinator.
+assert.commandWorked(participant.adminCommand({
+    abortTransaction: 1,
+    lsid: lsid,
+    txnNumber: NumberLong(txnNumber),
+    stmtId: NumberInt(0),
+    autocommit: false,
+}));
+commitJoin = commitTxn(st, lsid, txnNumber, false);
+const sendAbortFilter = makeWorkerFilterWithAction(session, "sendingAbort");
+let sendingAbortOp = afterFailpoint('hangBeforeSendingAbort', function() {
+    return adminDB.aggregate([{$currentOp: {}}, {$match: sendAbortFilter}]).toArray();
+}, numShards);
+
+assert.eq(numShards, sendingAbortOp.length);
 
 commitJoin();
 

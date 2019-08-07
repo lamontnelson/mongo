@@ -50,11 +50,13 @@ namespace mongo {
 namespace txn {
 namespace {
 
-MONGO_FAIL_POINT_DEFINE(hangAfterDeletingCoordinatorDoc);
-
 MONGO_FAIL_POINT_DEFINE(hangBeforeWritingParticipantList);
+MONGO_FAIL_POINT_DEFINE(hangBeforeSendingPrepare);
 MONGO_FAIL_POINT_DEFINE(hangBeforeWritingDecision);
+MONGO_FAIL_POINT_DEFINE(hangBeforeSendingCommit);
+MONGO_FAIL_POINT_DEFINE(hangBeforeSendingAbort);
 MONGO_FAIL_POINT_DEFINE(hangBeforeDeletingCoordinatorDoc);
+MONGO_FAIL_POINT_DEFINE(hangAfterDeletingCoordinatorDoc);
 
 using ResponseStatus = executor::TaskExecutor::ResponseStatus;
 
@@ -384,6 +386,11 @@ Future<void> sendCommit(ServiceContext* service,
             invariant(opCtx);
             CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
                 opCtx, lsid, txnNumber, CurOpTwoPhaseCommitCoordinatorInfo::kSendingCommit);
+
+            if (MONGO_FAIL_POINT(hangBeforeSendingCommit)) {
+                LOG(0) << "Hit hangBeforeSendingCommit failpoint";
+                MONGO_FAIL_POINT_PAUSE_WHILE_SET_OR_INTERRUPTED(opCtx, hangBeforeSendingCommit);
+            }
         };
 
     std::vector<Future<void>> responses;
@@ -410,6 +417,11 @@ Future<void> sendAbort(ServiceContext* service,
             invariant(opCtx);
             CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
                 opCtx, lsid, txnNumber, CurOpTwoPhaseCommitCoordinatorInfo::kSendingAbort);
+
+            if (MONGO_FAIL_POINT(hangBeforeSendingAbort)) {
+                LOG(0) << "Hit hangBeforeSendingAbort failpoint";
+                MONGO_FAIL_POINT_PAUSE_WHILE_SET_OR_INTERRUPTED(opCtx, hangBeforeSendingAbort);
+            }
         };
 
     std::vector<Future<void>> responses;
@@ -559,6 +571,12 @@ Future<PrepareResponse> sendPrepareToShard(ServiceContext* service,
                         lsid,
                         txnNumber,
                         CurOpTwoPhaseCommitCoordinatorInfo::kSendingPrepare);
+
+                    if (MONGO_FAIL_POINT(hangBeforeSendingPrepare)) {
+                        LOG(0) << "Hit hangBeforeSendingPrepare failpoint";
+                        MONGO_FAIL_POINT_PAUSE_WHILE_SET_OR_INTERRUPTED(opCtx,
+                                                                        hangBeforeSendingPrepare);
+                    }
                 };
 
             return scheduler
