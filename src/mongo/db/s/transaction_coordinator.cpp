@@ -141,7 +141,7 @@ TransactionCoordinator::TransactionCoordinator(ServiceContext* serviceContext,
             }
 
             return txn::persistParticipantsList(
-                *_sendPrepareScheduler, _lsid, _txnNumber, *_participants, startTime);
+                *_sendPrepareScheduler, _lsid, _txnNumber, *_participants);
         })
         .then([this](repl::OpTime opTime) {
             hangIfFailPointEnabled(_serviceContext,

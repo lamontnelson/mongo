@@ -172,22 +172,20 @@ repl::OpTime persistParticipantListBlocking(OperationContext* opCtx,
 Future<repl::OpTime> persistParticipantsList(txn::AsyncWorkScheduler& scheduler,
                                              const LogicalSessionId& lsid,
                                              TxnNumber txnNumber,
-                                             const txn::ParticipantsList& participants,
-                                             Date_t startTime) {
+                                             const txn::ParticipantsList& participants) {
     return txn::doWhile(
         scheduler,
         boost::none /* no need for a backoff */,
         [](const StatusWith<repl::OpTime>& s) { return shouldRetryPersistingCoordinatorState(s); },
-        [&scheduler, lsid, txnNumber, participants, startTime] {
-            return scheduler.scheduleWork(
-                [lsid, txnNumber, participants, startTime](OperationContext* opCtx) {
-                    CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
-                        opCtx,
-                        lsid,
-                        txnNumber,
-                        CurOpTwoPhaseCommitCoordinatorInfo::kWritingParticipantList);
-                    return persistParticipantListBlocking(opCtx, lsid, txnNumber, participants);
-                });
+        [&scheduler, lsid, txnNumber, participants] {
+            return scheduler.scheduleWork([lsid, txnNumber, participants](OperationContext* opCtx) {
+                CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
+                    opCtx,
+                    lsid,
+                    txnNumber,
+                    CurOpTwoPhaseCommitCoordinatorInfo::kWritingParticipantList);
+                return persistParticipantListBlocking(opCtx, lsid, txnNumber, participants);
+            });
         });
 }
 

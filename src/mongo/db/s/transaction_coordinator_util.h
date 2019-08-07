@@ -56,8 +56,7 @@ namespace txn {
 Future<repl::OpTime> persistParticipantsList(txn::AsyncWorkScheduler& scheduler,
                                              const LogicalSessionId& lsid,
                                              TxnNumber txnNumber,
-                                             const txn::ParticipantsList& participants,
-                                             Date_t startTime);
+                                             const txn::ParticipantsList& participants);
 
 struct PrepareResponse;
 class PrepareVoteConsensus {
