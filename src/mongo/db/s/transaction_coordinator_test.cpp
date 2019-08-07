@@ -265,8 +265,13 @@ TEST_F(TransactionCoordinatorDriverTest,
 
 TEST_F(TransactionCoordinatorDriverTest, SendPrepareToShardReturnsCommitDecisionOnOkResponse) {
     txn::AsyncWorkScheduler aws(getServiceContext());
-    Future<PrepareResponse> future = txn::sendPrepareToShard(
-        getServiceContext(), aws, kTwoShardIdList[0], makeDummyPrepareCommand(_lsid, _txnNumber));
+    Future<PrepareResponse> future =
+        txn::sendPrepareToShard(getServiceContext(),
+                                aws,
+                                _lsid,
+                                _txnNumber,
+                                kTwoShardIdList[0],
+                                makeDummyPrepareCommand(_lsid, _txnNumber));
     ASSERT(!future.isReady());
 
     assertPrepareSentAndRespondWithSuccess();
@@ -279,8 +284,13 @@ TEST_F(TransactionCoordinatorDriverTest, SendPrepareToShardReturnsCommitDecision
 TEST_F(TransactionCoordinatorDriverTest,
        SendPrepareToShardReturnsCommitDecisionOnRetryableErrorThenOkResponse) {
     txn::AsyncWorkScheduler aws(getServiceContext());
-    Future<PrepareResponse> future = txn::sendPrepareToShard(
-        getServiceContext(), aws, kTwoShardIdList[0], makeDummyPrepareCommand(_lsid, _txnNumber));
+    Future<PrepareResponse> future =
+        txn::sendPrepareToShard(getServiceContext(),
+                                aws,
+                                _lsid,
+                                _txnNumber,
+                                kTwoShardIdList[0],
+                                makeDummyPrepareCommand(_lsid, _txnNumber));
     ASSERT(!future.isReady());
 
     assertPrepareSentAndRespondWithRetryableError();
@@ -296,8 +306,13 @@ TEST_F(TransactionCoordinatorDriverTest,
 TEST_F(TransactionCoordinatorDriverTest,
        SendPrepareToShardCanBeInterruptedAndReturnsNoDecisionIfNotServiceShutdown) {
     txn::AsyncWorkScheduler aws(getServiceContext());
-    Future<PrepareResponse> future = txn::sendPrepareToShard(
-        getServiceContext(), aws, kTwoShardIdList[0], makeDummyPrepareCommand(_lsid, _txnNumber));
+    Future<PrepareResponse> future =
+        txn::sendPrepareToShard(getServiceContext(),
+                                aws,
+                                _lsid,
+                                _txnNumber,
+                                kTwoShardIdList[0],
+                                makeDummyPrepareCommand(_lsid, _txnNumber));
 
     assertPrepareSentAndRespondWithRetryableError();
     const auto shutdownStatus =
@@ -314,8 +329,13 @@ TEST_F(TransactionCoordinatorDriverTest,
 TEST_F(TransactionCoordinatorDriverTest,
        SendPrepareToShardCanBeInterruptedAndThrowsExceptionIfServiceShutdown) {
     txn::AsyncWorkScheduler aws(getServiceContext());
-    Future<PrepareResponse> future = txn::sendPrepareToShard(
-        getServiceContext(), aws, kTwoShardIdList[0], makeDummyPrepareCommand(_lsid, _txnNumber));
+    Future<PrepareResponse> future =
+        txn::sendPrepareToShard(getServiceContext(),
+                                aws,
+                                _lsid,
+                                _txnNumber,
+                                kTwoShardIdList[0],
+                                makeDummyPrepareCommand(_lsid, _txnNumber));
 
     assertPrepareSentAndRespondWithRetryableError();
     aws.shutdown({ErrorCodes::TransactionCoordinatorSteppingDown, "Service shutting down"});
@@ -328,8 +348,12 @@ TEST_F(TransactionCoordinatorDriverTest,
 TEST_F(TransactionCoordinatorDriverTest,
        SendPrepareToShardReturnsAbortDecisionOnVoteAbortResponse) {
     txn::AsyncWorkScheduler aws(getServiceContext());
-    auto future = txn::sendPrepareToShard(
-        getServiceContext(), aws, kTwoShardIdList[0], makeDummyPrepareCommand(_lsid, _txnNumber));
+    auto future = txn::sendPrepareToShard(getServiceContext(),
+                                          aws,
+                                          _lsid,
+                                          _txnNumber,
+                                          kTwoShardIdList[0],
+                                          makeDummyPrepareCommand(_lsid, _txnNumber));
 
     assertPrepareSentAndRespondWithNoSuchTransaction();
 
@@ -343,8 +367,12 @@ TEST_F(TransactionCoordinatorDriverTest,
 TEST_F(TransactionCoordinatorDriverTest,
        SendPrepareToShardReturnsAbortDecisionOnRetryableErrorThenVoteAbortResponse) {
     txn::AsyncWorkScheduler aws(getServiceContext());
-    auto future = txn::sendPrepareToShard(
-        getServiceContext(), aws, kTwoShardIdList[0], makeDummyPrepareCommand(_lsid, _txnNumber));
+    auto future = txn::sendPrepareToShard(getServiceContext(),
+                                          aws,
+                                          _lsid,
+                                          _txnNumber,
+                                          kTwoShardIdList[0],
+                                          makeDummyPrepareCommand(_lsid, _txnNumber));
 
     assertPrepareSentAndRespondWithRetryableError();
     assertPrepareSentAndRespondWithNoSuchTransaction();

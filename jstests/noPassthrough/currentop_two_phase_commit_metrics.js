@@ -61,9 +61,9 @@ function setupDatabase(st, dbName, collectionName) {
     assert.commandWorked(st.shard1.adminCommand({_flushRoutingTableCacheUpdates: ns}));
 }
 
-function enableFailPoints(failPoints) {
+function enableFailPoints(shard, failPoints) {
     failPoints.forEach(function(fpName) {
-        assert.commandWorked(coordinator.adminCommand({
+        assert.commandWorked(shard.adminCommand({
             configureFailPoint: fpName,
             mode: "alwaysOn",
         }));
@@ -117,7 +117,7 @@ const deletingCoordinatorFilter = makeWorkerFilterWithAction(session, "deletingC
 
 // commit path
 setupDatabase(st, dbName, collectionName);
-enableFailPoints(failPoints);
+enableFailPoints(coordinator, failPoints);
 startTransaction(session, collectionName);
 let txnNumber = session.getTxnNumber_forTesting();
 let lsid = session.getSessionId();
