@@ -113,6 +113,7 @@ env.Library(
     target='curop',
     source=[
         'curop.cpp',
+        'curop_two_phase_coordinator_info.cpp'
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/bson/mutable/mutable_bson',

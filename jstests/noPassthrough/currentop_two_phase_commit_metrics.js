@@ -80,7 +80,7 @@ const writeParticipantFilter = {
     active: true,
     'twoPhaseCommitCoordinator.lsid.id': session.getSessionId().id,
     'twoPhaseCommitCoordinator.txnNumber': NumberLong(0),
-    'twoPhaseCommitCoordinator.action': "writingParticipantsList",
+    'twoPhaseCommitCoordinator.action': "writingParticipantList",
     'twoPhaseCommitCoordinator.startTime': {$exists: true}
 };
 // printjson(writeParticipantFilter);

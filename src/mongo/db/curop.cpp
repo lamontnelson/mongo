@@ -597,15 +597,7 @@ void CurOp::reportState(BSONObjBuilder* builder, bool truncateOps) {
     builder->append("numYields", _numYields);
 
     if (_twoPhaseCoordinatorInfo) {
-        BSONObjBuilder twoPhaseCoordinatorBuilder;
-        BSONObjBuilder lsidBuilder(twoPhaseCoordinatorBuilder.subobjStart("lsid"));
-        _twoPhaseCoordinatorInfo->lsid.serialize(&lsidBuilder);
-        lsidBuilder.doneFast();
-        twoPhaseCoordinatorBuilder.append("txnNumber", _twoPhaseCoordinatorInfo->txnNum);
-        twoPhaseCoordinatorBuilder.append("action", _twoPhaseCoordinatorInfo->action);
-        twoPhaseCoordinatorBuilder.append("startTime",
-                                          dateToISOStringUTC(_twoPhaseCoordinatorInfo->startTime));
-        builder->append("twoPhaseCommitCoordinator", twoPhaseCoordinatorBuilder.obj());
+        _twoPhaseCoordinatorInfo->reportState(*builder);
     }
 }
 

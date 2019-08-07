@@ -40,6 +40,7 @@
 #include "mongo/db/dbdirectclient.h"
 #include "mongo/db/ops/write_ops.h"
 #include "mongo/db/repl/repl_client_info.h"
+#include "mongo/db/s/transaction_coordinator_futures_util.h"
 #include "mongo/db/write_concern.h"
 #include "mongo/rpc/get_status_from_command_result.h"
 #include "mongo/util/fail_point_service.h"
@@ -180,13 +181,11 @@ Future<repl::OpTime> persistParticipantsList(txn::AsyncWorkScheduler& scheduler,
         [&scheduler, lsid, txnNumber, participants, startTime] {
             return scheduler.scheduleWork(
                 [lsid, txnNumber, participants, startTime](OperationContext* opCtx) {
-                    printf("XXX: write 2pc info!!!\n");
-                    TwoPhaseCommitCoordinatorInfo coordinatorInfo = {.lsid = lsid,
-                                                                     .txnNum = txnNumber,
-                                                                     .action =
-                                                                         "writingParticipantsList",
-                                                                     .startTime = startTime};
-                    CurOp::get(opCtx)->setTwoPhaseCommitCoordinatorInfo(coordinatorInfo);
+                    CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
+                        opCtx,
+                        lsid,
+                        txnNumber,
+                        CurOpTwoPhaseCommitCoordinatorInfo::kWritingParticipantList);
                     return persistParticipantListBlocking(opCtx, lsid, txnNumber, participants);
                 });
         });
@@ -237,8 +236,8 @@ Future<PrepareVoteConsensus> sendPrepare(ServiceContext* service,
     auto prepareScheduler = scheduler.makeChildScheduler();
 
     for (const auto& participant : participants) {
-        responses.emplace_back(
-            sendPrepareToShard(service, *prepareScheduler, participant, prepareObj));
+        responses.emplace_back(sendPrepareToShard(
+            service, *prepareScheduler, lsid, txnNumber, participant, prepareObj));
     }
 
     // Asynchronously aggregate all prepare responses to find the decision and max prepare timestamp
@@ -360,10 +359,12 @@ Future<repl::OpTime> persistDecision(txn::AsyncWorkScheduler& scheduler,
         boost::none /* no need for a backoff */,
         [](const StatusWith<repl::OpTime>& s) { return shouldRetryPersistingCoordinatorState(s); },
         [&scheduler, lsid, txnNumber, participants, decision] {
-            return scheduler.scheduleWork(
-                [lsid, txnNumber, participants, decision](OperationContext* opCtx) {
-                    return persistDecisionBlocking(opCtx, lsid, txnNumber, participants, decision);
-                });
+            return scheduler.scheduleWork([lsid, txnNumber, participants, decision](
+                                              OperationContext* opCtx) {
+                CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
+                    opCtx, lsid, txnNumber, CurOpTwoPhaseCommitCoordinatorInfo::kWritingDecision);
+                return persistDecisionBlocking(opCtx, lsid, txnNumber, participants, decision);
+            });
         });
 }
 
@@ -380,9 +381,17 @@ Future<void> sendCommit(ServiceContext* service,
         BSON("lsid" << lsid.toBSON() << "txnNumber" << txnNumber << "autocommit" << false
                     << WriteConcernOptions::kWriteConcernField << WriteConcernOptions::Majority));
 
+    std::function<void(OperationContext*)> opCtxTwoPhaseAnnotator =
+        [lsid, txnNumber](OperationContext* opCtx) {
+            invariant(opCtx);
+            CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
+                opCtx, lsid, txnNumber, CurOpTwoPhaseCommitCoordinatorInfo::kSendingCommit);
+        };
+
     std::vector<Future<void>> responses;
     for (const auto& participant : participants) {
-        responses.push_back(sendDecisionToShard(service, scheduler, participant, commitObj));
+        responses.push_back(sendDecisionToShard(
+            service, scheduler, participant, commitObj, opCtxTwoPhaseAnnotator));
     }
     return txn::whenAll(responses);
 }
@@ -398,9 +407,17 @@ Future<void> sendAbort(ServiceContext* service,
         BSON("lsid" << lsid.toBSON() << "txnNumber" << txnNumber << "autocommit" << false
                     << WriteConcernOptions::kWriteConcernField << WriteConcernOptions::Majority));
 
+    std::function<void(OperationContext*)> opCtxTwoPhaseAnnotator =
+        [lsid, txnNumber](OperationContext* opCtx) {
+            invariant(opCtx);
+            CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
+                opCtx, lsid, txnNumber, CurOpTwoPhaseCommitCoordinatorInfo::kSendingAbort);
+        };
+
     std::vector<Future<void>> responses;
     for (const auto& participant : participants) {
-        responses.push_back(sendDecisionToShard(service, scheduler, participant, abortObj));
+        responses.push_back(
+            sendDecisionToShard(service, scheduler, participant, abortObj, opCtxTwoPhaseAnnotator));
     }
     return txn::whenAll(responses);
 }
@@ -481,15 +498,20 @@ void deleteCoordinatorDocBlocking(OperationContext* opCtx,
 Future<void> deleteCoordinatorDoc(txn::AsyncWorkScheduler& scheduler,
                                   const LogicalSessionId& lsid,
                                   TxnNumber txnNumber) {
-    return txn::doWhile(scheduler,
-                        boost::none /* no need for a backoff */,
-                        [](const Status& s) { return s == ErrorCodes::Interrupted; },
-                        [&scheduler, lsid, txnNumber] {
-                            return scheduler.scheduleWork(
-                                [lsid, txnNumber](OperationContext* opCtx) {
-                                    deleteCoordinatorDocBlocking(opCtx, lsid, txnNumber);
-                                });
-                        });
+    return txn::doWhile(
+        scheduler,
+        boost::none /* no need for a backoff */,
+        [](const Status& s) { return s == ErrorCodes::Interrupted; },
+        [&scheduler, lsid, txnNumber] {
+            return scheduler.scheduleWork([lsid, txnNumber](OperationContext* opCtx) {
+                CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
+                    opCtx,
+                    lsid,
+                    txnNumber,
+                    CurOpTwoPhaseCommitCoordinatorInfo::kDeletingCoordinatorDoc);
+                deleteCoordinatorDocBlocking(opCtx, lsid, txnNumber);
+            });
+        });
 }
 
 std::vector<TransactionCoordinatorDocument> readAllCoordinatorDocs(OperationContext* opCtx) {
@@ -512,10 +534,11 @@ std::vector<TransactionCoordinatorDocument> readAllCoordinatorDocs(OperationCont
 
 Future<PrepareResponse> sendPrepareToShard(ServiceContext* service,
                                            txn::AsyncWorkScheduler& scheduler,
+                                           const LogicalSessionId& lsid,
+                                           TxnNumber txnNumber,
                                            const ShardId& shardId,
                                            const BSONObj& commandObj) {
     const bool isLocalShard = (shardId == txn::getLocalShardId(service));
-
     auto f = txn::doWhile(
         scheduler,
         kExponentialBackoff,
@@ -526,11 +549,23 @@ Future<PrepareResponse> sendPrepareToShard(ServiceContext* service,
                 swPrepareResponse != ErrorCodes::TransactionCoordinatorSteppingDown &&
                 swPrepareResponse != ErrorCodes::TransactionCoordinatorReachedAbortDecision;
         },
-        [&scheduler, shardId, isLocalShard, commandObj = commandObj.getOwned()] {
+        [&scheduler, shardId, isLocalShard, commandObj = commandObj.getOwned(), lsid, txnNumber] {
             LOG(3) << "Coordinator going to send command " << commandObj << " to "
                    << (isLocalShard ? " local " : "") << " shard " << shardId;
 
-            return scheduler.scheduleRemoteCommand(shardId, kPrimaryReadPreference, commandObj)
+            std::function<void(OperationContext*)> opCtxTwoPhaseAnnotator =
+                [lsid, txnNumber](OperationContext* opCtx) {
+                    invariant(opCtx);
+                    CurOpTwoPhaseCommitCoordinatorInfo::setOpContextData(
+                        opCtx,
+                        lsid,
+                        txnNumber,
+                        CurOpTwoPhaseCommitCoordinatorInfo::kSendingPrepare);
+                };
+
+            return scheduler
+                .scheduleRemoteCommand(
+                    shardId, kPrimaryReadPreference, commandObj, opCtxTwoPhaseAnnotator)
                 .then([shardId, commandObj = commandObj.getOwned()](ResponseStatus response) {
                     auto status = getStatusFromCommandResult(response.data);
                     auto wcStatus = getWriteConcernStatusFromCommandResult(response.data);
@@ -604,10 +639,12 @@ Future<PrepareResponse> sendPrepareToShard(ServiceContext* service,
         });
 }
 
-Future<void> sendDecisionToShard(ServiceContext* service,
-                                 txn::AsyncWorkScheduler& scheduler,
-                                 const ShardId& shardId,
-                                 const BSONObj& commandObj) {
+Future<void> sendDecisionToShard(
+    ServiceContext* service,
+    txn::AsyncWorkScheduler& scheduler,
+    const ShardId& shardId,
+    const BSONObj& commandObj,
+    boost::optional<mongo::txn::OpContextAnnotator> opContextAnnotator) {
     const bool isLocalShard = (shardId == txn::getLocalShardId(service));
 
     return txn::doWhile(
@@ -618,11 +655,17 @@ Future<void> sendDecisionToShard(ServiceContext* service,
             // coordinator-specific code.
             return !s.isOK() && s != ErrorCodes::TransactionCoordinatorSteppingDown;
         },
-        [&scheduler, shardId, isLocalShard, commandObj = commandObj.getOwned()] {
+        [&scheduler,
+         shardId,
+         isLocalShard,
+         opContextAnnotator,
+         commandObj = commandObj.getOwned()] {
             LOG(3) << "Coordinator going to send command " << commandObj << " to "
                    << (isLocalShard ? "local" : "") << " shard " << shardId;
 
-            return scheduler.scheduleRemoteCommand(shardId, kPrimaryReadPreference, commandObj)
+            return scheduler
+                .scheduleRemoteCommand(
+                    shardId, kPrimaryReadPreference, commandObj, opContextAnnotator)
                 .then([shardId, commandObj = commandObj.getOwned()](ResponseStatus response) {
                     auto status = getStatusFromCommandResult(response.data);
                     auto wcStatus = getWriteConcernStatusFromCommandResult(response.data);

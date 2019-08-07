@@ -73,8 +73,12 @@ AsyncWorkScheduler::~AsyncWorkScheduler() {
     _parent = nullptr;
 }
 
+
 Future<executor::TaskExecutor::ResponseStatus> AsyncWorkScheduler::scheduleRemoteCommand(
-    const ShardId& shardId, const ReadPreferenceSetting& readPref, const BSONObj& commandObj) {
+    const ShardId& shardId,
+    const ReadPreferenceSetting& readPref,
+    const BSONObj& commandObj,
+    boost::optional<OpContextAnnotator> opCtxAnnotator) {
 
     const bool isSelfShard = (shardId == getLocalShardId(_serviceContext));
 
@@ -83,10 +87,13 @@ Future<executor::TaskExecutor::ResponseStatus> AsyncWorkScheduler::scheduleRemot
         // rather than going through the host targeting below. This ensures that the state changes
         // for the participant and coordinator occur sequentially on a single branch of replica set
         // history. See SERVER-38142 for details.
-        return scheduleWork([this, shardId, commandObj = commandObj.getOwned()](
+        return scheduleWork([this, shardId, opCtxAnnotator, commandObj = commandObj.getOwned()](
                                 OperationContext* opCtx) {
-            // Note: This internal authorization is tied to the lifetime of the client, which will
-            // be destroyed by 'scheduleWork' immediately after this lambda ends
+            if (opCtxAnnotator) {
+                opCtxAnnotator.get()(opCtx);
+            }
+            // Note: This internal authorization is tied to the lifetime of the client, which
+            // will be destroyed by 'scheduleWork' immediately after this lambda ends
             AuthorizationSession::get(opCtx->getClient())
                 ->grantInternalAuthorization(opCtx->getClient());
 
@@ -113,7 +120,7 @@ Future<executor::TaskExecutor::ResponseStatus> AsyncWorkScheduler::scheduleRemot
         });
     }
 
-    return _targetHostAsync(shardId, readPref)
+    return _targetHostAsync(shardId, readPref, opCtxAnnotator)
         .then([this, shardId, commandObj = commandObj.getOwned(), readPref](
                   HostAndShard hostAndShard) mutable {
             executor::RemoteCommandRequest request(hostAndShard.hostTargeted,
@@ -218,11 +225,15 @@ void AsyncWorkScheduler::join() {
 }
 
 Future<AsyncWorkScheduler::HostAndShard> AsyncWorkScheduler::_targetHostAsync(
-    const ShardId& shardId, const ReadPreferenceSetting& readPref) {
-    return scheduleWork([shardId, readPref](OperationContext* opCtx) {
+    const ShardId& shardId,
+    const ReadPreferenceSetting& readPref,
+    boost::optional<OpContextAnnotator> opCtxAnnotator) {
+    return scheduleWork([shardId, readPref, opCtxAnnotator](OperationContext* opCtx) {
+        if (opCtxAnnotator) {
+            opCtxAnnotator.get()(opCtx);
+        }
         const auto shardRegistry = Grid::get(opCtx)->shardRegistry();
         const auto shard = uassertStatusOK(shardRegistry->getShard(opCtx, shardId));
-
         if (MONGO_FAIL_POINT(hangWhileTargetingRemoteHost)) {
             LOG(0) << "Hit hangWhileTargetingRemoteHost failpoint for shard " << shardId;
             MONGO_FAIL_POINT_PAUSE_WHILE_SET_OR_INTERRUPTED(opCtx, hangWhileTargetingRemoteHost);

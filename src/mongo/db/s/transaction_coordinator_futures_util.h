@@ -44,6 +44,7 @@
 namespace mongo {
 namespace txn {
 
+typedef std::function<void(OperationContext*)> OpContextAnnotator; 
 /**
  * This class groups all the asynchronous work scheduled by a given TransactionCoordinatorDriver.
  */
@@ -126,12 +127,15 @@ public:
         }
     }
 
+
+
     /**
      * Sends a command asynchronously to the given shard and returns a Future when that request
      * completes (with error or not).
      */
     Future<executor::TaskExecutor::ResponseStatus> scheduleRemoteCommand(
-        const ShardId& shardId, const ReadPreferenceSetting& readPref, const BSONObj& commandObj);
+        const ShardId& shardId, const ReadPreferenceSetting& readPref, const BSONObj& commandObj, 
+        boost::optional<OpContextAnnotator> opCtxAnnotator = boost::none);
 
     /**
      * Allows sub-tasks on this scheduler to be grouped together and works-around the fact that
@@ -176,7 +180,7 @@ private:
      * Finds the host and port for a shard id, returning it and the shard object used for targeting.
      */
     Future<HostAndShard> _targetHostAsync(const ShardId& shardId,
-                                          const ReadPreferenceSetting& readPref);
+                                          const ReadPreferenceSetting& readPref, boost::optional<OpContextAnnotator> opCtxAnnotator = boost::none);
 
     /**
      * Returns true when all the registered child schedulers, op contexts and handles have joined.

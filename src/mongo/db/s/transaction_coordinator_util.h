@@ -205,6 +205,8 @@ struct PrepareResponse {
 };
 Future<PrepareResponse> sendPrepareToShard(ServiceContext* service,
                                            txn::AsyncWorkScheduler& scheduler,
+                                           const LogicalSessionId& lsid,
+                                           TxnNumber txnNumber,
                                            const ShardId& shardId,
                                            const BSONObj& prepareCommandObj);
 
@@ -219,10 +221,12 @@ Future<PrepareResponse> sendPrepareToShard(ServiceContext* service,
  * running is shut down. Because of this it can return only the following error code(s):
  *   - TransactionCoordinatorSteppingDown
  */
-Future<void> sendDecisionToShard(ServiceContext* service,
-                                 txn::AsyncWorkScheduler& scheduler,
-                                 const ShardId& shardId,
-                                 const BSONObj& commandObj);
+Future<void> sendDecisionToShard(
+    ServiceContext* service,
+    txn::AsyncWorkScheduler& scheduler,
+    const ShardId& shardId,
+    const BSONObj& commandObj,
+    boost::optional<OpContextAnnotator> opContextAnnotator = boost::none);
 
 }  // namespace txn
 }  // namespace mongo

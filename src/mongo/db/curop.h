@@ -32,6 +32,7 @@
 
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/curop_two_phase_coordinator_info.h"
 #include "mongo/db/cursor_id.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/server_options.h"
@@ -45,6 +46,7 @@ namespace mongo {
 class Client;
 class CurOp;
 class OperationContext;
+class CurOpTwoPhaseCommitCoordinatorInfo;
 struct PlanSummaryStats;
 
 /* lifespan is different than CurOp because of recursives with DBDirectClient */
@@ -238,12 +240,6 @@ public:
     bool waitingForFlowControl{false};
 };
 
-struct TwoPhaseCommitCoordinatorInfo {
-    LogicalSessionId lsid;
-    TxnNumber txnNum;
-    std::string action;
-    Date_t startTime;
-};
 
 /**
  * Container for data used to report information about an OperationContext.
@@ -329,9 +325,10 @@ public:
     }
 
 
-    void setTwoPhaseCommitCoordinatorInfo(TwoPhaseCommitCoordinatorInfo coordinatorInfo) {
+    void setTwoPhaseCommitCoordinatorInfo(
+        std::unique_ptr<CurOpTwoPhaseCommitCoordinatorInfo> coordinatorInfo) {
         invariant(!_twoPhaseCoordinatorInfo);
-        _twoPhaseCoordinatorInfo = coordinatorInfo;
+        _twoPhaseCoordinatorInfo = std::move(coordinatorInfo);
     }
 
     /**
@@ -680,8 +677,9 @@ private:
     boost::optional<SingleThreadedLockStats>
         _lockStatsBase;  // This is the snapshot of lock stats taken when curOp is constructed.
 
-    boost::optional<TwoPhaseCommitCoordinatorInfo> _twoPhaseCoordinatorInfo;
+    std::unique_ptr<CurOpTwoPhaseCommitCoordinatorInfo> _twoPhaseCoordinatorInfo;
 };
+
 
 /**
  * Upconverts a legacy query object such that it matches the format of the find command.
