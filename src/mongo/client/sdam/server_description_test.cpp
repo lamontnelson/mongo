@@ -90,14 +90,18 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareMultipleHostsOrderDoesntMatter)
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMultiplePassivesOrderDoesntMatter) {
-    ServerDescription a = *ServerDescriptionBuilder().withPassive("foo").withPassive("bar").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withPassive("bar").withPassive("foo").instance();
+    ServerDescription a =
+        *ServerDescriptionBuilder().withPassive("foo").withPassive("bar").instance();
+    ServerDescription b =
+        *ServerDescriptionBuilder().withPassive("bar").withPassive("foo").instance();
     ASSERT_EQUALS(a, b);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMultipleArbitersOrderDoesntMatter) {
-    ServerDescription a = *ServerDescriptionBuilder().withArbiter("foo").withArbiter("bar").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withArbiter("bar").withArbiter("foo").instance();
+    ServerDescription a =
+        *ServerDescriptionBuilder().withArbiter("foo").withArbiter("bar").instance();
+    ServerDescription b =
+        *ServerDescriptionBuilder().withArbiter("bar").withArbiter("foo").instance();
     ASSERT_EQUALS(a, b);
 }
 
@@ -124,7 +128,8 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareSetVersion) {
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareElectionId) {
     ServerDescription a = *ServerDescriptionBuilder().withElectionId(OID::max()).instance();
-    ServerDescription b = *ServerDescriptionBuilder().withElectionId(OID("000000000000000000000000")).instance();
+    ServerDescription b =
+        *ServerDescriptionBuilder().withElectionId(OID("000000000000000000000000")).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
@@ -137,8 +142,10 @@ TEST(ServerDescriptionEqualityTest, ShouldComparePrimary) {
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareLogicalSessionTimeout) {
-    ServerDescription a = *ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(1).instance();
-    ServerDescription b = *ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(2).instance();
+    ServerDescription a =
+        *ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(1).instance();
+    ServerDescription b =
+        *ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(2).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }

@@ -89,7 +89,6 @@ private:
     // (=) logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 
-
 private:
     ServerDescription() = default;
     friend class ServerDescriptionBuilder;
