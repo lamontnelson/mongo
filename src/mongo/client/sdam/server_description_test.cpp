@@ -83,6 +83,24 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareArbiters) {
     ASSERT_EQUALS(a, a);
 }
 
+TEST(ServerDescriptionEqualityTest, ShouldCompareMultipleHostsOrderDoesntMatter) {
+    ServerDescription a = *ServerDescriptionBuilder().withHost("foo").withHost("bar").instance();
+    ServerDescription b = *ServerDescriptionBuilder().withHost("bar").withHost("foo").instance();
+    ASSERT_EQUALS(a, b);
+}
+
+TEST(ServerDescriptionEqualityTest, ShouldCompareMultiplePassivesOrderDoesntMatter) {
+    ServerDescription a = *ServerDescriptionBuilder().withPassive("foo").withPassive("bar").instance();
+    ServerDescription b = *ServerDescriptionBuilder().withPassive("bar").withPassive("foo").instance();
+    ASSERT_EQUALS(a, b);
+}
+
+TEST(ServerDescriptionEqualityTest, ShouldCompareMultipleArbitersOrderDoesntMatter) {
+    ServerDescription a = *ServerDescriptionBuilder().withArbiter("foo").withArbiter("bar").instance();
+    ServerDescription b = *ServerDescriptionBuilder().withArbiter("bar").withArbiter("foo").instance();
+    ASSERT_EQUALS(a, b);
+}
+
 TEST(ServerDescriptionEqualityTest, ShouldCompareTags) {
     ServerDescription a = *ServerDescriptionBuilder().withTag("foo", "bar").instance();
     ServerDescription b = *ServerDescriptionBuilder().withTag("baz", "buz").instance();
