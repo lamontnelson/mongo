@@ -41,6 +41,7 @@ env.SConscript(
         'shell',
         'stdx',
         'tools',
+        'topology',
         'transport',
         'unittest',
         'util',

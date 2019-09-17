@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "mongo/db/s/transaction_coordinator_util.h"
+#include "mongo/db/s/transaction_coordinator_futures_util.h"
 #include "mongo/util/fail_point_service.h"
 
 namespace mongo {
@@ -74,7 +75,7 @@ public:
     TransactionCoordinator(OperationContext* operationContext,
                            const LogicalSessionId& lsid,
                            TxnNumber txnNumber,
-                           std::unique_ptr<txn::AsyncWorkScheduler> scheduler,
+                           std::unique_ptr<::mongo::txn::AsyncWorkScheduler> scheduler,
                            Date_t deadline);
 
     ~TransactionCoordinator();

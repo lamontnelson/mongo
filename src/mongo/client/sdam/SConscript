@@ -1,0 +1,32 @@
+# -*- mode: python -*-
+
+Import('env')
+
+env = env.Clone()
+
+env.Library(
+    target='sdam',
+    source=[
+        'datatypes.cpp',
+        'events.cpp',
+        'server_description.cpp',
+        'topology_description.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/base',
+    ],
+    LIBDEPS_PRIVATE=[
+    ],
+)
+
+env.CppUnitTest(
+    target='topology_test',
+    source=['topology_test.cpp'],
+    LIBDEPS=['sdam'],
+)
+
+env.CppUnitTest(
+    target='server_description_test',
+    source=['server_description_test.cpp'],
+    LIBDEPS=['sdam'],
+)
