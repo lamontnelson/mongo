@@ -12,9 +12,14 @@
 namespace mongo::sdam {
 class ServerDescription {
 public:
+    ServerDescription(ServerAddress address) : ServerDescription(address, ServerType::Unknown) {}
     ServerDescription(ServerAddress address, ServerType type)
-        : _address(std::move(address)), _type(type){};
+        : _address(std::move(address)), _type(type) {
+        std::transform(_address.begin(), _address.end(), _address.begin(), ::tolower);
+    };
+
     bool operator==(const ServerDescription& other) const;
+    bool operator!=(const ServerDescription& other) const;
 
     const ServerAddress& getAddress() const;
     const boost::optional<std::string>& getError() const;
@@ -23,9 +28,9 @@ public:
     const boost::optional<OID>& getOpTime() const;
     ServerType getType() const;
     const boost::optional<ServerAddress>& getMe() const;
-    const std::vector<ServerAddress>& getHosts() const;
-    const std::vector<ServerAddress>& getPassives() const;
-    const std::vector<ServerAddress>& getArbiters() const;
+    const std::set<ServerAddress>& getHosts() const;
+    const std::set<ServerAddress>& getPassives() const;
+    const std::set<ServerAddress>& getArbiters() const;
     const std::map<std::string, std::string>& getTags() const;
     const boost::optional<std::string>& getSetName() const;
     const boost::optional<int>& getSetVersion() const;
@@ -35,6 +40,7 @@ public:
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
 
     bool isDataBearingServer() const;
+    BSONObj toBson() const;
 
 private:
     // address: the hostname or IP, and the port number, that the client connects to. Note that this
@@ -56,15 +62,17 @@ private:
     ServerType _type;
     // (=) minWireVersion, maxWireVersion: the wire protocol version range supported by the server.
     // Both default to 0. Use min and maxWireVersion only to determine compatibility.
+    int _minWireVersion = 0;
+    int _maxWireVersion = 0;
     // (=) me: The hostname or IP, and the port number, that this server was configured with in the
     // replica set. Default null.
     boost::optional<ServerAddress> _me;
     // (=) hosts, passives, arbiters: Sets of addresses. This server's opinion of the replica set's
     // members, if any. These hostnames are normalized to lower-case. Default empty. The client
     // monitors all three types of servers in a replica set.
-    std::vector<ServerAddress> _hosts;
-    std::vector<ServerAddress> _passives;
-    std::vector<ServerAddress> _arbiters;
+    std::set<ServerAddress> _hosts;
+    std::set<ServerAddress> _passives;
+    std::set<ServerAddress> _arbiters;
     // (=) tags: map from string to string. Default empty.
     std::map<std::string, std::string> _tags;
     // (=) setName: string or null. Default null.
@@ -80,5 +88,39 @@ private:
     boost::optional<Date_t> _lastUpdateTime;
     // (=) logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
+
+
+private:
+    ServerDescription() = default;
+    friend class ServerDescriptionBuilder;
+};
+
+class ServerDescriptionBuilder {
+public:
+    ServerDescriptionBuilder();
+    std::shared_ptr<ServerDescription> instance();
+    ServerDescriptionBuilder& withError(const std::string& error);
+    ServerDescriptionBuilder& withAddress(const ServerAddress& address);
+    ServerDescriptionBuilder& withRtt(const OpLatency& rtt);
+    ServerDescriptionBuilder& withLastWriteDate(const Date_t& lastWriteDate);
+    ServerDescriptionBuilder& withOpTime(const OID& opTime);
+    ServerDescriptionBuilder& withType(const ServerType type);
+    ServerDescriptionBuilder& withMinWireVersion(int minVersion);
+    ServerDescriptionBuilder& withMaxWireVersion(int maxVersion);
+    ServerDescriptionBuilder& withMe(const ServerAddress& me);
+    ServerDescriptionBuilder& withHost(const ServerAddress& host);
+    ServerDescriptionBuilder& withPassive(const ServerAddress& passive);
+    ServerDescriptionBuilder& withArbiter(const ServerAddress& arbiter);
+    ServerDescriptionBuilder& withTag(const std::string key, const std::string value);
+    ServerDescriptionBuilder& withSetName(const std::string setName);
+    ServerDescriptionBuilder& withSetVersion(const int setVersion);
+    ServerDescriptionBuilder& withElectionId(const OID& electionId);
+    ServerDescriptionBuilder& withPrimary(const ServerAddress& primary);
+    ServerDescriptionBuilder& withLastUpdateTime(const Date_t& lastUpdateTime);
+    ServerDescriptionBuilder& withLogicalSessionTimeoutMinutes(
+        const int logicalSessionTimeoutMinutes);
+
+private:
+    std::shared_ptr<ServerDescription> _instance;
 };
 }

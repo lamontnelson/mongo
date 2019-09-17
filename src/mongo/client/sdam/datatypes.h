@@ -22,7 +22,6 @@ enum class ServerType {
 };
 
 using ServerAddress = std::string;
-
 using OpLatency = mongo::Nanoseconds;
 
 // The result of an attempt to call the "ismaster" command on a server.
