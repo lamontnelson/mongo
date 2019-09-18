@@ -90,7 +90,7 @@ private:
     boost::optional<int> _logicalSessionTimeoutMinutes;
 
 private:
-    ServerDescription() = default;
+    ServerDescription() : ServerDescription("", ServerType::Unknown) {}
     friend class ServerDescriptionBuilder;
 };
 
@@ -123,5 +123,8 @@ public:
 
 private:
     ServerDescription _instance;
+    void parseTypeFromIsMaster(const BSONObj& isMaster);
+
+    inline static const std::string ISDBGRID = "isdbgrid";
 };
 }

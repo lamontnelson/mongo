@@ -1,3 +1,4 @@
+#include <mongo/db/jsobj.h>
 #include <ostream>
 
 #include "mongo/client/sdam/server_description.h"
@@ -13,7 +14,11 @@ ostream& operator<<(ostream& os, const ServerDescription& description) {
     os << obj.toString();
     return os;
 }
+ostream& operator<<(ostream& os, ServerType serverType) {
+    os << toString(serverType);
+    return os;
 }
+}  // namespace sdam
 
 TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
     ServerDescription a("foo:1234");
@@ -144,11 +149,92 @@ TEST(ServerDescriptionEqualityTest, ShouldComparePrimary) {
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareLogicalSessionTimeout) {
-    ServerDescription a =
-        ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(1).instance();
-    ServerDescription b =
-        ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(2).instance();
+    ServerDescription a = ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(1).instance();
+    ServerDescription b = ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(2).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
+}
+
+
+class ServerDescriptionBuilderTestFixture : public mongo::unittest::Test {
+
+protected:
+    static BSONObjBuilder okBuilder() {
+        return std::move(BSONObjBuilder().append("ok", 1));
+    }
+    inline static const BSONObj BSON_OK = okBuilder().obj();
+    inline static const BSONObj BSON_MISSING_OK = BSONObjBuilder().obj();
+    inline static const BSONObj BSON_MONGOS = okBuilder().append("msg", "isdbgrid").obj();
+    inline static const BSONObj BSON_RSPRIMARY =
+        okBuilder().append("ismaster", true).append("setName", "foo").obj();
+    inline static const BSONObj BSON_RSSECONDARY =
+        okBuilder().append("secondary", true).append("setName", "foo").obj();
+    inline static const BSONObj BSON_RSARBITER =
+        okBuilder().append("arbiterOnly", true).append("setName", "foo").obj();
+    inline static const BSONObj BSON_RSOTHER =
+        okBuilder().append("hidden", true).append("setName", "foo").obj();
+    inline static const BSONObj BSON_RSGHOST=
+        okBuilder().append("isreplicaset", true).obj();
+};
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
+    auto response = IsMasterOutcome("foo:1234", "an error occurred");
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::Unknown, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownIfOkMissing) {
+    auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, OpLatency::min());
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::Unknown, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsStandalone) {
+    // No "msg: isdbgrid", no setName, and no "isreplicaset: true".
+    auto response = IsMasterOutcome("foo:1234", BSON_OK, OpLatency::min());
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::Standalone, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsMongos) {
+    // contains "msg: isdbgrid"
+    auto response = IsMasterOutcome("foo:1234", BSON_MONGOS, OpLatency::min());
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::Mongos, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSPrimary) {
+    // "ismaster: true", "setName" in response
+    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, OpLatency::min());
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::RSPrimary, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSSecondary) {
+    // "secondary: true", "setName" in response
+    auto response = IsMasterOutcome("foo:1234", BSON_RSSECONDARY, OpLatency::min());
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::RSSecondary, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsArbiter) {
+    // "arbiterOnly: true", "setName" in response.
+    auto response = IsMasterOutcome("foo:1234", BSON_RSARBITER, OpLatency::min());
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::RSArbiter, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsOther) {
+    // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
+    auto response = IsMasterOutcome("foo:1234", BSON_RSOTHER, OpLatency::min());
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::RSOther, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsGhost) {
+    // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
+    auto response = IsMasterOutcome("foo:1234", BSON_RSGHOST, OpLatency::min());
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(ServerType::RSGhost, description.getType());
 }
 };  // namespace mongo

@@ -21,12 +21,15 @@ enum class ServerType {
     Unknown
 };
 
+std::string toString(ServerType serverType);
+
 using ServerAddress = std::string;
 using OpLatency = mongo::Nanoseconds;
 
 // The result of an attempt to call the "ismaster" command on a server.
 class IsMasterOutcome {
     IsMasterOutcome() = delete;
+
 public:
     // success constrructor
     IsMasterOutcome(ServerAddress server, BSONObj response, OpLatency rtt)

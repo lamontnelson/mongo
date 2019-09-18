@@ -170,7 +170,9 @@ BSONObj ServerDescription::toBson() const {
 
 ServerDescriptionBuilder::ServerDescriptionBuilder(const IsMasterOutcome& isMasterOutcome) {
     if (isMasterOutcome.isSuccess()) {
+        parseTypeFromIsMaster(*isMasterOutcome.getResponse());
     } else {
+        // type Unknown is default value for ServerDescription
     }
 }
 
@@ -272,5 +274,35 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMin
     const int logicalSessionTimeoutMinutes) {
     _instance._logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
     return *this;
+}
+void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj& isMaster) {
+    std::cout << isMaster;
+    bool hasMsg = isMaster.hasField("msg");
+    bool hasSetName = isMaster.hasField("setName");
+    bool isReplicaSetTrue = isMaster.getBoolField("isreplicaset");
+
+    ServerType t;
+    if (isMaster.getField("ok").numberInt() != 1) {
+        t = ServerType::Unknown;
+    } else if (!hasMsg && !hasSetName && !isReplicaSetTrue) {
+        t = ServerType::Standalone;
+    } else if (ISDBGRID == isMaster.getStringField("msg")) {
+        t = ServerType::Mongos;
+    } else if (hasSetName && isMaster.getBoolField("ismaster")) {
+        t = ServerType::RSPrimary;
+    } else if (hasSetName && isMaster.getBoolField("secondary")) {
+        t = ServerType::RSSecondary;
+    } else if (hasSetName && isMaster.getBoolField("arbiterOnly")) {
+        t = ServerType::RSArbiter;
+    } else if (hasSetName && isMaster.getBoolField("hidden")) {
+        t = ServerType::RSOther;
+    } else if (isReplicaSetTrue) {
+        t = ServerType::RSGhost;
+    } else {
+        // TODO: maybe log
+        t = ServerType::Unknown;
+    }
+
+    withType(t);
 }
 };  // namespace mongo::sdam
