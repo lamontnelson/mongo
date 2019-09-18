@@ -187,7 +187,7 @@ void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
         t = ServerType::Unknown;
     } else if (!hasSetName && !isMaster.hasField("msg") && !isMaster.getBoolField("isreplicaset")) {
         t = ServerType::Standalone;
-    } else if (ISDBGRID == isMaster.getStringField("msg")) {
+    } else if (IS_DB_GRID == isMaster.getStringField("msg")) {
         t = ServerType::Mongos;
     } else if (hasSetName && isMaster.getBoolField("ismaster")) {
         t = ServerType::RSPrimary;
@@ -201,7 +201,8 @@ void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
         t = ServerType::RSGhost;
     } else {
         // TODO: what are the log levels?
-        MONGO_LOG(3) << "unknown server type from successful ismaster reply: " << isMaster.toString();
+        MONGO_LOG(3) << "unknown server type from successful ismaster reply: "
+                     << isMaster.toString();
         t = ServerType::Unknown;
     }
     withType(t);

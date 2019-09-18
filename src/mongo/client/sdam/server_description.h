@@ -123,8 +123,15 @@ public:
 
 private:
     ServerDescription _instance;
+
+    /**
+     * Classify the server's type based on the ismaster response.
+     * Note: PossiblePrimary is not output from this function since this requires global cluster
+     * state.
+     * @param isMaster - reply document for ismaster command
+     */
     void parseTypeFromIsMaster(const BSONObj isMaster);
 
-    inline static const std::string ISDBGRID = "isdbgrid";
+    inline static const std::string IS_DB_GRID = "isdbgrid";
 };
 }
