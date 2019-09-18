@@ -1,13 +1,19 @@
 #include "mongo/client/sdam/datatypes.h"
 
 namespace mongo::sdam {
-IsMasterOutcome IsMasterOutcome::forSuccess(const ServerAddress& server,
-                                            const BSONObj& response,
-                                            OpLatency latency) {
-    return IsMasterOutcome{server, true, response, latency};
+const ServerAddress& IsMasterOutcome::getServer() const {
+    return _server;
 }
-
-IsMasterOutcome IsMasterOutcome::forFailure(const ServerAddress& server) {
-    return IsMasterOutcome{server, false, boost::none, boost::none};
+bool IsMasterOutcome::isSuccess() const {
+    return _success;
+}
+const boost::optional<BSONObj>& IsMasterOutcome::getResponse() const {
+    return _response;
+}
+const boost::optional<OpLatency>& IsMasterOutcome::getRtt() const {
+    return _rtt;
+}
+const std::string& IsMasterOutcome::getErrorMsg() const {
+    return _errorMsg;
 }
 };  // namespace mongo::sdam

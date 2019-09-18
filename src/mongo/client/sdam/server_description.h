@@ -96,8 +96,10 @@ private:
 
 class ServerDescriptionBuilder {
 public:
-    ServerDescriptionBuilder();
-    std::shared_ptr<ServerDescription> instance();
+    ServerDescriptionBuilder() = default;
+    ServerDescriptionBuilder(const IsMasterOutcome& isMasterOutcome);
+
+    ServerDescription instance() const;
     ServerDescriptionBuilder& withError(const std::string& error);
     ServerDescriptionBuilder& withAddress(const ServerAddress& address);
     ServerDescriptionBuilder& withRtt(const OpLatency& rtt);
@@ -120,6 +122,6 @@ public:
         const int logicalSessionTimeoutMinutes);
 
 private:
-    std::shared_ptr<ServerDescription> _instance;
+    ServerDescription _instance;
 };
 }

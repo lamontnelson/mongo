@@ -37,117 +37,117 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareDifferentAddressButSameServerTy
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareServerTypes) {
-    ServerDescription a = *ServerDescriptionBuilder().withType(ServerType::Standalone).instance();
-    ServerDescription b = *ServerDescriptionBuilder().withType(ServerType::RSSecondary).instance();
+    ServerDescription a = ServerDescriptionBuilder().withType(ServerType::Standalone).instance();
+    ServerDescription b = ServerDescriptionBuilder().withType(ServerType::RSSecondary).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMinWireVersion) {
-    ServerDescription a = *ServerDescriptionBuilder().withMinWireVersion(1).instance();
-    ServerDescription b = *ServerDescriptionBuilder().withMinWireVersion(2).instance();
+    ServerDescription a = ServerDescriptionBuilder().withMinWireVersion(1).instance();
+    ServerDescription b = ServerDescriptionBuilder().withMinWireVersion(2).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMaxWireVersion) {
-    ServerDescription a = *ServerDescriptionBuilder().withMaxWireVersion(1).instance();
-    ServerDescription b = *ServerDescriptionBuilder().withMaxWireVersion(2).instance();
+    ServerDescription a = ServerDescriptionBuilder().withMaxWireVersion(1).instance();
+    ServerDescription b = ServerDescriptionBuilder().withMaxWireVersion(2).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMeValues) {
-    ServerDescription a = *ServerDescriptionBuilder().withMe("foo").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withMe("bar").instance();
+    ServerDescription a = ServerDescriptionBuilder().withMe("foo").instance();
+    ServerDescription b = ServerDescriptionBuilder().withMe("bar").instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareHosts) {
-    ServerDescription a = *ServerDescriptionBuilder().withHost("foo").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withHost("bar").instance();
+    ServerDescription a = ServerDescriptionBuilder().withHost("foo").instance();
+    ServerDescription b = ServerDescriptionBuilder().withHost("bar").instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldComparePassives) {
-    ServerDescription a = *ServerDescriptionBuilder().withPassive("foo").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withPassive("bar").instance();
+    ServerDescription a = ServerDescriptionBuilder().withPassive("foo").instance();
+    ServerDescription b = ServerDescriptionBuilder().withPassive("bar").instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareArbiters) {
-    ServerDescription a = *ServerDescriptionBuilder().withArbiter("foo").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withArbiter("bar").instance();
+    ServerDescription a = ServerDescriptionBuilder().withArbiter("foo").instance();
+    ServerDescription b = ServerDescriptionBuilder().withArbiter("bar").instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMultipleHostsOrderDoesntMatter) {
-    ServerDescription a = *ServerDescriptionBuilder().withHost("foo").withHost("bar").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withHost("bar").withHost("foo").instance();
+    ServerDescription a = ServerDescriptionBuilder().withHost("foo").withHost("bar").instance();
+    ServerDescription b = ServerDescriptionBuilder().withHost("bar").withHost("foo").instance();
     ASSERT_EQUALS(a, b);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMultiplePassivesOrderDoesntMatter) {
     ServerDescription a =
-        *ServerDescriptionBuilder().withPassive("foo").withPassive("bar").instance();
+        ServerDescriptionBuilder().withPassive("foo").withPassive("bar").instance();
     ServerDescription b =
-        *ServerDescriptionBuilder().withPassive("bar").withPassive("foo").instance();
+        ServerDescriptionBuilder().withPassive("bar").withPassive("foo").instance();
     ASSERT_EQUALS(a, b);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMultipleArbitersOrderDoesntMatter) {
     ServerDescription a =
-        *ServerDescriptionBuilder().withArbiter("foo").withArbiter("bar").instance();
+        ServerDescriptionBuilder().withArbiter("foo").withArbiter("bar").instance();
     ServerDescription b =
-        *ServerDescriptionBuilder().withArbiter("bar").withArbiter("foo").instance();
+        ServerDescriptionBuilder().withArbiter("bar").withArbiter("foo").instance();
     ASSERT_EQUALS(a, b);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareTags) {
-    ServerDescription a = *ServerDescriptionBuilder().withTag("foo", "bar").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withTag("baz", "buz").instance();
+    ServerDescription a = ServerDescriptionBuilder().withTag("foo", "bar").instance();
+    ServerDescription b = ServerDescriptionBuilder().withTag("baz", "buz").instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareSetName) {
-    ServerDescription a = *ServerDescriptionBuilder().withSetName("foo").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withSetName("bar").instance();
+    ServerDescription a = ServerDescriptionBuilder().withSetName("foo").instance();
+    ServerDescription b = ServerDescriptionBuilder().withSetName("bar").instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareSetVersion) {
-    ServerDescription a = *ServerDescriptionBuilder().withSetVersion(1).instance();
-    ServerDescription b = *ServerDescriptionBuilder().withSetVersion(2).instance();
+    ServerDescription a = ServerDescriptionBuilder().withSetVersion(1).instance();
+    ServerDescription b = ServerDescriptionBuilder().withSetVersion(2).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareElectionId) {
-    ServerDescription a = *ServerDescriptionBuilder().withElectionId(OID::max()).instance();
+    ServerDescription a = ServerDescriptionBuilder().withElectionId(OID::max()).instance();
     ServerDescription b =
-        *ServerDescriptionBuilder().withElectionId(OID("000000000000000000000000")).instance();
+        ServerDescriptionBuilder().withElectionId(OID("000000000000000000000000")).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldComparePrimary) {
-    ServerDescription a = *ServerDescriptionBuilder().withPrimary("foo:1234").instance();
-    ServerDescription b = *ServerDescriptionBuilder().withPrimary("bar:1234").instance();
+    ServerDescription a = ServerDescriptionBuilder().withPrimary("foo:1234").instance();
+    ServerDescription b = ServerDescriptionBuilder().withPrimary("bar:1234").instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareLogicalSessionTimeout) {
     ServerDescription a =
-        *ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(1).instance();
+        ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(1).instance();
     ServerDescription b =
-        *ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(2).instance();
+        ServerDescriptionBuilder().withLogicalSessionTimeoutMinutes(2).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }

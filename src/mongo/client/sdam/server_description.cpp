@@ -168,106 +168,109 @@ BSONObj ServerDescription::toBson() const {
 }
 
 
-ServerDescriptionBuilder::ServerDescriptionBuilder()
-    : _instance(std::shared_ptr<ServerDescription>(new ServerDescription())) {}
+ServerDescriptionBuilder::ServerDescriptionBuilder(const IsMasterOutcome& isMasterOutcome) {
+    if (isMasterOutcome.isSuccess()) {
+    } else {
+    }
+}
 
-std::shared_ptr<ServerDescription> ServerDescriptionBuilder::instance() {
-    return _instance;
+ServerDescription ServerDescriptionBuilder::instance() const {
+    return std::move(_instance);
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withAddress(const ServerAddress& address) {
-    _instance->_address = address;
+    _instance._address = address;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withError(const std::string& error) {
-    _instance->_error = error;
+    _instance._error = error;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(const OpLatency& rtt) {
-    _instance->_rtt = rtt;
+    _instance._rtt = rtt;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withLastWriteDate(const Date_t& lastWriteDate) {
-    _instance->_lastWriteDate = lastWriteDate;
+    _instance._lastWriteDate = lastWriteDate;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withOpTime(const OID& opTime) {
-    _instance->_opTime = opTime;
+    _instance._opTime = opTime;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withType(const ServerType type) {
-    _instance->_type = type;
+    _instance._type = type;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withMinWireVersion(int minVersion) {
-    _instance->_minWireVersion = minVersion;
+    _instance._minWireVersion = minVersion;
     return *this;
 }
 ServerDescriptionBuilder& ServerDescriptionBuilder::withMaxWireVersion(int maxVersion) {
-    _instance->_maxWireVersion = maxVersion;
+    _instance._maxWireVersion = maxVersion;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withMe(const ServerAddress& me) {
-    _instance->_me = me;
+    _instance._me = me;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withHost(const ServerAddress& host) {
-    _instance->_hosts.emplace(host);
+    _instance._hosts.emplace(host);
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withPassive(const ServerAddress& passive) {
-    _instance->_passives.emplace(passive);
+    _instance._passives.emplace(passive);
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withArbiter(const ServerAddress& arbiter) {
-    _instance->_arbiters.emplace(arbiter);
+    _instance._arbiters.emplace(arbiter);
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withTag(const std::string key,
                                                             const std::string value) {
-    _instance->_tags[key] = value;
+    _instance._tags[key] = value;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withSetName(const std::string setName) {
-    _instance->_setName = std::move(setName);
+    _instance._setName = std::move(setName);
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withSetVersion(const int setVersion) {
-    _instance->_setVersion = setVersion;
+    _instance._setVersion = setVersion;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withElectionId(const OID& electionId) {
-    _instance->_electionId = electionId;
+    _instance._electionId = electionId;
     return *this;
 }
 ServerDescriptionBuilder& ServerDescriptionBuilder::withPrimary(const ServerAddress& primary) {
-    _instance->_primary = primary;
+    _instance._primary = primary;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withLastUpdateTime(
     const Date_t& lastUpdateTime) {
-    _instance->_lastUpdateTime = lastUpdateTime;
+    _instance._lastUpdateTime = lastUpdateTime;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMinutes(
     const int logicalSessionTimeoutMinutes) {
-    _instance->_logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
+    _instance._logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
     return *this;
 }
 };  // namespace mongo::sdam
