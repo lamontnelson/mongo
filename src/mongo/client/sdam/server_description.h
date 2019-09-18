@@ -123,7 +123,7 @@ public:
 
 private:
     ServerDescription _instance;
-    void parseTypeFromIsMaster(const BSONObj& isMaster);
+    void parseTypeFromIsMaster(const BSONObj isMaster);
 
     inline static const std::string ISDBGRID = "isdbgrid";
 };

@@ -4,10 +4,13 @@
 
 #include "boost/optional.hpp"
 
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/bson/oid.h"
 #include "mongo/client/sdam/datatypes.h"
 #include "mongo/util/duration.h"
+#include "mongo/util/log.h"
+
 
 namespace mongo::sdam {
 const ServerAddress& ServerDescription::getAddress() const {
@@ -275,16 +278,13 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMin
     _instance._logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
     return *this;
 }
-void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj& isMaster) {
-    std::cout << isMaster;
-    bool hasMsg = isMaster.hasField("msg");
-    bool hasSetName = isMaster.hasField("setName");
-    bool isReplicaSetTrue = isMaster.getBoolField("isreplicaset");
-
+void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
     ServerType t;
+    bool hasSetName = isMaster.hasField("setName");
+
     if (isMaster.getField("ok").numberInt() != 1) {
         t = ServerType::Unknown;
-    } else if (!hasMsg && !hasSetName && !isReplicaSetTrue) {
+    } else if (!hasSetName && !isMaster.hasField("msg") && !isMaster.getBoolField("isreplicaset")) {
         t = ServerType::Standalone;
     } else if (ISDBGRID == isMaster.getStringField("msg")) {
         t = ServerType::Mongos;
@@ -296,10 +296,11 @@ void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj& isMaster) {
         t = ServerType::RSArbiter;
     } else if (hasSetName && isMaster.getBoolField("hidden")) {
         t = ServerType::RSOther;
-    } else if (isReplicaSetTrue) {
+    } else if (isMaster.getBoolField("isreplicaset")) {
         t = ServerType::RSGhost;
     } else {
-        // TODO: maybe log
+        // TODO: what are the log levels?
+        MONGO_LOG(3) << "unknown server type from successful ismaster reply: " << isMaster.toString();
         t = ServerType::Unknown;
     }
 
