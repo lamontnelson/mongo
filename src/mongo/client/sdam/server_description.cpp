@@ -175,7 +175,7 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(const IsMasterOutcome& isMast
     if (isMasterOutcome.isSuccess()) {
         parseTypeFromIsMaster(*isMasterOutcome.getResponse());
     } else {
-        // type Unknown is default value for ServerDescription
+        withError(isMasterOutcome.getErrorMsg());
     }
 }
 

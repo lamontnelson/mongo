@@ -173,8 +173,7 @@ protected:
         okBuilder().append("arbiterOnly", true).append("setName", "foo").obj();
     inline static const BSONObj BSON_RSOTHER =
         okBuilder().append("hidden", true).append("setName", "foo").obj();
-    inline static const BSONObj BSON_RSGHOST=
-        okBuilder().append("isreplicaset", true).obj();
+    inline static const BSONObj BSON_RSGHOST = okBuilder().append("isreplicaset", true).obj();
 };
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
@@ -236,5 +235,13 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsGhost) {
     auto response = IsMasterOutcome("foo:1234", BSON_RSGHOST, OpLatency::min());
     auto description = ServerDescriptionBuilder(response).instance();
     ASSERT_EQUALS(ServerType::RSGhost, description.getType());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreErrorDescription) {
+    // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
+    auto errorMsg = "an error occurred";
+    auto response = IsMasterOutcome("foo:1234", errorMsg);
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(errorMsg, *description.getError());
 }
 };  // namespace mongo
