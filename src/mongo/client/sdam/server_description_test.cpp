@@ -7,10 +7,12 @@ namespace mongo {
 using namespace sdam;
 using namespace std;
 
+namespace sdam {
 ostream& operator<<(ostream& os, const ServerDescription& description) {
     BSONObj obj = description.toBson();
     os << obj.toString();
     return os;
+}
 }
 
 TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
