@@ -179,6 +179,35 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(const IsMasterOutcome& isMast
     }
 }
 
+void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
+    ServerType t;
+    bool hasSetName = isMaster.hasField("setName");
+
+    if (isMaster.getField("ok").numberInt() != 1) {
+        t = ServerType::Unknown;
+    } else if (!hasSetName && !isMaster.hasField("msg") && !isMaster.getBoolField("isreplicaset")) {
+        t = ServerType::Standalone;
+    } else if (ISDBGRID == isMaster.getStringField("msg")) {
+        t = ServerType::Mongos;
+    } else if (hasSetName && isMaster.getBoolField("ismaster")) {
+        t = ServerType::RSPrimary;
+    } else if (hasSetName && isMaster.getBoolField("secondary")) {
+        t = ServerType::RSSecondary;
+    } else if (hasSetName && isMaster.getBoolField("arbiterOnly")) {
+        t = ServerType::RSArbiter;
+    } else if (hasSetName && isMaster.getBoolField("hidden")) {
+        t = ServerType::RSOther;
+    } else if (isMaster.getBoolField("isreplicaset")) {
+        t = ServerType::RSGhost;
+    } else {
+        // TODO: what are the log levels?
+        MONGO_LOG(3) << "unknown server type from successful ismaster reply: " << isMaster.toString();
+        t = ServerType::Unknown;
+    }
+
+    withType(t);
+}
+
 ServerDescription ServerDescriptionBuilder::instance() const {
     return std::move(_instance);
 }
@@ -277,33 +306,5 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMin
     const int logicalSessionTimeoutMinutes) {
     _instance._logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
     return *this;
-}
-void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
-    ServerType t;
-    bool hasSetName = isMaster.hasField("setName");
-
-    if (isMaster.getField("ok").numberInt() != 1) {
-        t = ServerType::Unknown;
-    } else if (!hasSetName && !isMaster.hasField("msg") && !isMaster.getBoolField("isreplicaset")) {
-        t = ServerType::Standalone;
-    } else if (ISDBGRID == isMaster.getStringField("msg")) {
-        t = ServerType::Mongos;
-    } else if (hasSetName && isMaster.getBoolField("ismaster")) {
-        t = ServerType::RSPrimary;
-    } else if (hasSetName && isMaster.getBoolField("secondary")) {
-        t = ServerType::RSSecondary;
-    } else if (hasSetName && isMaster.getBoolField("arbiterOnly")) {
-        t = ServerType::RSArbiter;
-    } else if (hasSetName && isMaster.getBoolField("hidden")) {
-        t = ServerType::RSOther;
-    } else if (isMaster.getBoolField("isreplicaset")) {
-        t = ServerType::RSGhost;
-    } else {
-        // TODO: what are the log levels?
-        MONGO_LOG(3) << "unknown server type from successful ismaster reply: " << isMaster.toString();
-        t = ServerType::Unknown;
-    }
-
-    withType(t);
 }
 };  // namespace mongo::sdam
