@@ -204,7 +204,6 @@ void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
         MONGO_LOG(3) << "unknown server type from successful ismaster reply: " << isMaster.toString();
         t = ServerType::Unknown;
     }
-
     withType(t);
 }
 
