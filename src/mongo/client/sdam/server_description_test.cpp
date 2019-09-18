@@ -1,3 +1,4 @@
+#include <boost/optional/optional_io.hpp>
 #include <mongo/db/jsobj.h>
 #include <ostream>
 
@@ -231,17 +232,53 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsOther) {
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsGhost) {
-    // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
+    // "isreplicaset: true" in response.
     auto response = IsMasterOutcome("foo:1234", BSON_RSGHOST, OpLatency::min());
     auto description = ServerDescriptionBuilder(response).instance();
     ASSERT_EQUALS(ServerType::RSGhost, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreErrorDescription) {
-    // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
     auto errorMsg = "an error occurred";
     auto response = IsMasterOutcome("foo:1234", errorMsg);
     auto description = ServerDescriptionBuilder(response).instance();
     ASSERT_EQUALS(errorMsg, *description.getError());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTWithNoPreviousServerDescription) {
+    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, OpLatency::max());
+    auto description = ServerDescriptionBuilder(response, boost::none).instance();
+    ASSERT_EQUALS(OpLatency ::max(), *description.getRtt());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTWhenPreviousTypeWasUnknown) {
+    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, OpLatency::max());
+    auto description =
+        ServerDescriptionBuilder(
+            response, ServerDescriptionBuilder().withType(ServerType::Unknown).instance())
+            .instance();
+    ASSERT_EQUALS(OpLatency ::max(), *description.getRtt());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTNullWhenServerTypeIsUnknown) {
+    auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, OpLatency::max());
+    auto description = ServerDescriptionBuilder(response, boost::none).instance();
+    ASSERT_EQUALS(boost::none, description.getRtt());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture,
+       ShouldStoreMovingAverageRTTWhenChangingFromOneKnownServerTypeToAnother) {
+    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
+    auto lastServerDescription = ServerDescriptionBuilder()
+                                     .withType(ServerType::RSSecondary)
+                                     .withRtt(mongo::Milliseconds(20))
+                                     .instance();
+    auto description = ServerDescriptionBuilder(response, lastServerDescription).instance();
+    ASSERT_EQUALS(24, durationCount<mongo::Milliseconds>(*description.getRtt()));
+
+    auto response2 = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(30));
+    auto description2 = ServerDescriptionBuilder(response2, description).instance();
+    std::cout << durationCount<mongo::Milliseconds>(*description2.getRtt()) << " ms";
+    ASSERT_EQUALS(25, durationCount<mongo::Milliseconds>(*description2.getRtt()));
 }
 };  // namespace mongo

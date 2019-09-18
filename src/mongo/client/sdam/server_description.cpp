@@ -171,9 +171,18 @@ BSONObj ServerDescription::toBson() const {
 }
 
 
-ServerDescriptionBuilder::ServerDescriptionBuilder(const IsMasterOutcome& isMasterOutcome) {
+ServerDescriptionBuilder::ServerDescriptionBuilder(
+    const IsMasterOutcome& isMasterOutcome,
+    boost::optional<ServerDescription> lastServerDescription) {
     if (isMasterOutcome.isSuccess()) {
         parseTypeFromIsMaster(*isMasterOutcome.getResponse());
+        if (_instance.getType() != ServerType::Unknown) {
+            if (lastServerDescription.is_initialized()) {
+                withRtt(*isMasterOutcome.getRtt(), lastServerDescription->getRtt());
+            } else {
+                withRtt(*isMasterOutcome.getRtt());
+            }
+        }
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }
@@ -222,8 +231,15 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withError(const std::string&
     return *this;
 }
 
-ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(const OpLatency& rtt) {
-    _instance._rtt = rtt;
+ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(const OpLatency& rtt,
+                                                            boost::optional<OpLatency> lastRtt) {
+    if (lastRtt) {
+        // new_rtt = alpha * x + (1 - alpha) * old_rtt
+        _instance._rtt = OpLatency(static_cast<OpLatency::rep>(
+            RTT_ALPHA * rtt.count() + (1 - RTT_ALPHA) * lastRtt.get().count()));
+    } else {
+        _instance._rtt = rtt;
+    }
     return *this;
 }
 

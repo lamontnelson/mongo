@@ -97,12 +97,12 @@ private:
 class ServerDescriptionBuilder {
 public:
     ServerDescriptionBuilder() = default;
-    ServerDescriptionBuilder(const IsMasterOutcome& isMasterOutcome);
+    ServerDescriptionBuilder(const IsMasterOutcome& isMasterOutcome, boost::optional<ServerDescription> lastServerDescription=boost::none);
 
     ServerDescription instance() const;
     ServerDescriptionBuilder& withError(const std::string& error);
     ServerDescriptionBuilder& withAddress(const ServerAddress& address);
-    ServerDescriptionBuilder& withRtt(const OpLatency& rtt);
+    ServerDescriptionBuilder& withRtt(const OpLatency& rtt, boost::optional<OpLatency> lastRtt=boost::none);
     ServerDescriptionBuilder& withLastWriteDate(const Date_t& lastWriteDate);
     ServerDescriptionBuilder& withOpTime(const OID& opTime);
     ServerDescriptionBuilder& withType(const ServerType type);
@@ -133,5 +133,6 @@ private:
     void parseTypeFromIsMaster(const BSONObj isMaster);
 
     inline static const std::string IS_DB_GRID = "isdbgrid";
+    inline static double RTT_ALPHA = 0.2;
 };
 }
