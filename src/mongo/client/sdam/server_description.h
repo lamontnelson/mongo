@@ -40,6 +40,8 @@ public:
     const boost::optional<ServerAddress>& getPrimary() const;
     const boost::optional<Date_t>& getLastUpdateTime() const;
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
+    int getMinWireVersion() const;
+    int getMaxWireVersion() const;
 
     bool isDataBearingServer() const;
     BSONObj toBson() const;

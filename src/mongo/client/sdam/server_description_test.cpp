@@ -202,6 +202,8 @@ protected:
     inline static const auto BSON_RSOTHER =
         okBuilder().append("hidden", true).append("setName", "foo").obj();
     inline static const auto BSON_RSGHOST = okBuilder().append("isreplicaset", true).obj();
+    inline static const auto BSON_WIRE_VERSION =
+        okBuilder().append("minWireVersion", 1).append("maxWireVersion", 2).obj();
 
     inline static const mongo::repl::OpTime OP_TIME =
         mongo::repl::OpTime(Timestamp(1568848910), 24);
@@ -372,5 +374,12 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreHostNamesAsLowercase) {
 
     auto expectedArbiters = toHostSet(BSON_HOSTNAMES.getField("arbiters").Array());
     ASSERT_EQUALS(expectedArbiters, description.getArbiters());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreMinMaxWireVersion) {
+    auto response = IsMasterOutcome("foo:1234", BSON_WIRE_VERSION, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    ASSERT_EQUALS(BSON_WIRE_VERSION["minWireVersion"].Int(), description.getMinWireVersion());
+    ASSERT_EQUALS(BSON_WIRE_VERSION["maxWireVersion"].Int(), description.getMaxWireVersion());
 }
 };  // namespace mongo

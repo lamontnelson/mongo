@@ -171,6 +171,14 @@ BSONObj ServerDescription::toBson() const {
     return bson.obj();
 }
 
+int ServerDescription::getMinWireVersion() const {
+    return _minWireVersion;
+}
+
+int ServerDescription::getMaxWireVersion() const {
+    return _maxWireVersion;
+}
+
 
 ServerDescriptionBuilder::ServerDescriptionBuilder(
     ClockSource* clockSource,
@@ -182,8 +190,10 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
         calculateRtt(*isMasterOutcome.getRtt(),
                      (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
         saveLastWriteInfo(response.getObjectField("lastWrite"));
-        withLastUpdateTime(clockSource->now());
         saveHosts(response);
+        withLastUpdateTime(clockSource->now());
+        withMinWireVersion(response["minWireVersion"].numberInt());
+        withMaxWireVersion(response["maxWireVersion"].numberInt());
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }
@@ -350,8 +360,8 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMin
 }
 
 void ServerDescriptionBuilder::storeHostListIfPresent(const std::string key,
-                            const BSONObj response,
-                            std::set<ServerAddress>& destination) {
+                                                      const BSONObj response,
+                                                      std::set<ServerAddress>& destination) {
     if (response.hasField(key)) {
         auto hostsBsonArray = response[key].Array();
         std::transform(hostsBsonArray.begin(),
