@@ -1,10 +1,11 @@
 #include "mongo/client/sdam/server_description.h"
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 
+#include <algorithm>
+#include <boost/algorithm/string.hpp>
+#include <boost/optional.hpp>
 #include <set>
 
-#include "boost/optional.hpp"
-
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/bson/oid.h"
 #include "mongo/client/sdam/datatypes.h"
@@ -182,6 +183,7 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
                      (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
         saveLastWriteInfo(response.getObjectField("lastWrite"));
         withLastUpdateTime(clockSource->now());
+        saveHosts(response);
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }
@@ -296,17 +298,17 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withMe(const ServerAddress& 
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withHost(const ServerAddress& host) {
-    _instance._hosts.emplace(host);
+    _instance._hosts.emplace(boost::to_lower_copy(host));
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withPassive(const ServerAddress& passive) {
-    _instance._passives.emplace(passive);
+    _instance._passives.emplace(boost::to_lower_copy(passive));
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withArbiter(const ServerAddress& arbiter) {
-    _instance._arbiters.emplace(arbiter);
+    _instance._arbiters.emplace(boost::to_lower_copy(arbiter));
     return *this;
 }
 
@@ -345,5 +347,27 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMin
     const int logicalSessionTimeoutMinutes) {
     _instance._logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
     return *this;
+}
+
+void storeHostListIfPresent(const std::string key,
+                            const BSONObj response,
+                            std::set<ServerAddress>& destination) {
+    if (response.hasField(key)) {
+        auto hostsBsonArray = response[key].Array();
+        std::transform(hostsBsonArray.begin(),
+                       hostsBsonArray.end(),
+                       std::inserter(destination, destination.begin()),
+                       [](const BSONElement e) { return boost::to_lower_copy(e.String()); });
+    }
+}
+
+void ServerDescriptionBuilder::saveHosts(const BSONObj response) {
+    if (response.hasField("me")) {
+        withMe(response.getStringField("me"));
+    }
+
+    storeHostListIfPresent("hosts", response, _instance._hosts);
+    storeHostListIfPresent("passives", response, _instance._passives);
+    storeHostListIfPresent("arbiters", response, _instance._arbiters);
 }
 };  // namespace mongo::sdam

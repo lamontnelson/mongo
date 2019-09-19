@@ -1,6 +1,8 @@
+#include <boost/algorithm/string.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <mongo/db/jsobj.h>
 #include <ostream>
+#include <set>
 
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/db/repl/optime.h"
@@ -12,6 +14,17 @@ using namespace sdam;
 using namespace std;
 
 namespace sdam {
+ostream& operator<<(ostream& os, const std::set<std::string>& s) {
+    os << "{";
+    size_t i = 0;
+    for (auto it = s.begin(); it != s.end(); ++it, ++i) {
+        os << *it;
+        if (i != s.size() - 1)
+            os << ", ";
+    }
+    os << "}" << std::endl;
+    return os;
+}
 ostream& operator<<(ostream& os, const ServerDescription& description) {
     BSONObj obj = description.toBson();
     os << obj.toString();
@@ -160,32 +173,40 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareLogicalSessionTimeout) {
 
 
 class ServerDescriptionBuilderTestFixture : public mongo::unittest::Test {
-
 protected:
+    std::set<std::string> toHostSet(std::vector<BSONElement> bsonArray) {
+        std::set<std::string> result;
+        std::transform(bsonArray.begin(),
+                       bsonArray.end(),
+                       std::inserter(result, result.begin()),
+                       [](BSONElement e) { return boost::to_lower_copy(e.String()); });
+        return result;
+    }
+
     static BSONObjBuilder okBuilder() {
         return std::move(BSONObjBuilder().append("ok", 1));
     }
 
     inline static const auto clockSource = SystemClockSource::get();
 
-    inline static const BSONObj BSON_OK = okBuilder().obj();
-    inline static const BSONObj BSON_MISSING_OK = BSONObjBuilder().obj();
-    inline static const BSONObj BSON_MONGOS = okBuilder().append("msg", "isdbgrid").obj();
-    inline static const BSONObj BSON_RSPRIMARY =
+    inline static const auto BSON_OK = okBuilder().obj();
+    inline static const auto BSON_MISSING_OK = BSONObjBuilder().obj();
+    inline static const auto BSON_MONGOS = okBuilder().append("msg", "isdbgrid").obj();
+    inline static const auto BSON_RSPRIMARY =
         okBuilder().append("ismaster", true).append("setName", "foo").obj();
-    inline static const BSONObj BSON_RSSECONDARY =
+    inline static const auto BSON_RSSECONDARY =
         okBuilder().append("secondary", true).append("setName", "foo").obj();
-    inline static const BSONObj BSON_RSARBITER =
+    inline static const auto BSON_RSARBITER =
         okBuilder().append("arbiterOnly", true).append("setName", "foo").obj();
-    inline static const BSONObj BSON_RSOTHER =
+    inline static const auto BSON_RSOTHER =
         okBuilder().append("hidden", true).append("setName", "foo").obj();
-    inline static const BSONObj BSON_RSGHOST = okBuilder().append("isreplicaset", true).obj();
+    inline static const auto BSON_RSGHOST = okBuilder().append("isreplicaset", true).obj();
 
     inline static const mongo::repl::OpTime OP_TIME =
         mongo::repl::OpTime(Timestamp(1568848910), 24);
     inline static const Date_t LAST_WRITE_DATE =
         dateFromISOString("2019-09-18T23:21:50Z").getValue();
-    inline static const BSONObj BSON_LAST_WRITE =
+    inline static const auto BSON_LAST_WRITE =
         okBuilder()
             .append("lastWrite",
                     BSONObjBuilder()
@@ -193,6 +214,18 @@ protected:
                         .append("opTime", OP_TIME.toBSON())
                         .obj())
             .obj();
+    inline static const auto BSON_HOSTNAMES = okBuilder()
+                                                  .append("me", "Me:1234")
+                                                  .appendArray("hosts",
+                                                               BSON_ARRAY("Foo:1234"
+                                                                          << "Bar:1234"))
+                                                  .appendArray("arbiters",
+                                                               BSON_ARRAY("Baz:1234"
+                                                                          << "Buz:1234"))
+                                                  .appendArray("passives",
+                                                               BSON_ARRAY("Biz:1234"
+                                                                          << "Boz:1234"))
+                                                  .obj();
 };
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
@@ -321,5 +354,21 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastUpdateTime) {
     auto lastUpdateTime = description.getLastUpdateTime();
     ASSERT_NOT_EQUALS(boost::none, lastUpdateTime);
     ASSERT_GREATER_THAN_OR_EQUALS(testStart, *lastUpdateTime);
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreHostNamesAsLowercase) {
+    auto response = IsMasterOutcome("foo:1234", BSON_HOSTNAMES, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+
+    ASSERT_EQUALS(BSON_HOSTNAMES.getStringField("me"), *description.getMe());
+
+    auto expectedHosts = toHostSet(BSON_HOSTNAMES.getField("hosts").Array());
+    ASSERT_EQUALS(expectedHosts, description.getHosts());
+
+    auto expectedPassives = toHostSet(BSON_HOSTNAMES.getField("passives").Array());
+    ASSERT_EQUALS(expectedPassives, description.getPassives());
+
+    auto expectedArbiters = toHostSet(BSON_HOSTNAMES.getField("arbiters").Array());
+    ASSERT_EQUALS(expectedArbiters, description.getArbiters());
 }
 };  // namespace mongo

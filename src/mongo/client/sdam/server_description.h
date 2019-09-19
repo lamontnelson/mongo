@@ -7,8 +7,8 @@
 
 #include "mongo/bson/oid.h"
 #include "mongo/client/sdam/datatypes.h"
-#include "mongo/platform/basic.h"
 #include "mongo/db/repl/optime.h"
+#include "mongo/platform/basic.h"
 #include "mongo/util/clock_source.h"
 
 namespace mongo::sdam {
@@ -143,5 +143,6 @@ private:
 
     void calculateRtt(const OpLatency currentRtt, const boost::optional<OpLatency> lastRtt);
     void saveLastWriteInfo(BSONObj lastWriteBson);
+    void saveHosts(const BSONObj response);
 };
 }
