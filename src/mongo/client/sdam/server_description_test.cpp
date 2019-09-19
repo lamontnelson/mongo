@@ -174,6 +174,7 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareLogicalSessionTimeout) {
 
 class ServerDescriptionBuilderTestFixture : public mongo::unittest::Test {
 protected:
+    // returns a set containing the elements in the given bson array with lowercase values.
     std::set<std::string> toHostSet(std::vector<BSONElement> bsonArray) {
         std::set<std::string> result;
         std::transform(bsonArray.begin(),
@@ -348,7 +349,7 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreOpTime) {
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastUpdateTime) {
-    auto testStart = Date_t::now();
+    auto testStart = clockSource->now();
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     auto lastUpdateTime = description.getLastUpdateTime();
