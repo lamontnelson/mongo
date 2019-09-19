@@ -360,7 +360,8 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreHostNamesAsLowercase) {
     auto response = IsMasterOutcome("foo:1234", BSON_HOSTNAMES, mongo::Milliseconds(40));
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
 
-    ASSERT_EQUALS(BSON_HOSTNAMES.getStringField("me"), *description.getMe());
+    ASSERT_EQUALS(boost::to_lower_copy(std::string(BSON_HOSTNAMES.getStringField("me"))),
+                  *description.getMe());
 
     auto expectedHosts = toHostSet(BSON_HOSTNAMES.getField("hosts").Array());
     ASSERT_EQUALS(expectedHosts, description.getHosts());

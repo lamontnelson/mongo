@@ -143,6 +143,9 @@ private:
 
     void calculateRtt(const OpLatency currentRtt, const boost::optional<OpLatency> lastRtt);
     void saveLastWriteInfo(BSONObj lastWriteBson);
+    void storeHostListIfPresent(const std::string key,
+                                const BSONObj response,
+                                std::set<ServerAddress>& destination);
     void saveHosts(const BSONObj response);
 };
 }

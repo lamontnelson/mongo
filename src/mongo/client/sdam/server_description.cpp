@@ -293,7 +293,7 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withMaxWireVersion(int maxVe
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withMe(const ServerAddress& me) {
-    _instance._me = me;
+    _instance._me = boost::to_lower_copy(me);
     return *this;
 }
 
@@ -349,7 +349,7 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMin
     return *this;
 }
 
-void storeHostListIfPresent(const std::string key,
+void ServerDescriptionBuilder::storeHostListIfPresent(const std::string key,
                             const BSONObj response,
                             std::set<ServerAddress>& destination) {
     if (response.hasField(key)) {
