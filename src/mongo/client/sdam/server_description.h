@@ -8,6 +8,7 @@
 #include "mongo/bson/oid.h"
 #include "mongo/client/sdam/datatypes.h"
 #include "mongo/platform/basic.h"
+#include "mongo/db/repl/optime.h"
 
 namespace mongo::sdam {
 class ServerDescription {
@@ -25,7 +26,7 @@ public:
     const boost::optional<std::string>& getError() const;
     const boost::optional<OpLatency>& getRtt() const;
     const boost::optional<Date_t>& getLastWriteDate() const;
-    const boost::optional<OID>& getOpTime() const;
+    const boost::optional<repl::OpTime>& getOpTime() const;
     ServerType getType() const;
     const boost::optional<ServerAddress>& getMe() const;
     const std::set<ServerAddress>& getHosts() const;
@@ -57,7 +58,7 @@ private:
     // opTime: an ObjectId or null. The last opTime reported by the server; an ObjectId or null.
     // (Only mongos and shard servers record this field when monitoring config servers as replica
     // sets.)
-    boost::optional<OID> _opTime;
+    boost::optional<repl::OpTime> _opTime;
     // (=) type: a ServerType enum value. Default Unknown.
     ServerType _type;
     // (=) minWireVersion, maxWireVersion: the wire protocol version range supported by the server.
@@ -97,14 +98,17 @@ private:
 class ServerDescriptionBuilder {
 public:
     ServerDescriptionBuilder() = default;
-    ServerDescriptionBuilder(const IsMasterOutcome& isMasterOutcome, boost::optional<ServerDescription> lastServerDescription=boost::none);
+    ServerDescriptionBuilder(
+        const IsMasterOutcome& isMasterOutcome,
+        boost::optional<ServerDescription> lastServerDescription = boost::none);
 
     ServerDescription instance() const;
     ServerDescriptionBuilder& withError(const std::string& error);
     ServerDescriptionBuilder& withAddress(const ServerAddress& address);
-    ServerDescriptionBuilder& withRtt(const OpLatency& rtt, boost::optional<OpLatency> lastRtt=boost::none);
+    ServerDescriptionBuilder& withRtt(const OpLatency& rtt,
+                                      boost::optional<OpLatency> lastRtt = boost::none);
     ServerDescriptionBuilder& withLastWriteDate(const Date_t& lastWriteDate);
-    ServerDescriptionBuilder& withOpTime(const OID& opTime);
+    ServerDescriptionBuilder& withOpTime(const repl::OpTime opTime);
     ServerDescriptionBuilder& withType(const ServerType type);
     ServerDescriptionBuilder& withMinWireVersion(int minVersion);
     ServerDescriptionBuilder& withMaxWireVersion(int maxVersion);
@@ -134,5 +138,8 @@ private:
 
     inline static const std::string IS_DB_GRID = "isdbgrid";
     inline static double RTT_ALPHA = 0.2;
+
+    void calculateRtt(const OpLatency currentRtt, const boost::optional<OpLatency> lastRtt);
+    void saveLastWriteInfo(BSONObj lastWriteBson);
 };
 }

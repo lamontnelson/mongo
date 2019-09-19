@@ -3,6 +3,7 @@
 #include <ostream>
 
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/db/repl/optime.h"
 #include "mongo/unittest/unittest.h"
 
 namespace mongo {
@@ -175,6 +176,19 @@ protected:
     inline static const BSONObj BSON_RSOTHER =
         okBuilder().append("hidden", true).append("setName", "foo").obj();
     inline static const BSONObj BSON_RSGHOST = okBuilder().append("isreplicaset", true).obj();
+
+    inline static const mongo::repl::OpTime OP_TIME =
+        mongo::repl::OpTime(Timestamp(1568848910), 24);
+    inline static const Date_t LAST_WRITE_DATE =
+        dateFromISOString("2019-09-18T23:21:50Z").getValue();
+    inline static const BSONObj BSON_LAST_WRITE =
+        okBuilder()
+            .append("lastWrite",
+                    BSONObjBuilder()
+                        .appendTimeT("lastWriteDate", LAST_WRITE_DATE.toTimeT())
+                        .append("opTime", OP_TIME.toBSON())
+                        .obj())
+            .obj();
 };
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
@@ -280,5 +294,17 @@ TEST_F(ServerDescriptionBuilderTestFixture,
     auto description2 = ServerDescriptionBuilder(response2, description).instance();
     std::cout << durationCount<mongo::Milliseconds>(*description2.getRtt()) << " ms";
     ASSERT_EQUALS(25, durationCount<mongo::Milliseconds>(*description2.getRtt()));
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastWriteDate) {
+    auto response = IsMasterOutcome("foo:1234", BSON_LAST_WRITE, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(LAST_WRITE_DATE, description.getLastWriteDate());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreOpTime) {
+    auto response = IsMasterOutcome("foo:1234", BSON_LAST_WRITE, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(response).instance();
+    ASSERT_EQUALS(OP_TIME, description.getOpTime());
 }
 };  // namespace mongo

@@ -29,7 +29,7 @@ const boost::optional<mongo::Date_t>& ServerDescription::getLastWriteDate() cons
     return _lastWriteDate;
 }
 
-const boost::optional<mongo::OID>& ServerDescription::getOpTime() const {
+const boost::optional<repl::OpTime>& ServerDescription::getOpTime() const {
     return _opTime;
 }
 
@@ -124,7 +124,7 @@ BSONObj ServerDescription::toBson() const {
         bson.appendNull("lastWriteDate");
     }
     if (_opTime) {
-        bson.append("opTime", *_opTime);
+        bson.append("opTime", _opTime->toBSON());
     } else {
         bson.appendNull("opTime");
     }
@@ -175,16 +175,37 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
     const IsMasterOutcome& isMasterOutcome,
     boost::optional<ServerDescription> lastServerDescription) {
     if (isMasterOutcome.isSuccess()) {
-        parseTypeFromIsMaster(*isMasterOutcome.getResponse());
-        if (_instance.getType() != ServerType::Unknown) {
-            if (lastServerDescription.is_initialized()) {
-                withRtt(*isMasterOutcome.getRtt(), lastServerDescription->getRtt());
-            } else {
-                withRtt(*isMasterOutcome.getRtt());
-            }
-        }
+        const auto response = *isMasterOutcome.getResponse();
+        parseTypeFromIsMaster(response);
+        calculateRtt(*isMasterOutcome.getRtt(),
+                     (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
+        saveLastWriteInfo(response.getObjectField("lastWrite"));
     } else {
         withError(isMasterOutcome.getErrorMsg());
+    }
+}
+
+void ServerDescriptionBuilder::calculateRtt(const OpLatency currentRtt,
+                                            const boost::optional<OpLatency> lastRtt) {
+    if (_instance.getType() != ServerType::Unknown) {
+        if (lastRtt) {
+            withRtt(currentRtt, *lastRtt);
+        } else {
+            withRtt(currentRtt);
+        }
+    }
+}
+
+void ServerDescriptionBuilder::saveLastWriteInfo(BSONObj lastWriteBson) {
+    const auto lastWriteDateField = lastWriteBson.getField("lastWriteDate");
+    if (lastWriteDateField.type() == BSONType::Date) {
+        withLastWriteDate(lastWriteDateField.date());
+    }
+
+    const auto opTimeParse =
+        repl::OpTime::parseFromOplogEntry(lastWriteBson.getObjectField("opTime"));
+    if (opTimeParse.isOK()) {
+        withOpTime(opTimeParse.getValue());
     }
 }
 
@@ -248,7 +269,7 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLastWriteDate(const Date
     return *this;
 }
 
-ServerDescriptionBuilder& ServerDescriptionBuilder::withOpTime(const OID& opTime) {
+ServerDescriptionBuilder& ServerDescriptionBuilder::withOpTime(const repl::OpTime opTime) {
     _instance._opTime = opTime;
     return *this;
 }
