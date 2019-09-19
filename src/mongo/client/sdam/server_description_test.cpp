@@ -14,6 +14,17 @@ using namespace sdam;
 using namespace std;
 
 namespace sdam {
+ostream& operator<<(ostream& os, const std::map<std::string, std::string>& m) {
+    os << "{";
+    size_t i = 0;
+    for (auto it = m.begin(); it != m.end(); ++it, ++i) {
+        os << (*it).first << ": " << (*it).second;
+        if (i != m.size() - 1)
+            os << ", ";
+    }
+    os << "}" << std::endl;
+    return os;
+}
 ostream& operator<<(ostream& os, const std::set<std::string>& s) {
     os << "{";
     size_t i = 0;
@@ -184,6 +195,18 @@ protected:
         return result;
     }
 
+    std::map<std::string, std::string> toStringMap(BSONObj bsonObj) {
+        std::map<std::string, std::string> result;
+        const auto keys = bsonObj.getFieldNames<std::set<std::string>>();
+        std::transform(keys.begin(),
+                       keys.end(),
+                       std::inserter(result, result.begin()),
+                       [bsonObj](const std::string& key) {
+                           return std::pair<const std::string, std::string>(key, bsonObj.getStringField(key));
+                       });
+        return result;
+    }
+
     static BSONObjBuilder okBuilder() {
         return std::move(BSONObjBuilder().append("ok", 1));
     }
@@ -204,6 +227,10 @@ protected:
     inline static const auto BSON_RSGHOST = okBuilder().append("isreplicaset", true).obj();
     inline static const auto BSON_WIRE_VERSION =
         okBuilder().append("minWireVersion", 1).append("maxWireVersion", 2).obj();
+    inline static const auto BSON_TAGS =
+        okBuilder()
+            .append("tags", BSONObjBuilder().append("foo", "bar").append("baz", "buz").obj())
+            .obj();
 
     inline static const mongo::repl::OpTime OP_TIME =
         mongo::repl::OpTime(Timestamp(1568848910), 24);
@@ -382,4 +409,11 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreMinMaxWireVersion) {
     ASSERT_EQUALS(BSON_WIRE_VERSION["minWireVersion"].Int(), description.getMinWireVersion());
     ASSERT_EQUALS(BSON_WIRE_VERSION["maxWireVersion"].Int(), description.getMaxWireVersion());
 }
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreTags) {
+    auto response = IsMasterOutcome("foo:1234", BSON_TAGS, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    ASSERT_EQUALS(toStringMap(BSON_TAGS["tags"].Obj()), description.getTags());
+}
+
 };  // namespace mongo

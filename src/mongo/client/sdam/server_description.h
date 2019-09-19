@@ -149,5 +149,6 @@ private:
                                 const BSONObj response,
                                 std::set<ServerAddress>& destination);
     void saveHosts(const BSONObj response);
+    void saveTags(BSONObj tagsObj);
 };
 }

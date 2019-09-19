@@ -194,6 +194,7 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
         withLastUpdateTime(clockSource->now());
         withMinWireVersion(response["minWireVersion"].numberInt());
         withMaxWireVersion(response["maxWireVersion"].numberInt());
+        saveTags(response.getObjectField("tags"));
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }
@@ -380,4 +381,11 @@ void ServerDescriptionBuilder::saveHosts(const BSONObj response) {
     storeHostListIfPresent("passives", response, _instance._passives);
     storeHostListIfPresent("arbiters", response, _instance._arbiters);
 }
+void ServerDescriptionBuilder::saveTags(BSONObj tagsObj) {
+    const auto keys = tagsObj.getFieldNames<std::set<std::string>>();
+    for (const auto key : keys) {
+        withTag(key, tagsObj.getStringField(key));
+    }
+}
+
 };  // namespace mongo::sdam
