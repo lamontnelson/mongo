@@ -14,7 +14,8 @@ env.Library(
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/base',
-        '$BUILD_DIR/mongo/db/repl/optime'
+        '$BUILD_DIR/mongo/db/repl/optime',
+        '$BUILD_DIR/mongo/util/clock_sources'
     ],
     LIBDEPS_PRIVATE=[
     ],

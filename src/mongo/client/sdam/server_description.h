@@ -9,6 +9,7 @@
 #include "mongo/client/sdam/datatypes.h"
 #include "mongo/platform/basic.h"
 #include "mongo/db/repl/optime.h"
+#include "mongo/util/clock_source.h"
 
 namespace mongo::sdam {
 class ServerDescription {
@@ -99,6 +100,7 @@ class ServerDescriptionBuilder {
 public:
     ServerDescriptionBuilder() = default;
     ServerDescriptionBuilder(
+        ClockSource* clockSource,
         const IsMasterOutcome& isMasterOutcome,
         boost::optional<ServerDescription> lastServerDescription = boost::none);
 

@@ -5,6 +5,7 @@
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/db/repl/optime.h"
 #include "mongo/unittest/unittest.h"
+#include "mongo/util/system_clock_source.h"
 
 namespace mongo {
 using namespace sdam;
@@ -164,6 +165,9 @@ protected:
     static BSONObjBuilder okBuilder() {
         return std::move(BSONObjBuilder().append("ok", 1));
     }
+
+    inline static const auto clockSource = SystemClockSource::get();
+
     inline static const BSONObj BSON_OK = okBuilder().obj();
     inline static const BSONObj BSON_MISSING_OK = BSONObjBuilder().obj();
     inline static const BSONObj BSON_MONGOS = okBuilder().append("msg", "isdbgrid").obj();
@@ -193,90 +197,91 @@ protected:
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
     auto response = IsMasterOutcome("foo:1234", "an error occurred");
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::Unknown, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownIfOkMissing) {
     auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, OpLatency::min());
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::Unknown, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsStandalone) {
     // No "msg: isdbgrid", no setName, and no "isreplicaset: true".
     auto response = IsMasterOutcome("foo:1234", BSON_OK, OpLatency::min());
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::Standalone, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsMongos) {
     // contains "msg: isdbgrid"
     auto response = IsMasterOutcome("foo:1234", BSON_MONGOS, OpLatency::min());
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::Mongos, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSPrimary) {
     // "ismaster: true", "setName" in response
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, OpLatency::min());
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::RSPrimary, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSSecondary) {
     // "secondary: true", "setName" in response
     auto response = IsMasterOutcome("foo:1234", BSON_RSSECONDARY, OpLatency::min());
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::RSSecondary, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsArbiter) {
     // "arbiterOnly: true", "setName" in response.
     auto response = IsMasterOutcome("foo:1234", BSON_RSARBITER, OpLatency::min());
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::RSArbiter, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsOther) {
     // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
     auto response = IsMasterOutcome("foo:1234", BSON_RSOTHER, OpLatency::min());
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::RSOther, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsGhost) {
     // "isreplicaset: true" in response.
     auto response = IsMasterOutcome("foo:1234", BSON_RSGHOST, OpLatency::min());
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::RSGhost, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreErrorDescription) {
     auto errorMsg = "an error occurred";
     auto response = IsMasterOutcome("foo:1234", errorMsg);
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(errorMsg, *description.getError());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTWithNoPreviousServerDescription) {
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, OpLatency::max());
-    auto description = ServerDescriptionBuilder(response, boost::none).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(OpLatency ::max(), *description.getRtt());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTWhenPreviousTypeWasUnknown) {
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, OpLatency::max());
-    auto description =
-        ServerDescriptionBuilder(
-            response, ServerDescriptionBuilder().withType(ServerType::Unknown).instance())
-            .instance();
+    auto description = ServerDescriptionBuilder(
+                           clockSource,
+                           response,
+                           ServerDescriptionBuilder().withType(ServerType::Unknown).instance())
+                           .instance();
     ASSERT_EQUALS(OpLatency ::max(), *description.getRtt());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTNullWhenServerTypeIsUnknown) {
     auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, OpLatency::max());
-    auto description = ServerDescriptionBuilder(response, boost::none).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response, boost::none).instance();
     ASSERT_EQUALS(boost::none, description.getRtt());
 }
 
@@ -287,24 +292,34 @@ TEST_F(ServerDescriptionBuilderTestFixture,
                                      .withType(ServerType::RSSecondary)
                                      .withRtt(mongo::Milliseconds(20))
                                      .instance();
-    auto description = ServerDescriptionBuilder(response, lastServerDescription).instance();
+    auto description =
+        ServerDescriptionBuilder(clockSource, response, lastServerDescription).instance();
     ASSERT_EQUALS(24, durationCount<mongo::Milliseconds>(*description.getRtt()));
 
     auto response2 = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(30));
-    auto description2 = ServerDescriptionBuilder(response2, description).instance();
+    auto description2 = ServerDescriptionBuilder(clockSource, response2, description).instance();
     std::cout << durationCount<mongo::Milliseconds>(*description2.getRtt()) << " ms";
     ASSERT_EQUALS(25, durationCount<mongo::Milliseconds>(*description2.getRtt()));
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastWriteDate) {
     auto response = IsMasterOutcome("foo:1234", BSON_LAST_WRITE, mongo::Milliseconds(40));
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(LAST_WRITE_DATE, description.getLastWriteDate());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreOpTime) {
     auto response = IsMasterOutcome("foo:1234", BSON_LAST_WRITE, mongo::Milliseconds(40));
-    auto description = ServerDescriptionBuilder(response).instance();
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(OP_TIME, description.getOpTime());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastUpdateTime) {
+    auto testStart = Date_t::now();
+    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    auto lastUpdateTime = description.getLastUpdateTime();
+    ASSERT_NOT_EQUALS(boost::none, lastUpdateTime);
+    ASSERT_GREATER_THAN_OR_EQUALS(testStart, *lastUpdateTime);
 }
 };  // namespace mongo

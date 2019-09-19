@@ -172,6 +172,7 @@ BSONObj ServerDescription::toBson() const {
 
 
 ServerDescriptionBuilder::ServerDescriptionBuilder(
+    ClockSource* clockSource,
     const IsMasterOutcome& isMasterOutcome,
     boost::optional<ServerDescription> lastServerDescription) {
     if (isMasterOutcome.isSuccess()) {
@@ -180,6 +181,7 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
         calculateRtt(*isMasterOutcome.getRtt(),
                      (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
         saveLastWriteInfo(response.getObjectField("lastWrite"));
+        withLastUpdateTime(clockSource->now());
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }
