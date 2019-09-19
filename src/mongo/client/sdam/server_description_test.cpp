@@ -202,7 +202,8 @@ protected:
                        keys.end(),
                        std::inserter(result, result.begin()),
                        [bsonObj](const std::string& key) {
-                           return std::pair<const std::string, std::string>(key, bsonObj.getStringField(key));
+                           return std::pair<const std::string, std::string>(
+                               key, bsonObj.getStringField(key));
                        });
         return result;
     }

@@ -191,10 +191,10 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
                      (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
         saveLastWriteInfo(response.getObjectField("lastWrite"));
         saveHosts(response);
+        saveTags(response.getObjectField("tags"));
         withLastUpdateTime(clockSource->now());
         withMinWireVersion(response["minWireVersion"].numberInt());
         withMaxWireVersion(response["maxWireVersion"].numberInt());
-        saveTags(response.getObjectField("tags"));
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }
