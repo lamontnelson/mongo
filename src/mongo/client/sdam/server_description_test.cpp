@@ -260,6 +260,8 @@ protected:
         okBuilder().append("setVersion", 1).append("setName", "bar").obj();
     inline static const auto BSON_ELECTION_ID = okBuilder().append("electionId", OID::max()).obj();
     inline static const auto BSON_PRIMARY = okBuilder().append("primary", "foo:1234").obj();
+    inline static const auto BSON_LOGICAL_SESSION_TIMEOUT =
+        okBuilder().append("logicalSessionTimeoutMinutes", 1).obj();
 };
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
@@ -385,9 +387,7 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastUpdateTime) {
     auto testStart = clockSource->now();
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    auto lastUpdateTime = description.getLastUpdateTime();
-    ASSERT_NOT_EQUALS(boost::none, lastUpdateTime);
-    ASSERT_GREATER_THAN_OR_EQUALS(testStart, *lastUpdateTime);
+    ASSERT_GREATER_THAN_OR_EQUALS(testStart, description.getLastUpdateTime());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreHostNamesAsLowercase) {
@@ -438,5 +438,50 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStorePrimary) {
     auto response = IsMasterOutcome("foo:1234", BSON_PRIMARY, mongo::Milliseconds(40));
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(std::string(BSON_PRIMARY.getStringField("primary")), description.getPrimary());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLogicalSessionTimeout) {
+    auto response =
+        IsMasterOutcome("foo:1234", BSON_LOGICAL_SESSION_TIMEOUT, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    ASSERT_EQUALS(BSON_LOGICAL_SESSION_TIMEOUT.getIntField("logicalSessionTimeoutMinutes"),
+                  description.getLogicalSessionTimeoutMinutes());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnSuccess) {
+    auto response = IsMasterOutcome("foo:1234", BSON_OK, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    ASSERT_EQUALS(boost::none, description.getError());
+    ASSERT_EQUALS(boost::none, description.getLastWriteDate());
+    ASSERT_EQUALS(0, description.getMinWireVersion());
+    ASSERT_EQUALS(0, description.getMaxWireVersion());
+    ASSERT_EQUALS(boost::none, description.getMe());
+    ASSERT_EQUALS(static_cast<size_t>(0), description.getHosts().size());
+    ASSERT_EQUALS(static_cast<size_t>(0), description.getPassives().size());
+    ASSERT_EQUALS(static_cast<size_t>(0), description.getTags().size());
+    ASSERT_EQUALS(boost::none, description.getSetName());
+    ASSERT_EQUALS(boost::none, description.getSetVersion());
+    ASSERT_EQUALS(boost::none, description.getElectionId());
+    ASSERT_EQUALS(boost::none, description.getPrimary());
+    ASSERT_EQUALS(boost::none, description.getLogicalSessionTimeoutMinutes());
+}
+
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnFailure) {
+    auto response = IsMasterOutcome("foo:1234", "an error occurred");
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    ASSERT_EQUALS(boost::none, description.getLastWriteDate());
+    ASSERT_EQUALS(ServerType::Unknown, description.getType());
+    ASSERT_EQUALS(0, description.getMinWireVersion());
+    ASSERT_EQUALS(0, description.getMaxWireVersion());
+    ASSERT_EQUALS(boost::none, description.getMe());
+    ASSERT_EQUALS(static_cast<size_t>(0), description.getHosts().size());
+    ASSERT_EQUALS(static_cast<size_t>(0), description.getPassives().size());
+    ASSERT_EQUALS(static_cast<size_t>(0), description.getTags().size());
+    ASSERT_EQUALS(boost::none, description.getSetName());
+    ASSERT_EQUALS(boost::none, description.getSetVersion());
+    ASSERT_EQUALS(boost::none, description.getElectionId());
+    ASSERT_EQUALS(boost::none, description.getPrimary());
+    ASSERT_EQUALS(boost::none, description.getLogicalSessionTimeoutMinutes());
 }
 };  // namespace mongo

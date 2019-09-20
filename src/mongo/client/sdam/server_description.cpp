@@ -74,8 +74,8 @@ const boost::optional<ServerAddress>& ServerDescription::getPrimary() const {
     return _primary;
 }
 
-const boost::optional<mongo::Date_t>& ServerDescription::getLastUpdateTime() const {
-    return _lastUpdateTime;
+const mongo::Date_t ServerDescription::getLastUpdateTime() const {
+    return (_lastUpdateTime) ? *_lastUpdateTime : Date_t::min();
 }
 
 const boost::optional<int>& ServerDescription::getLogicalSessionTimeoutMinutes() const {
@@ -187,6 +187,7 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
     if (isMasterOutcome.isSuccess()) {
         const auto response = *isMasterOutcome.getResponse();
         parseTypeFromIsMaster(response);
+
         calculateRtt(*isMasterOutcome.getRtt(),
                      (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
 
@@ -198,13 +199,31 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
         withLastUpdateTime(clockSource->now());
         withMinWireVersion(response["minWireVersion"].numberInt());
         withMaxWireVersion(response["maxWireVersion"].numberInt());
-        withSetVersion(response["setVersion"].numberInt());
-        withSetName(response["setName"].str());
-        withPrimary(response.getStringField("primary"));
+
+        auto lsTimeoutField = response.getField("logicalSessionTimeoutMinutes");
+        if (lsTimeoutField.type() == BSONType::NumberInt) {
+            withLogicalSessionTimeoutMinutes(lsTimeoutField.numberInt());
+        }
+
+        auto setVersionField = response.getField("setVersion");
+        if (setVersionField.type() == BSONType::NumberInt) {
+            withSetVersion(response["setVersion"].numberInt());
+        }
+
+        auto setNameField = response.getField("setName");
+        if (setNameField.type() == BSONType::String) {
+            withSetName(response["setName"].str());
+        }
+
+        auto primaryField = response.getField("primary");
+        if (primaryField.type() == BSONType::String) {
+            withPrimary(response.getStringField("primary"));
+        }
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }
 }
+
 void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
     if (electionId.type() == jstOID) {
         withElectionId(electionId.OID());

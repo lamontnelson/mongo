@@ -38,7 +38,7 @@ public:
     const boost::optional<int>& getSetVersion() const;
     const boost::optional<OID>& getElectionId() const;
     const boost::optional<ServerAddress>& getPrimary() const;
-    const boost::optional<Date_t>& getLastUpdateTime() const;
+    const Date_t getLastUpdateTime() const;
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
     int getMinWireVersion() const;
     int getMaxWireVersion() const;
