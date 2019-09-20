@@ -12,19 +12,6 @@
 
 namespace mongo::sdam {
 
-//class ServerCheckError {
-//    ServerCheckError() = delete;
-//
-//public:
-//    ServerCheckError(const ServerAddress serverAddress, const mongo::Status errorStatus);
-//    const ServerAddress& getServerAddress() const;
-//    const Status& getErrorStatus() const;
-//
-//private:
-//    ServerAddress _serverAddress;
-//    Status _errorStatus;
-//};
-
 class TopologyDescription {
     TopologyDescription() = default;
 

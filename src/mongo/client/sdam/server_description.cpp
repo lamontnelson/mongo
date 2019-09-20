@@ -105,12 +105,11 @@ bool ServerDescription::operator!=(const mongo::sdam::ServerDescription& other) 
     return !(*this == other);
 }
 
-static const std::set<ServerType> dataServerTypes{
-    ServerType::Mongos, ServerType::RSPrimary, ServerType::RSSecondary, ServerType::Standalone};
 bool ServerDescription::isDataBearingServer() const {
-    return dataServerTypes.find(_type) != dataServerTypes.end();
+    return DATA_SERVER_TYPES.find(_type) != DATA_SERVER_TYPES.end();
 }
 
+// output server description to bson. This is primarily used for debugging.
 BSONObj ServerDescription::toBson() const {
     BSONObjBuilder bson;
     bson.append("address", _address);
@@ -137,7 +136,6 @@ BSONObj ServerDescription::toBson() const {
     } else {
         bson.appendNull("me");
     }
-    // TODO: hosts,passives,arbiters,tags
     if (_setName) {
         bson.append("setName", *_setName);
     } else {
@@ -178,7 +176,6 @@ int ServerDescription::getMinWireVersion() const {
 int ServerDescription::getMaxWireVersion() const {
     return _maxWireVersion;
 }
-
 
 ServerDescriptionBuilder::ServerDescriptionBuilder(
     ClockSource* clockSource,
@@ -276,7 +273,7 @@ void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
     } else if (isMaster.getBoolField("isreplicaset")) {
         t = ServerType::RSGhost;
     } else {
-        // TODO: what are the log levels?
+        // TODO: check for appropriate log level
         MONGO_LOG(3) << "unknown server type from successful ismaster reply: "
                      << isMaster.toString();
         t = ServerType::Unknown;
@@ -419,5 +416,4 @@ void ServerDescriptionBuilder::saveTags(BSONObj tagsObj) {
         withTag(key, tagsObj.getStringField(key));
     }
 }
-
 };  // namespace mongo::sdam

@@ -47,6 +47,9 @@ public:
     BSONObj toBson() const;
 
 private:
+    static inline const std::set<ServerType> DATA_SERVER_TYPES{
+        ServerType::Mongos, ServerType::RSPrimary, ServerType::RSSecondary, ServerType::Standalone};
+
     // address: the hostname or IP, and the port number, that the client connects to. Note that this
     // is not the server's ismaster.me field, in the case that the server reports an address
     // different from the address the client uses.
@@ -93,7 +96,6 @@ private:
     // (=) logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 
-private:
     ServerDescription() : ServerDescription("", ServerType::Unknown) {}
     friend class ServerDescriptionBuilder;
 };
@@ -103,7 +105,7 @@ public:
     ServerDescriptionBuilder() = default;
 
     /**
-     * Calculate a new ServerDescription according to the rules of the SDAM spec based on the
+     * Build a new ServerDescription according to the rules of the SDAM spec based on the
      * last description and isMaster response.
      */
     ServerDescriptionBuilder(
@@ -135,8 +137,6 @@ public:
         const int logicalSessionTimeoutMinutes);
 
 private:
-    ServerDescription _instance;
-
     /**
      * Classify the server's type based on the ismaster response.
      * Note: PossiblePrimary is not output from this function since this requires global cluster
@@ -145,8 +145,6 @@ private:
      */
     void parseTypeFromIsMaster(const BSONObj isMaster);
 
-    inline static const std::string IS_DB_GRID = "isdbgrid";
-    inline static double RTT_ALPHA = 0.2;
 
     void calculateRtt(const OpLatency currentRtt, const boost::optional<OpLatency> lastRtt);
     void saveLastWriteInfo(BSONObj lastWriteBson);
@@ -156,5 +154,10 @@ private:
     void saveHosts(const BSONObj response);
     void saveTags(BSONObj tagsObj);
     void saveElectionId(BSONElement electionId);
+
+    ServerDescription _instance;
+
+    inline static const std::string IS_DB_GRID = "isdbgrid";
+    inline static double RTT_ALPHA = 0.2;
 };
 }
