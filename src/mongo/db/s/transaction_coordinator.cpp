@@ -35,7 +35,6 @@
 
 #include "mongo/db/logical_clock.h"
 #include "mongo/db/s/transaction_coordinator_metrics_observer.h"
-#include "mongo/db/s/transaction_coordinator_util.h"
 #include "mongo/db/s/wait_for_majority_service.h"
 #include "mongo/db/server_options.h"
 #include "mongo/s/grid.h"
