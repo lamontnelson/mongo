@@ -31,8 +31,8 @@
 
 #include <vector>
 
-#include "mongo/db/s/transaction_coordinator_util.h"
 #include "mongo/db/s/transaction_coordinator_futures_util.h"
+#include "mongo/db/s/transaction_coordinator_util.h"
 #include "mongo/util/fail_point_service.h"
 
 namespace mongo {

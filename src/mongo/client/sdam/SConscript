@@ -8,7 +8,6 @@ env.Library(
     target='sdam',
     source=[
         'datatypes.cpp',
-        'events.cpp',
         'server_description.cpp',
         'topology_description.cpp',
     ],
