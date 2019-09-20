@@ -160,4 +160,4 @@ private:
     inline static const std::string IS_DB_GRID = "isdbgrid";
     inline static double RTT_ALPHA = 0.2;
 };
-}
+}  // namespace mongo::sdam
