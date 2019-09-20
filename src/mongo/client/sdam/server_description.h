@@ -106,7 +106,7 @@ public:
 
     /**
      * Build a new ServerDescription according to the rules of the SDAM spec based on the
-     * last description and isMaster response.
+     * last server description and isMaster response.
      */
     ServerDescriptionBuilder(
         ClockSource* clockSource,
