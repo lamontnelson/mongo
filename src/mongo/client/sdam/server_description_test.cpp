@@ -387,12 +387,16 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastUpdateTime) {
     auto testStart = clockSource->now();
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_GREATER_THAN_OR_EQUALS(testStart, description.getLastUpdateTime());
+    std::cout << "start: " << testStart << ";"
+              << "lastUpdate: " << description.getLastUpdateTime() << std::endl;
+    ASSERT_GREATER_THAN_OR_EQUALS(description.getLastUpdateTime(), testStart);
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreHostNamesAsLowercase) {
-    auto response = IsMasterOutcome("foo:1234", BSON_HOSTNAMES, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("FOO:1234", BSON_HOSTNAMES, mongo::Milliseconds(40));
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
+
+    ASSERT_EQUALS("foo:1234", description.getAddress());
 
     ASSERT_EQUALS(boost::to_lower_copy(std::string(BSON_HOSTNAMES.getStringField("me"))),
                   *description.getMe());
@@ -446,6 +450,13 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLogicalSessionTimeout) {
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(BSON_LOGICAL_SESSION_TIMEOUT.getIntField("logicalSessionTimeoutMinutes"),
                   description.getLogicalSessionTimeoutMinutes());
+}
+
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreServerAddressOnError) {
+    auto response = IsMasterOutcome("foo:1234", "an error occurred");
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    ASSERT_EQUALS(std::string("foo:1234"), description.getAddress());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnSuccess) {

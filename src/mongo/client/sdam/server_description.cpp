@@ -184,6 +184,7 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
     ClockSource* clockSource,
     const IsMasterOutcome& isMasterOutcome,
     boost::optional<ServerDescription> lastServerDescription) {
+    withAddress(boost::to_lower_copy(isMasterOutcome.getServer()));
     if (isMasterOutcome.isSuccess()) {
         const auto response = *isMasterOutcome.getResponse();
         parseTypeFromIsMaster(response);
@@ -191,14 +192,14 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
         calculateRtt(*isMasterOutcome.getRtt(),
                      (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
 
+        withLastUpdateTime(clockSource->now());
+        withMinWireVersion(response["minWireVersion"].numberInt());
+        withMaxWireVersion(response["maxWireVersion"].numberInt());
+
         saveLastWriteInfo(response.getObjectField("lastWrite"));
         saveHosts(response);
         saveTags(response.getObjectField("tags"));
         saveElectionId(response.getField("electionId"));
-
-        withLastUpdateTime(clockSource->now());
-        withMinWireVersion(response["minWireVersion"].numberInt());
-        withMaxWireVersion(response["maxWireVersion"].numberInt());
 
         auto lsTimeoutField = response.getField("logicalSessionTimeoutMinutes");
         if (lsTimeoutField.type() == BSONType::NumberInt) {
