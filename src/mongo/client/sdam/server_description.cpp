@@ -197,8 +197,14 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
         withMaxWireVersion(response["maxWireVersion"].numberInt());
         withSetVersion(response["setVersion"].numberInt());
         withSetName(response["setName"].str());
+        saveElectionId(response.getField("electionId"));
     } else {
         withError(isMasterOutcome.getErrorMsg());
+    }
+}
+void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
+    if (electionId.type() == jstOID) {
+        withElectionId(electionId.OID());
     }
 }
 
