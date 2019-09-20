@@ -232,7 +232,6 @@ protected:
         okBuilder()
             .append("tags", BSONObjBuilder().append("foo", "bar").append("baz", "buz").obj())
             .obj();
-
     inline static const mongo::repl::OpTime OP_TIME =
         mongo::repl::OpTime(Timestamp(1568848910), 24);
     inline static const Date_t LAST_WRITE_DATE =
@@ -257,10 +256,8 @@ protected:
                                                                BSON_ARRAY("Biz:1234"
                                                                           << "Boz:1234"))
                                                   .obj();
-
     inline static const auto BSON_SET_VERSION_NAME =
         okBuilder().append("setVersion", 1).append("setName", "bar").obj();
-
     inline static const auto BSON_ELECTION_ID = okBuilder().append("electionId", OID::max()).obj();
 };
 
