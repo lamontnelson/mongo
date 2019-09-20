@@ -189,15 +189,18 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
         parseTypeFromIsMaster(response);
         calculateRtt(*isMasterOutcome.getRtt(),
                      (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
+
         saveLastWriteInfo(response.getObjectField("lastWrite"));
         saveHosts(response);
         saveTags(response.getObjectField("tags"));
+        saveElectionId(response.getField("electionId"));
+
         withLastUpdateTime(clockSource->now());
         withMinWireVersion(response["minWireVersion"].numberInt());
         withMaxWireVersion(response["maxWireVersion"].numberInt());
         withSetVersion(response["setVersion"].numberInt());
         withSetName(response["setName"].str());
-        saveElectionId(response.getField("electionId"));
+        withPrimary(response.getStringField("primary"));
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }

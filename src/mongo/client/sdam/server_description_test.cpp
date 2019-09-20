@@ -259,6 +259,7 @@ protected:
     inline static const auto BSON_SET_VERSION_NAME =
         okBuilder().append("setVersion", 1).append("setName", "bar").obj();
     inline static const auto BSON_ELECTION_ID = okBuilder().append("electionId", OID::max()).obj();
+    inline static const auto BSON_PRIMARY = okBuilder().append("primary", "foo:1234").obj();
 };
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
@@ -431,5 +432,11 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreElectionId) {
     auto response = IsMasterOutcome("foo:1234", BSON_ELECTION_ID, mongo::Milliseconds(40));
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(BSON_ELECTION_ID.getField("electionId").OID(), description.getElectionId());
+}
+
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStorePrimary) {
+    auto response = IsMasterOutcome("foo:1234", BSON_PRIMARY, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    ASSERT_EQUALS(std::string(BSON_PRIMARY.getStringField("primary")), description.getPrimary());
 }
 };  // namespace mongo
