@@ -64,13 +64,6 @@ class TopologyDescription {
      */
     void onNewServerDescription(ServerDescription newDescription);
 
-//    /**
-//     * Occurs if there is an error while processing an ismaster request for a server.
-//     * @param error
-//     */
-//    void onServerCheckError(ServerCheckError error);
-
-
     /**
      * Determines if the topology has a readable server available.
      */
