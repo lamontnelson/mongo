@@ -139,8 +139,8 @@ public:
 private:
     /**
      * Classify the server's type based on the ismaster response.
-     * Note: PossiblePrimary is not output from this function since this requires global cluster
-     * state.
+     * Note: PossiblePrimary server type is not output from this function since this requires global
+     * cluster state.
      * @param isMaster - reply document for ismaster command
      */
     void parseTypeFromIsMaster(const BSONObj isMaster);
