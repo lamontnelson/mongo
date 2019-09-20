@@ -387,8 +387,6 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastUpdateTime) {
     auto testStart = clockSource->now();
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    std::cout << "start: " << testStart << ";"
-              << "lastUpdate: " << description.getLastUpdateTime() << std::endl;
     ASSERT_GREATER_THAN_OR_EQUALS(description.getLastUpdateTime(), testStart);
 }
 
