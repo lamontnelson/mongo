@@ -195,6 +195,8 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(
         withLastUpdateTime(clockSource->now());
         withMinWireVersion(response["minWireVersion"].numberInt());
         withMaxWireVersion(response["maxWireVersion"].numberInt());
+        withSetVersion(response["setVersion"].numberInt());
+        withSetName(response["setName"].str());
     } else {
         withError(isMasterOutcome.getErrorMsg());
     }

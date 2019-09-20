@@ -257,6 +257,9 @@ protected:
                                                                BSON_ARRAY("Biz:1234"
                                                                           << "Boz:1234"))
                                                   .obj();
+
+    inline static const auto BSON_SET_VERSION_NAME =
+        okBuilder().append("setVersion", 1).append("setName", "bar").obj();
 };
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
@@ -417,4 +420,10 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreTags) {
     ASSERT_EQUALS(toStringMap(BSON_TAGS["tags"].Obj()), description.getTags());
 }
 
+TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreSetVersionAndName) {
+    auto response = IsMasterOutcome("foo:1234", BSON_SET_VERSION_NAME, mongo::Milliseconds(40));
+    auto description = ServerDescriptionBuilder(clockSource, response).instance();
+    ASSERT_EQUALS(BSON_SET_VERSION_NAME.getIntField("setVersion"), description.getSetVersion());
+    ASSERT_EQUALS(std::string(BSON_SET_VERSION_NAME.getStringField("setName")), description.getSetName());
+}
 };  // namespace mongo
