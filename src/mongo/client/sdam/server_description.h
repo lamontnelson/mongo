@@ -101,6 +101,11 @@ private:
 class ServerDescriptionBuilder {
 public:
     ServerDescriptionBuilder() = default;
+
+    /**
+     * Calculate a new ServerDescription according to the rules of the SDAM spec based on the
+     * last description and isMaster response.
+     */
     ServerDescriptionBuilder(
         ClockSource* clockSource,
         const IsMasterOutcome& isMasterOutcome,
