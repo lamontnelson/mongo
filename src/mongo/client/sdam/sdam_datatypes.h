@@ -37,7 +37,13 @@
 #include "mongo/util/duration.h"
 
 namespace mongo::sdam {
-enum class TopologyType { kSingle, kReplicaSetNoPrimary, kReplicaSetWithPrimary, kSharded, kUnknown };
+enum class TopologyType {
+    kSingle,
+    kReplicaSetNoPrimary,
+    kReplicaSetWithPrimary,
+    kSharded,
+    kUnknown
+};
 
 enum class ServerType {
     kStandalone,
