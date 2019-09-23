@@ -1,3 +1,32 @@
+/**
+ *    Copyright (C) 2019-present MongoDB, Inc.
+ *
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the Server Side Public License, version 1,
+ *    as published by MongoDB, Inc.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    Server Side Public License for more details.
+ *
+ *    You should have received a copy of the Server Side Public License
+ *    along with this program. If not, see
+ *    <http://www.mongodb.com/licensing/server-side-public-license>.
+ *
+ *    As a special exception, the copyright holders give permission to link the
+ *    code of portions of this program with the OpenSSL library under certain
+ *    conditions as described in each individual source file and distribute
+ *    linked combinations including the program with the OpenSSL library. You
+ *    must comply with the Server Side Public License in all respects for
+ *    all of the code used other than as permitted herein. If you modify file(s)
+ *    with this exception, you may extend this exception to your version of the
+ *    file(s), but you are not obligated to do so. If you do not wish to do so,
+ *    delete this exception statement from your version. If you delete this
+ *    exception statement from all source files in the program, then also delete
+ *    it in the license file.
+ */
+
 #include "mongo/client/sdam/server_description.h"
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 
@@ -8,7 +37,7 @@
 
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/bson/oid.h"
-#include "mongo/client/sdam/datatypes.h"
+#include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/util/duration.h"
 #include "mongo/util/log.h"
 
@@ -22,7 +51,7 @@ const boost::optional<std::string>& ServerDescription::getError() const {
     return _error;
 }
 
-const boost::optional<OpLatency>& ServerDescription::getRtt() const {
+const boost::optional<IsMasterLatency>& ServerDescription::getRtt() const {
     return _rtt;
 }
 
@@ -82,7 +111,7 @@ const boost::optional<int>& ServerDescription::getLogicalSessionTimeoutMinutes()
     return _logicalSessionTimeoutMinutes;
 }
 
-bool ServerDescription::operator==(const ServerDescription& other) const {
+bool ServerDescription::isEquivalent(const ServerDescription& other) const {
     auto typeEqual = _type == other._type;
     auto minWireVersionEqual = _minWireVersion == other._minWireVersion;
     auto maxWireVersionEqual = _maxWireVersion == other._maxWireVersion;
@@ -99,10 +128,6 @@ bool ServerDescription::operator==(const ServerDescription& other) const {
     return typeEqual && minWireVersionEqual && maxWireVersionEqual && meEqual && hostsEqual &&
         passivesEqual && arbitersEqual && tagsEqual && namesEqual && versionsEqual &&
         electionIdEqual && primaryEqual && lsTimeoutEqual;
-}
-
-bool ServerDescription::operator!=(const mongo::sdam::ServerDescription& other) const {
-    return !(*this == other);
 }
 
 bool ServerDescription::isDataBearingServer() const {
@@ -177,17 +202,15 @@ int ServerDescription::getMaxWireVersion() const {
     return _maxWireVersion;
 }
 
-ServerDescriptionBuilder::ServerDescriptionBuilder(
-    ClockSource* clockSource,
-    const IsMasterOutcome& isMasterOutcome,
-    boost::optional<ServerDescription> lastServerDescription) {
+ServerDescriptionBuilder::ServerDescriptionBuilder(ClockSource* clockSource,
+                                                   const IsMasterOutcome& isMasterOutcome,
+                                                   boost::optional<IsMasterLatency> lastRtt) {
     withAddress(boost::to_lower_copy(isMasterOutcome.getServer()));
     if (isMasterOutcome.isSuccess()) {
         const auto response = *isMasterOutcome.getResponse();
         parseTypeFromIsMaster(response);
 
-        calculateRtt(*isMasterOutcome.getRtt(),
-                     (lastServerDescription) ? lastServerDescription->getRtt() : boost::none);
+        calculateRtt(*isMasterOutcome.getRtt(), lastRtt);
 
         withLastUpdateTime(clockSource->now());
         withMinWireVersion(response["minWireVersion"].numberInt());
@@ -228,8 +251,8 @@ void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
     }
 }
 
-void ServerDescriptionBuilder::calculateRtt(const OpLatency currentRtt,
-                                            const boost::optional<OpLatency> lastRtt) {
+void ServerDescriptionBuilder::calculateRtt(const IsMasterLatency currentRtt,
+                                            const boost::optional<IsMasterLatency> lastRtt) {
     if (_instance.getType() != ServerType::Unknown) {
         if (lastRtt) {
             withRtt(currentRtt, *lastRtt);
@@ -295,11 +318,11 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withError(const std::string&
     return *this;
 }
 
-ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(const OpLatency& rtt,
-                                                            boost::optional<OpLatency> lastRtt) {
+ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(
+    const IsMasterLatency& rtt, boost::optional<IsMasterLatency> lastRtt) {
     if (lastRtt) {
         // new_rtt = alpha * x + (1 - alpha) * old_rtt
-        _instance._rtt = OpLatency(static_cast<OpLatency::rep>(
+        _instance._rtt = IsMasterLatency(static_cast<IsMasterLatency::rep>(
             RTT_ALPHA * rtt.count() + (1 - RTT_ALPHA) * lastRtt.get().count()));
     } else {
         _instance._rtt = rtt;

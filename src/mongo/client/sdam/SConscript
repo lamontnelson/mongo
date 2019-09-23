@@ -7,7 +7,7 @@ env = env.Clone()
 env.Library(
     target='sdam',
     source=[
-        'datatypes.cpp',
+        'sdam_datatypes.cpp',
         'server_description.cpp',
         'topology_description.cpp',
     ],

@@ -27,25 +27,46 @@
  *    it in the license file.
  */
 
-#include "mongo/client/sdam/topology_description.h"
-
-#include "mongo/platform/basic.h"
+#include "mongo/client/sdam/sdam_datatypes.h"
 
 namespace mongo::sdam {
-TopologyDescription::TopologyDescription(TopologyType topologyType,
-                                         std::vector<ServerAddress> seedList,
-                                         StringData setName) {}
-
-void TopologyDescription::onNewServerDescription(ServerDescription newDescription) {
-    stdx::lock_guard<stdx::mutex> lock(_mutex);
-    // TODO:
+std::string toString(ServerType serverType) {
+    switch (serverType) {
+        case ServerType::Standalone:
+            return "Standalone";
+        case ServerType::Mongos:
+            return "Mongos";
+        case ServerType::RSPrimary:
+            return "RSPrimary";
+        case ServerType::RSSecondary:
+            return "RSSecondary";
+        case ServerType::RSArbiter:
+            return "RSArbiter";
+        case ServerType::RSOther:
+            return "RSOther";
+        case ServerType::RSGhost:
+            return "RSGhost";
+        case ServerType::Unknown:
+            return "Unknown";
+        default:
+            MONGO_UNREACHABLE;
+    }
 }
 
-bool TopologyDescription::hasReadableServer(boost::optional<ReadPreference> readPreference) {
-    return false;
-}
 
-bool TopologyDescription::hasWritableServer() {
-    return false;
+const ServerAddress& IsMasterOutcome::getServer() const {
+    return _server;
+}
+bool IsMasterOutcome::isSuccess() const {
+    return _success;
+}
+const boost::optional<BSONObj>& IsMasterOutcome::getResponse() const {
+    return _response;
+}
+const boost::optional<IsMasterLatency>& IsMasterOutcome::getRtt() const {
+    return _rtt;
+}
+const std::string& IsMasterOutcome::getErrorMsg() const {
+    return _errorMsg;
 }
 };  // namespace mongo::sdam

@@ -1,3 +1,32 @@
+/**
+ *    Copyright (C) 2019-present MongoDB, Inc.
+ *
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the Server Side Public License, version 1,
+ *    as published by MongoDB, Inc.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    Server Side Public License for more details.
+ *
+ *    You should have received a copy of the Server Side Public License
+ *    along with this program. If not, see
+ *    <http://www.mongodb.com/licensing/server-side-public-license>.
+ *
+ *    As a special exception, the copyright holders give permission to link the
+ *    code of portions of this program with the OpenSSL library under certain
+ *    conditions as described in each individual source file and distribute
+ *    linked combinations including the program with the OpenSSL library. You
+ *    must comply with the Server Side Public License in all respects for
+ *    all of the code used other than as permitted herein. If you modify file(s)
+ *    with this exception, you may extend this exception to your version of the
+ *    file(s), but you are not obligated to do so. If you do not wish to do so,
+ *    delete this exception statement from your version. If you delete this
+ *    exception statement from all source files in the program, then also delete
+ *    it in the license file.
+ */
+
 #pragma once
 #include <map>
 #include <set>
@@ -6,7 +35,7 @@
 #include "boost/optional.hpp"
 
 #include "mongo/bson/oid.h"
-#include "mongo/client/sdam/datatypes.h"
+#include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/db/repl/optime.h"
 #include "mongo/platform/basic.h"
 #include "mongo/util/clock_source.h"
@@ -20,12 +49,11 @@ public:
         std::transform(_address.begin(), _address.end(), _address.begin(), ::tolower);
     };
 
-    bool operator==(const ServerDescription& other) const;
-    bool operator!=(const ServerDescription& other) const;
+    bool isEquivalent(const ServerDescription& other) const;
 
     const ServerAddress& getAddress() const;
     const boost::optional<std::string>& getError() const;
-    const boost::optional<OpLatency>& getRtt() const;
+    const boost::optional<IsMasterLatency>& getRtt() const;
     const boost::optional<Date_t>& getLastWriteDate() const;
     const boost::optional<repl::OpTime>& getOpTime() const;
     ServerType getType() const;
@@ -57,7 +85,7 @@ private:
     // error: information about the last error related to this server. Default null.
     boost::optional<std::string> _error;
     // roundTripTime: the duration of the ismaster call. Default null.
-    boost::optional<OpLatency> _rtt;
+    boost::optional<IsMasterLatency> _rtt;
     // lastWriteDate: a 64-bit BSON datetime or null. The "lastWriteDate" from the server's most
     // recent ismaster response.
     boost::optional<Date_t> _lastWriteDate;
@@ -108,16 +136,15 @@ public:
      * Build a new ServerDescription according to the rules of the SDAM spec based on the
      * last server description and isMaster response.
      */
-    ServerDescriptionBuilder(
-        ClockSource* clockSource,
-        const IsMasterOutcome& isMasterOutcome,
-        boost::optional<ServerDescription> lastServerDescription = boost::none);
+    ServerDescriptionBuilder(ClockSource* clockSource,
+                             const IsMasterOutcome& isMasterOutcome,
+                             boost::optional<IsMasterLatency> lastRtt = boost::none);
 
     ServerDescription instance() const;
     ServerDescriptionBuilder& withError(const std::string& error);
     ServerDescriptionBuilder& withAddress(const ServerAddress& address);
-    ServerDescriptionBuilder& withRtt(const OpLatency& rtt,
-                                      boost::optional<OpLatency> lastRtt = boost::none);
+    ServerDescriptionBuilder& withRtt(const IsMasterLatency& rtt,
+                                      boost::optional<IsMasterLatency> lastRtt = boost::none);
     ServerDescriptionBuilder& withLastWriteDate(const Date_t& lastWriteDate);
     ServerDescriptionBuilder& withOpTime(const repl::OpTime opTime);
     ServerDescriptionBuilder& withType(const ServerType type);
@@ -146,7 +173,8 @@ private:
     void parseTypeFromIsMaster(const BSONObj isMaster);
 
 
-    void calculateRtt(const OpLatency currentRtt, const boost::optional<OpLatency> lastRtt);
+    void calculateRtt(const IsMasterLatency currentRtt,
+                      const boost::optional<IsMasterLatency> lastRtt);
     void saveLastWriteInfo(BSONObj lastWriteBson);
     void storeHostListIfPresent(const std::string key,
                                 const BSONObj response,
