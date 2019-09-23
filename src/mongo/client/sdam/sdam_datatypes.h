@@ -28,14 +28,21 @@
  */
 
 #pragma once
+
+#include <boost/optional.hpp>
 #include <chrono>
 #include <string>
-
-#include "boost/optional.hpp"
 
 #include "mongo/bson/bsonobj.h"
 #include "mongo/util/duration.h"
 
+
+/**
+ * The data structures in this file are defined in the "Server Discovery & Monitoring"
+ * specification, which governs how topology changes are detected in a cluster. See
+ * https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst
+ * for more information.
+ */
 namespace mongo::sdam {
 enum class TopologyType {
     kSingle,
