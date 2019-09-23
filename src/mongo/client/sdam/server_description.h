@@ -31,6 +31,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/optional.hpp>
 #include <map>
+#include <ostream>
 #include <set>
 #include <utility>
 
@@ -134,6 +135,13 @@ private:
     ServerDescription() : ServerDescription("", ServerType::kUnknown) {}
     friend class ServerDescriptionBuilder;
 };
+
+bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
+bool operator!=(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
+
+std::ostream& operator<<(std::ostream& os, const ServerDescription& description);
+std::ostream& operator<<(std::ostream& os, const std::vector<ServerDescription>& v);
+
 
 class ServerDescriptionBuilder {
 public:

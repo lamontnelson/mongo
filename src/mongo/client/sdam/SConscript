@@ -21,8 +21,8 @@ env.Library(
 )
 
 env.CppUnitTest(
-    target='topology_test',
-    source=['topology_test.cpp'],
+    target='topology_description_test',
+    source=['topology_description_test.cpp'],
     LIBDEPS=['sdam'],
 )
 

@@ -439,4 +439,30 @@ void ServerDescriptionBuilder::saveTags(BSONObj tagsObj) {
         withTag(key, tagsObj.getStringField(key));
     }
 }
+
+bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b) {
+    return a.isEquivalent(b);
+}
+
+bool operator!=(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b) {
+    return !(a == b);
+}
+
+std::ostream& operator<<(std::ostream& os, const ServerDescription& description) {
+    BSONObj obj = description.toBson();
+    os << obj.toString();
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const std::vector<ServerDescription>& v) {
+    os << "[";
+    size_t i = 0;
+    for (auto it = v.begin(); it != v.end(); ++it, ++i) {
+        os << *it;
+        if (i != v.size() - 1)
+            os << ", ";
+    }
+    os << "]";
+    return os;
+}
 };  // namespace mongo::sdam

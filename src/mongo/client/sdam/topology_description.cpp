@@ -34,7 +34,12 @@
 namespace mongo::sdam {
 TopologyDescription::TopologyDescription(TopologyType topologyType,
                                          std::vector<ServerAddress> seedList,
-                                         StringData setName) {}
+                                         StringData setName) {
+    _servers.clear();
+    for (auto address : seedList) {
+        _servers.push_back(ServerDescription(address));
+    }
+}
 
 void TopologyDescription::onNewServerDescription(ServerDescription newDescription) {
     stdx::lock_guard<stdx::mutex> lock(_mutex);
@@ -47,5 +52,32 @@ bool TopologyDescription::hasReadableServer(boost::optional<ReadPreference> read
 
 bool TopologyDescription::hasWritableServer() {
     return false;
+}
+const UUID& TopologyDescription::getId() const {
+    return _id;
+}
+TopologyType TopologyDescription::getType() const {
+    return _type;
+}
+const boost::optional<std::string>& TopologyDescription::getSetName() const {
+    return _setName;
+}
+const boost::optional<int>& TopologyDescription::getMaxSetVersion() const {
+    return _maxSetVersion;
+}
+const boost::optional<OID>& TopologyDescription::getMaxElectionId() const {
+    return _maxElectionId;
+}
+const std::vector<ServerDescription>& TopologyDescription::getServers() const {
+    return _servers;
+}
+bool TopologyDescription::isWireVersionCompatible() const {
+    return _compatible;
+}
+const boost::optional<std::string>& TopologyDescription::getWireVersionCompatibleError() const {
+    return _compatibleError;
+}
+const boost::optional<int>& TopologyDescription::getLogicalSessionTimeoutMinutes() const {
+    return _logicalSessionTimeoutMinutes;
 }
 };  // namespace mongo::sdam

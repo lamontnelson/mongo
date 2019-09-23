@@ -42,6 +42,7 @@
 namespace mongo::sdam {
 
 class TopologyDescription {
+public:
     TopologyDescription() = default;
 
     /**
@@ -106,6 +107,15 @@ class TopologyDescription {
      */
     bool hasWritableServer();
 
+    const UUID& getId() const;
+    TopologyType getType() const;
+    const boost::optional<std::string>& getSetName() const;
+    const boost::optional<int>& getMaxSetVersion() const;
+    const boost::optional<OID>& getMaxElectionId() const;
+    const std::vector<ServerDescription>& getServers() const;
+    bool isWireVersionCompatible() const;
+    const boost::optional<std::string>& getWireVersionCompatibleError() const;
+    const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
 private:
     stdx::mutex _mutex;
 

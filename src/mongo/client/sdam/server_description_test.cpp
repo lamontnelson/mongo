@@ -43,13 +43,6 @@ using namespace sdam;
 using namespace std;
 
 namespace sdam {
-bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b) {
-    return a.isEquivalent(b);
-}
-
-bool operator!=(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b) {
-    return !(a == b);
-}
 
 ostream& operator<<(ostream& os, const std::map<std::string, std::string>& m) {
     os << "{";
