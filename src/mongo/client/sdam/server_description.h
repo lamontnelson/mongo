@@ -28,11 +28,11 @@
  */
 
 #pragma once
+#include <boost/algorithm/string.hpp>
+#include <boost/optional.hpp>
 #include <map>
 #include <set>
 #include <utility>
-
-#include "boost/optional.hpp"
 
 #include "mongo/bson/oid.h"
 #include "mongo/client/sdam/sdam_datatypes.h"
@@ -43,12 +43,17 @@
 namespace mongo::sdam {
 class ServerDescription {
 public:
-    ServerDescription(ServerAddress address) : ServerDescription(address, ServerType::Unknown) {}
+    ServerDescription(ServerAddress address) : ServerDescription(address, ServerType::kUnknown) {}
     ServerDescription(ServerAddress address, ServerType type)
         : _address(std::move(address)), _type(type) {
-        std::transform(_address.begin(), _address.end(), _address.begin(), ::tolower);
+        boost::to_lower(_address);
     };
 
+    /**
+     * This determines if a service description is equivalent according to the SDAM scecification.
+     * Members marked with (=) are used to determine equality. Note that these members do not
+     * include Rtt or the server's address.
+     */
     bool isEquivalent(const ServerDescription& other) const;
 
     const ServerAddress& getAddress() const;
@@ -75,8 +80,10 @@ public:
     BSONObj toBson() const;
 
 private:
-    static inline const std::set<ServerType> DATA_SERVER_TYPES{
-        ServerType::Mongos, ServerType::RSPrimary, ServerType::RSSecondary, ServerType::Standalone};
+    static inline const std::set<ServerType> DATA_SERVER_TYPES{ServerType::kMongos,
+                                                               ServerType::kRSPrimary,
+                                                               ServerType::kRSSecondary,
+                                                               ServerType::kStandalone};
 
     // address: the hostname or IP, and the port number, that the client connects to. Note that this
     // is not the server's ismaster.me field, in the case that the server reports an address
@@ -124,7 +131,7 @@ private:
     // (=) logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 
-    ServerDescription() : ServerDescription("", ServerType::Unknown) {}
+    ServerDescription() : ServerDescription("", ServerType::kUnknown) {}
     friend class ServerDescriptionBuilder;
 };
 

@@ -32,21 +32,21 @@
 namespace mongo::sdam {
 std::string toString(ServerType serverType) {
     switch (serverType) {
-        case ServerType::Standalone:
+        case ServerType::kStandalone:
             return "Standalone";
-        case ServerType::Mongos:
+        case ServerType::kMongos:
             return "Mongos";
-        case ServerType::RSPrimary:
+        case ServerType::kRSPrimary:
             return "RSPrimary";
-        case ServerType::RSSecondary:
+        case ServerType::kRSSecondary:
             return "RSSecondary";
-        case ServerType::RSArbiter:
+        case ServerType::kRSArbiter:
             return "RSArbiter";
-        case ServerType::RSOther:
+        case ServerType::kRSOther:
             return "RSOther";
-        case ServerType::RSGhost:
+        case ServerType::kRSGhost:
             return "RSGhost";
-        case ServerType::Unknown:
+        case ServerType::kUnknown:
             return "Unknown";
         default:
             MONGO_UNREACHABLE;

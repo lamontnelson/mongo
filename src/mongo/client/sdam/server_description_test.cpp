@@ -91,8 +91,8 @@ TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareDefaultValuesAsEqual) {
-    ServerDescription a("foo:1234", ServerType::Standalone);
-    ServerDescription b("foo:1234", ServerType::Standalone);
+    ServerDescription a("foo:1234", ServerType::kStandalone);
+    ServerDescription b("foo:1234", ServerType::kStandalone);
     ASSERT_EQUALS(a, b);
 }
 
@@ -100,14 +100,14 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareDifferentAddressButSameServerTy
     // Note: The SDAM specification does not prescribe how to compare server descriptions with
     // different addresses for equality. We choose that two descriptions are considered equal if
     // their addresses are different.
-    ServerDescription a("foo:1234", ServerType::Standalone);
-    ServerDescription b("bar:1234", ServerType::Standalone);
+    ServerDescription a("foo:1234", ServerType::kStandalone);
+    ServerDescription b("bar:1234", ServerType::kStandalone);
     ASSERT_EQUALS(a, b);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareServerTypes) {
-    ServerDescription a = ServerDescriptionBuilder().withType(ServerType::Standalone).instance();
-    ServerDescription b = ServerDescriptionBuilder().withType(ServerType::RSSecondary).instance();
+    ServerDescription a = ServerDescriptionBuilder().withType(ServerType::kStandalone).instance();
+    ServerDescription b = ServerDescriptionBuilder().withType(ServerType::kRSSecondary).instance();
     ASSERT_NOT_EQUALS(a, b);
     ASSERT_EQUALS(a, a);
 }
@@ -304,62 +304,62 @@ protected:
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
     auto response = IsMasterOutcome("foo:1234", "an error occurred");
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::Unknown, description.getType());
+    ASSERT_EQUALS(ServerType::kUnknown, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownIfOkMissing) {
     auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, IsMasterLatency::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::Unknown, description.getType());
+    ASSERT_EQUALS(ServerType::kUnknown, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsStandalone) {
     // No "msg: isdbgrid", no setName, and no "isreplicaset: true".
     auto response = IsMasterOutcome("foo:1234", BSON_OK, IsMasterLatency::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::Standalone, description.getType());
+    ASSERT_EQUALS(ServerType::kStandalone, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsMongos) {
     // contains "msg: isdbgrid"
     auto response = IsMasterOutcome("foo:1234", BSON_MONGOS, IsMasterLatency::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::Mongos, description.getType());
+    ASSERT_EQUALS(ServerType::kMongos, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSPrimary) {
     // "ismaster: true", "setName" in response
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, IsMasterLatency::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::RSPrimary, description.getType());
+    ASSERT_EQUALS(ServerType::kRSPrimary, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSSecondary) {
     // "secondary: true", "setName" in response
     auto response = IsMasterOutcome("foo:1234", BSON_RSSECONDARY, IsMasterLatency::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::RSSecondary, description.getType());
+    ASSERT_EQUALS(ServerType::kRSSecondary, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsArbiter) {
     // "arbiterOnly: true", "setName" in response.
     auto response = IsMasterOutcome("foo:1234", BSON_RSARBITER, IsMasterLatency::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::RSArbiter, description.getType());
+    ASSERT_EQUALS(ServerType::kRSArbiter, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsOther) {
     // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
     auto response = IsMasterOutcome("foo:1234", BSON_RSOTHER, IsMasterLatency::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::RSOther, description.getType());
+    ASSERT_EQUALS(ServerType::kRSOther, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsGhost) {
     // "isreplicaset: true" in response.
     auto response = IsMasterOutcome("foo:1234", BSON_RSGHOST, IsMasterLatency::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(ServerType::RSGhost, description.getType());
+    ASSERT_EQUALS(ServerType::kRSGhost, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreErrorDescription) {
@@ -385,7 +385,7 @@ TEST_F(ServerDescriptionBuilderTestFixture,
        ShouldStoreMovingAverageRTTWhenChangingFromOneKnownServerTypeToAnother) {
     auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
     auto lastServerDescription = ServerDescriptionBuilder()
-                                     .withType(ServerType::RSSecondary)
+                                     .withType(ServerType::kRSSecondary)
                                      .withRtt(mongo::Milliseconds(20))
                                      .instance();
     auto description =
@@ -508,7 +508,7 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnFai
     auto response = IsMasterOutcome("foo:1234", "an error occurred");
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(boost::none, description.getLastWriteDate());
-    ASSERT_EQUALS(ServerType::Unknown, description.getType());
+    ASSERT_EQUALS(ServerType::kUnknown, description.getType());
     ASSERT_EQUALS(0, description.getMinWireVersion());
     ASSERT_EQUALS(0, description.getMaxWireVersion());
     ASSERT_EQUALS(boost::none, description.getMe());

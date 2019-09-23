@@ -253,7 +253,7 @@ void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
 
 void ServerDescriptionBuilder::calculateRtt(const IsMasterLatency currentRtt,
                                             const boost::optional<IsMasterLatency> lastRtt) {
-    if (_instance.getType() != ServerType::Unknown) {
+    if (_instance.getType() != ServerType::kUnknown) {
         if (lastRtt) {
             withRtt(currentRtt, *lastRtt);
         } else {
@@ -280,26 +280,26 @@ void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
     bool hasSetName = isMaster.hasField("setName");
 
     if (isMaster.getField("ok").numberInt() != 1) {
-        t = ServerType::Unknown;
+        t = ServerType::kUnknown;
     } else if (!hasSetName && !isMaster.hasField("msg") && !isMaster.getBoolField("isreplicaset")) {
-        t = ServerType::Standalone;
+        t = ServerType::kStandalone;
     } else if (IS_DB_GRID == isMaster.getStringField("msg")) {
-        t = ServerType::Mongos;
+        t = ServerType::kMongos;
     } else if (hasSetName && isMaster.getBoolField("ismaster")) {
-        t = ServerType::RSPrimary;
+        t = ServerType::kRSPrimary;
     } else if (hasSetName && isMaster.getBoolField("secondary")) {
-        t = ServerType::RSSecondary;
+        t = ServerType::kRSSecondary;
     } else if (hasSetName && isMaster.getBoolField("arbiterOnly")) {
-        t = ServerType::RSArbiter;
+        t = ServerType::kRSArbiter;
     } else if (hasSetName && isMaster.getBoolField("hidden")) {
-        t = ServerType::RSOther;
+        t = ServerType::kRSOther;
     } else if (isMaster.getBoolField("isreplicaset")) {
-        t = ServerType::RSGhost;
+        t = ServerType::kRSGhost;
     } else {
         // TODO: check for appropriate log level
-        MONGO_LOG(3) << "unknown server type from successful ismaster reply: "
+        MONGO_LOG(0) << "unknown server type from successful ismaster reply: "
                      << isMaster.toString();
-        t = ServerType::Unknown;
+        t = ServerType::kUnknown;
     }
     withType(t);
 }

@@ -37,17 +37,17 @@
 #include "mongo/util/duration.h"
 
 namespace mongo::sdam {
-enum class TopologyType { Single, ReplicaSetNoPrimary, ReplicaSetWithPrimary, Sharded, Unknown };
+enum class TopologyType { kSingle, kReplicaSetNoPrimary, kReplicaSetWithPrimary, kSharded, kUnknown };
 
 enum class ServerType {
-    Standalone,
-    Mongos,
-    RSPrimary,
-    RSSecondary,
-    RSArbiter,
-    RSOther,
-    RSGhost,
-    Unknown
+    kStandalone,
+    kMongos,
+    kRSPrimary,
+    kRSSecondary,
+    kRSArbiter,
+    kRSOther,
+    kRSGhost,
+    kUnknown
 };
 
 std::string toString(ServerType serverType);

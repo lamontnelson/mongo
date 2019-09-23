@@ -45,41 +45,43 @@ class TopologyDescription {
     TopologyDescription() = default;
 
     /**
+     * From the Server Discovery & Monitoring Spec:
      * Initial Servers
-     *The user MUST be able to set the initial servers list to a seed list of one or more addresses.
+     * The user MUST be able to set the initial servers list to a seed list of one or more
+     * addresses.
      *
-     *The hostname portion of each address MUST be normalized to lower-case.
+     * The hostname portion of each address MUST be normalized to lower-case.
      *
-     *Initial TopologyType
-     *The user MUST be able to set the initial TopologyType to Single.
+     * Initial TopologyType
+     * The user MUST be able to set the initial TopologyType to Single.
      *
-     *The user MAY be able to initialize it to ReplicaSetNoPrimary. This provides the user a way to
-     *tell the client it can only connect to replica set members. Similarly the user MAY be able to
-     *initialize it to Sharded, to connect only to mongoses.
+     * The user MAY be able to initialize it to ReplicaSetNoPrimary. This provides the user a way to
+     * tell the client it can only connect to replica set members. Similarly the user MAY be able to
+     * initialize it to Sharded, to connect only to mongoses.
      *
-     *The user MAY be able to initialize it to Unknown, to allow for discovery of any topology type
-     *based only on ismaster responses.
+     * The user MAY be able to initialize it to Unknown, to allow for discovery of any topology type
+     * based only on ismaster responses.
      *
-     *The API for initializing TopologyType is not specified here. Drivers might already have a
-     *convention, e.g. a single seed means Single, a setName means ReplicaSetNoPrimary, and a list
-     *of seeds means Unknown. There are variations, however: In the Java driver a single seed means
-     *Single, but a list containing one seed means Unknown, so it can transition to replica-set
-     *monitoring if the seed is discovered to be a replica set member. In contrast, PyMongo requires
-     *a non-null setName in order to begin replica-set monitoring, regardless of the number of
-     *seeds. This spec does not imply existing driver APIs must change as long as all the required
-     *features are somehow supported.
+     * The API for initializing TopologyType is not specified here. Drivers might already have a
+     * convention, e.g. a single seed means Single, a setName means ReplicaSetNoPrimary, and a list
+     * of seeds means Unknown. There are variations, however: In the Java driver a single seed means
+     * Single, but a list containing one seed means Unknown, so it can transition to replica-set
+     * monitoring if the seed is discovered to be a replica set member. In contrast, PyMongo
+     * requires a non-null setName in order to begin replica-set monitoring, regardless of the
+     * number of seeds. This spec does not imply existing driver APIs must change as long as all the
+     * required features are somehow supported.
      *
-     *Initial setName
-     *The user MUST be able to set the client's initial replica set name. A driver MAY require the
-     *set name in order to connect to a replica set, or it MAY be able to discover the replica set
-     *name as it connects.
+     * Initial setName
+     * The user MUST be able to set the client's initial replica set name. A driver MAY require the
+     * set name in order to connect to a replica set, or it MAY be able to discover the replica set
+     * name as it connects.
      *
-     *Allowed configuration combinations
-     *Drivers MUST enforce:
+     * Allowed configuration combinations
+     * Drivers MUST enforce:
      *
-     *TopologyType Single cannot be used with multiple seeds.
-     *If setName is not null, only TopologyType ReplicaSetNoPrimary, and possibly Single, are
-     *allowed. (See verifying setName with TopologyType Single.)
+     * TopologyType Single cannot be used with multiple seeds.
+     * If setName is not null, only TopologyType ReplicaSetNoPrimary, and possibly Single, are
+     * allowed. (See verifying setName with TopologyType Single.)
      */
     TopologyDescription(TopologyType topologyType,
                         std::vector<ServerAddress> seedList,
@@ -111,13 +113,13 @@ private:
     UUID _id = UUID::gen();
 
     // a TopologyType enum value.
-    TopologyType _type = TopologyType::Unknown;
+    TopologyType _type = TopologyType::kUnknown;
 
     // setName: the replica set name. Default null.
     boost::optional<std::string> _setName;
 
-    //    maxSetVersion: an integer or null. The largest setVersion ever reported by a primary.
-    //    Default null.
+    // maxSetVersion: an integer or null. The largest setVersion ever reported by a primary.
+    // Default null.
     boost::optional<int> _maxSetVersion;
 
     // maxElectionId: an ObjectId or null. The largest electionId ever reported by a primary.
@@ -127,7 +129,7 @@ private:
     // servers: a set of ServerDescription instances. Default contains one server:
     // "localhost:27017", ServerType Unknown.
     std::vector<ServerDescription> _servers{
-        ServerDescription("localhost:27017", ServerType::Unknown)};
+        ServerDescription("localhost:27017", ServerType::kUnknown)};
 
     // compatible: a boolean. False if any server's wire protocol version range is incompatible with
     // the client's. Default true.
@@ -136,7 +138,7 @@ private:
     // compatibilityError: a string. The error message if "compatible" is false, otherwise null.
     boost::optional<std::string> _compatibleError;
 
-    // logicalSessionTimeoutMinutes: integer or null. Default null. See logical session timeout.
+    // logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 };
 }  // namespace mongo::sdam
