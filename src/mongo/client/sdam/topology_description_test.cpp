@@ -44,6 +44,8 @@ using mongo::operator<<;
 
 class TopologyDescriptionTestFixture : public SdamTestFixture {
 protected:
+    void assertDefaultConfig(const TopologyDescription& topologyDescription);
+
     static inline const std::vector<ServerAddress> ONE_SERVER{"foo:1234"};
     static inline const std::vector<ServerAddress> TWO_SERVERS_VARY_CASE{"FoO:1234", "BaR:1234"};
     static inline const std::vector<ServerAddress> TWO_SERVERS_NORMAL_CASE{"foo:1234", "bar:1234"};
@@ -53,8 +55,8 @@ protected:
         SdamConfiguration(ONE_SERVER, TopologyType::kSingle);
 };
 
-TEST_F(TopologyDescriptionTestFixture, ShouldHaveCorrectDefaultValues) {
-    TopologyDescription topologyDescription(DEFAULT_CONFIG);
+void TopologyDescriptionTestFixture::assertDefaultConfig(
+    const TopologyDescription& topologyDescription) {
     ASSERT_EQUALS(boost::none, topologyDescription.getSetName());
     ASSERT_EQUALS(boost::none, topologyDescription.getMaxElectionId());
 
@@ -65,6 +67,11 @@ TEST_F(TopologyDescriptionTestFixture, ShouldHaveCorrectDefaultValues) {
     ASSERT_EQUALS(true, topologyDescription.isWireVersionCompatible());
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
     ASSERT_EQUALS(boost::none, topologyDescription.getLogicalSessionTimeoutMinutes());
+}
+
+TEST_F(TopologyDescriptionTestFixture, ShouldHaveCorrectDefaultValues) {
+    assertDefaultConfig(TopologyDescription(DEFAULT_CONFIG));
+    assertDefaultConfig(TopologyDescription());
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNormalizeInitialSeedList) {

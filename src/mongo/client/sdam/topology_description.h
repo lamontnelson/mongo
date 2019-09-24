@@ -68,7 +68,7 @@ private:
 
 class TopologyDescription {
 public:
-    TopologyDescription() = default;
+    TopologyDescription() : TopologyDescription(SdamConfiguration()) {}
 
     /**
      * From the Server Discovery & Monitoring Spec:
