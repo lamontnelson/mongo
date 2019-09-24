@@ -44,10 +44,17 @@ using mongo::operator<<;
 
 class TopologyDescriptionTestFixture : public SdamTestFixture {
 protected:
+    static inline const std::vector<ServerAddress> ONE_SERVER{"foo:1234"};
+    static inline const std::vector<ServerAddress> TWO_SERVERS_VARY_CASE{"FoO:1234", "BaR:1234"};
+    static inline const std::vector<ServerAddress> TWO_SERVERS_NORMAL_CASE{"foo:1234", "bar:1234"};
+
+    static inline const auto DEFAULT_CONFIG = SdamConfiguration();
+    static inline const auto SINGLE_SEED_CONFIG =
+        SdamConfiguration(ONE_SERVER, TopologyType::kSingle);
 };
 
 TEST_F(TopologyDescriptionTestFixture, ShouldHaveCorrectDefaultValues) {
-    TopologyDescription topologyDescription;
+    TopologyDescription topologyDescription(DEFAULT_CONFIG);
     ASSERT_EQUALS(boost::none, topologyDescription.getSetName());
     ASSERT_EQUALS(boost::none, topologyDescription.getMaxElectionId());
 
@@ -61,12 +68,13 @@ TEST_F(TopologyDescriptionTestFixture, ShouldHaveCorrectDefaultValues) {
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNormalizeInitialSeedList) {
-    auto seedList = std::vector<ServerAddress>{"FoO:1234", "BaR:1234"};
+    auto config = SdamConfiguration(TWO_SERVERS_VARY_CASE);
+    TopologyDescription topologyDescription(config);
 
-    TopologyDescription topologyDescription(TopologyType::kUnknown, seedList);
-
-    std::vector<ServerAddress> expectedAddresses = map<ServerAddress, ServerAddress>(
-        seedList, [](const ServerAddress& addr) { return boost::to_lower_copy(addr); });
+    std::vector<ServerAddress> expectedAddresses =
+        map<ServerAddress, ServerAddress>(TWO_SERVERS_VARY_CASE, [](const ServerAddress& addr) {
+            return boost::to_lower_copy(addr);
+        });
 
     std::vector<ServerAddress> serverAddresses = map<ServerDescription, ServerAddress>(
         topologyDescription.getServers(),
@@ -76,64 +84,60 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNormalizeInitialSeedList) {
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldAllowTypeSingleWithASingleSeed) {
-    auto seedList = std::vector<ServerAddress>{"foo:1234"};
-    TopologyDescription topologyDescription(TopologyType::kSingle, seedList);
+    TopologyDescription topologyDescription(SINGLE_SEED_CONFIG);
+
     ASSERT(TopologyType::kSingle == topologyDescription.getType());
 
     auto servers = map<ServerDescription, ServerAddress>(
         topologyDescription.getServers(),
         [](const ServerDescription& desc) { return desc.getAddress(); });
-    ASSERT_EQUALS(seedList, servers);
+    ASSERT_EQUALS(ONE_SERVER, servers);
 }
 
 TEST_F(TopologyDescriptionTestFixture, DoesNotAllowMultipleSeedsWithSingle) {
-    auto seedList = std::vector<ServerAddress>{"foo:1234", "bar:1234"};
     ASSERT_THROWS_CODE(
-        { TopologyDescription topologyDescription(TopologyType::kSingle, seedList); },
+        {
+            auto config = SdamConfiguration(TWO_SERVERS_NORMAL_CASE, TopologyType::kSingle);
+            TopologyDescription topologyDescription(config);
+        },
         DBException,
         ErrorCodes::InvalidSeedList);
 }
 
-TEST_F(TopologyDescriptionTestFixture, ShouldAllowSettingTheReplicaSetName) {
-    auto seedList = std::vector<ServerAddress>{"foo:1234"};
+TEST_F(TopologyDescriptionTestFixture, ShouldSetTheReplicaSetName) {
     auto expectedSetName = std::string("baz");
-    TopologyDescription topologyDescription(
-        TopologyType::kReplicaSetNoPrimary, seedList, expectedSetName);
+    auto config = SdamConfiguration(
+        ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10), expectedSetName);
+    TopologyDescription topologyDescription(config);
     ASSERT_EQUALS(expectedSetName, *topologyDescription.getSetName());
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowSettingTheReplicaSetNameWithWrongType) {
-    auto seedList = std::vector<ServerAddress>{"foo:1234"};
-    auto expectedSetName = std::string("baz");
     ASSERT_THROWS_CODE(
         {
-            TopologyDescription topologyDescription(
-                TopologyType::kUnknown, seedList, expectedSetName);
-            ASSERT_EQUALS(expectedSetName, *topologyDescription.getSetName());
+            auto config = SdamConfiguration(
+                ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10), std::string("baz"));
+            TopologyDescription topologyDescription(config);
         },
         DBException,
         ErrorCodes::InvalidTopologyType);
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldDefaultHeartbeatToTenSecs) {
-    TopologyDescription topologyDescription(TopologyType::kSingle,
-                                            std::vector<ServerAddress>{"foo:1234"});
-    ASSERT_EQUALS(mongo::Seconds(10), topologyDescription.getHeartBeatFrequency());
+    SdamConfiguration config;
+    ASSERT_EQUALS(mongo::Seconds(10), config.getHeartBeatFrequency());
 }
 
-TEST_F(TopologyDescriptionTestFixture, ShouldAllowChangingTheHeartbeatFrequency) {
-    TopologyDescription topologyDescription(TopologyType::kSingle,
-                                            std::vector<ServerAddress>{"foo:1234"});
-    topologyDescription.setHeartBeatFrequency(mongo::Milliseconds(20*1000));
-    ASSERT_EQUALS(mongo::Seconds(20), topologyDescription.getHeartBeatFrequency());
+TEST_F(TopologyDescriptionTestFixture, ShouldAllowSettingTheHeartbeatFrequency) {
+    SdamConfiguration config(boost::none, TopologyType::kUnknown, mongo::Milliseconds(20 * 1000));
+    ASSERT_EQUALS(mongo::Seconds(20), config.getHeartBeatFrequency());
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowChangingTheHeartbeatFrequencyBelow500Ms) {
-    TopologyDescription topologyDescription(TopologyType::kSingle,
-                                            std::vector<ServerAddress>{"foo:1234"});
-    ASSERT_THROWS_CODE({
-        topologyDescription.setHeartBeatFrequency(mongo::Milliseconds(1));
-    }, DBException, ErrorCodes::InvalidHeartBeatFrequency);
+    ASSERT_THROWS_CODE(
+        { SdamConfiguration config(boost::none, TopologyType::kUnknown, mongo::Milliseconds(1)); },
+        DBException,
+        ErrorCodes::InvalidHeartBeatFrequency);
 }
 };  // namespace sdam
 };  // namespace mongo

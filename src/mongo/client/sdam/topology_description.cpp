@@ -34,25 +34,14 @@
 #include "mongo/util/log.h"
 
 namespace mongo::sdam {
-TopologyDescription::TopologyDescription(TopologyType topologyType,
-                                         std::vector<ServerAddress> seedList,
-                                         boost::optional<std::string> setName)
-    : _type(topologyType), _setName(setName) {
-    if (topologyType == TopologyType::kSingle) {
-        uassert(ErrorCodes::InvalidSeedList,
-                "A single TopologyType must have exactly one entry in the seed list.",
-                seedList.size() == 1);
-    }
+TopologyDescription::TopologyDescription(SdamConfiguration config)
+    : _type(config.getInitialType()), _setName(config.getSetName()) {
 
-    if (_setName) {
-        uassert(ErrorCodes::InvalidTopologyType,
-                "Only ReplicaSetNoPrimary allowed when a setName is provided.",
-                topologyType == TopologyType::kReplicaSetNoPrimary);
-    }
-
-    _servers.clear();
-    for (auto address : seedList) {
-        _servers.push_back(ServerDescription(address));
+    if (auto seeds = config.getSeedList()) {
+        _servers.clear();
+        for (auto address : *seeds) {
+            _servers.push_back(ServerDescription(address));
+        }
     }
 }
 
@@ -95,13 +84,51 @@ const boost::optional<std::string>& TopologyDescription::getWireVersionCompatibl
 const boost::optional<int>& TopologyDescription::getLogicalSessionTimeoutMinutes() const {
     return _logicalSessionTimeoutMinutes;
 }
-const Milliseconds& TopologyDescription::getHeartBeatFrequency() const {
-    return _heartBeatFrequencyMs;
-}
-void TopologyDescription::setHeartBeatFrequency(const Milliseconds& heartBeatFrequencyMs) {
+
+
+SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
+                                     TopologyType initialType,
+                                     mongo::Milliseconds heartBeatFrequencyMs,
+                                     boost::optional<std::string> setName)
+    : _seedList(seedList), _initialType(initialType), _heartBeatFrequencyMs(heartBeatFrequencyMs), _setName(setName) {
+    if (_initialType == TopologyType::kSingle) {
+        uassert(ErrorCodes::InvalidSeedList,
+                "A single TopologyType must have exactly one entry in the seed list.",
+                (*seedList).size() == 1);
+    }
+
+    if (_setName) {
+        uassert(ErrorCodes::InvalidTopologyType,
+                "Only ReplicaSetNoPrimary allowed when a setName is provided.",
+                _initialType == TopologyType::kReplicaSetNoPrimary);
+    }
+
+    if (seedList) {
+        uassert(
+            ErrorCodes::InvalidSeedList, "seed list size must be >= 1", (*seedList).size() >= 1);
+    }
+
     uassert(ErrorCodes::InvalidHeartBeatFrequency,
             "topology heartbeat must be >= 500ms",
-            heartBeatFrequencyMs >= mongo::Milliseconds(500));
-    _heartBeatFrequencyMs = heartBeatFrequencyMs;
+            _heartBeatFrequencyMs >= mongo::Milliseconds(500));
+}
+
+const boost::optional<std::vector<ServerAddress>>& SdamConfiguration::getSeedList() const {
+    return _seedList;
+}
+
+TopologyType SdamConfiguration::getInitialType() const {
+    return _initialType;
+}
+
+Milliseconds SdamConfiguration::getHeartBeatFrequency() const {
+    return _heartBeatFrequencyMs;
+}
+
+Milliseconds SdamConfiguration::getMinHeartbeatFrequencyMs() const {
+    return _minHeartbeatFrequencyMS;
+}
+const boost::optional<std::string>& SdamConfiguration::getSetName() const {
+    return _setName;
 }
 };  // namespace mongo::sdam

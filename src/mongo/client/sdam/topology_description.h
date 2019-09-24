@@ -41,6 +41,31 @@
 
 namespace mongo::sdam {
 
+class SdamConstants {};
+
+class SdamConfiguration {
+public:
+    SdamConfiguration() : SdamConfiguration(boost::none){};
+    SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
+                      TopologyType initialType = TopologyType::kUnknown,
+                      mongo::Milliseconds heartBeatFrequencyMs = mongo::Seconds(10),
+                      boost::optional<std::string> setName = boost::none);
+
+    const boost::optional<std::vector<ServerAddress>>& getSeedList() const;
+    TopologyType getInitialType() const;
+    Milliseconds getHeartBeatFrequency() const;
+    Milliseconds getMinHeartbeatFrequencyMs() const;
+    const boost::optional<std::string>& getSetName() const;
+
+private:
+    boost::optional<std::vector<ServerAddress>> _seedList;
+    TopologyType _initialType;
+    mongo::Milliseconds _heartBeatFrequencyMs;
+    boost::optional<std::string> _setName;
+    const mongo::Milliseconds _minHeartbeatFrequencyMS = mongo::Milliseconds(500);
+};
+
+
 class TopologyDescription {
 public:
     TopologyDescription() = default;
@@ -84,10 +109,7 @@ public:
      * If setName is not null, only TopologyType ReplicaSetNoPrimary, and possibly Single, are
      * allowed. (See verifying setName with TopologyType Single.)
      */
-    TopologyDescription(TopologyType topologyType,
-                        std::vector<ServerAddress> seedList,
-                        boost::optional<std::string> setName = boost::none);
-    void setHeartBeatFrequency(const Milliseconds& heartBeatFrequencyMs);
+    TopologyDescription(SdamConfiguration config);
 
 
     /**
@@ -153,7 +175,5 @@ private:
 
     // logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
-
-    mongo::Milliseconds _heartBeatFrequencyMs = mongo::Seconds(10);
 };
 }  // namespace mongo::sdam
