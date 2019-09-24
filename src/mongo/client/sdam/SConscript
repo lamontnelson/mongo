@@ -22,12 +22,12 @@ env.Library(
 
 env.CppUnitTest(
     target='topology_description_test',
-    source=['topology_description_test.cpp'],
+    source=['topology_description_test.cpp', ],
     LIBDEPS=['sdam'],
 )
 
 env.CppUnitTest(
     target='server_description_test',
-    source=['server_description_test.cpp'],
+    source=['server_description_test.cpp', ],
     LIBDEPS=['sdam'],
 )

@@ -453,16 +453,4 @@ std::ostream& operator<<(std::ostream& os, const ServerDescription& description)
     os << obj.toString();
     return os;
 }
-
-std::ostream& operator<<(std::ostream& os, const std::vector<ServerDescription>& v) {
-    os << "[";
-    size_t i = 0;
-    for (auto it = v.begin(); it != v.end(); ++it, ++i) {
-        os << *it;
-        if (i != v.size() - 1)
-            os << ", ";
-    }
-    os << "]";
-    return os;
-}
 };  // namespace mongo::sdam

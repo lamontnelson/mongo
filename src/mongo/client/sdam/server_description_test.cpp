@@ -33,49 +33,26 @@
 #include <ostream>
 #include <set>
 
+#include "mongo/client/sdam/sdam_test_base.h"
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/db/repl/optime.h"
-#include "mongo/unittest/unittest.h"
 #include "mongo/util/system_clock_source.h"
 
 namespace mongo {
-using namespace sdam;
 using namespace std;
+template std::ostream& operator<<(std::ostream& os,
+                                  const std::vector<mongo::sdam::ServerDescription>& v);
+template std::ostream& operator<<(std::ostream& os, const std::set<std::string>& s);
+template std::ostream& operator<<(std::ostream& os, const std::map<std::string, std::string>& m);
 
 namespace sdam {
+using mongo::operator<<;
 
-ostream& operator<<(ostream& os, const std::map<std::string, std::string>& m) {
-    os << "{";
-    size_t i = 0;
-    for (auto it = m.begin(); it != m.end(); ++it, ++i) {
-        os << (*it).first << ": " << (*it).second;
-        if (i != m.size() - 1)
-            os << ", ";
-    }
-    os << "}" << std::endl;
-    return os;
-}
-ostream& operator<<(ostream& os, const std::set<std::string>& s) {
-    os << "{";
-    size_t i = 0;
-    for (auto it = s.begin(); it != s.end(); ++it, ++i) {
-        os << *it;
-        if (i != s.size() - 1)
-            os << ", ";
-    }
-    os << "}" << std::endl;
-    return os;
-}
-ostream& operator<<(ostream& os, const ServerDescription& description) {
-    BSONObj obj = description.toBson();
-    os << obj.toString();
-    return os;
-}
 ostream& operator<<(ostream& os, ServerType serverType) {
     os << toString(serverType);
     return os;
 }
-}  // namespace sdam
+
 
 TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
     ServerDescription a("foo:1234");
@@ -213,16 +190,11 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareLogicalSessionTimeout) {
 }
 
 
-class ServerDescriptionBuilderTestFixture : public mongo::unittest::Test {
+class ServerDescriptionBuilderTestFixture : public SdamTestFixture {
 protected:
     // returns a set containing the elements in the given bson array with lowercase values.
     std::set<std::string> toHostSet(std::vector<BSONElement> bsonArray) {
-        std::set<std::string> result;
-        std::transform(bsonArray.begin(),
-                       bsonArray.end(),
-                       std::inserter(result, result.begin()),
-                       [](BSONElement e) { return boost::to_lower_copy(e.String()); });
-        return result;
+        return mapSet<BSONElement, std::string>(bsonArray, [](const BSONElement& e) {return boost::to_lower_copy(e.String());});
     }
 
     std::map<std::string, std::string> toStringMap(BSONObj bsonObj) {
@@ -514,4 +486,5 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnFai
     ASSERT_EQUALS(boost::none, description.getPrimary());
     ASSERT_EQUALS(boost::none, description.getLogicalSessionTimeoutMinutes());
 }
+}  // namespace sdam
 };  // namespace mongo

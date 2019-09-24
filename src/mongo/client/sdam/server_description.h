@@ -26,7 +26,6 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-
 #pragma once
 #include <boost/algorithm/string.hpp>
 #include <boost/optional.hpp>
@@ -37,6 +36,7 @@
 
 #include "mongo/bson/oid.h"
 #include "mongo/client/sdam/sdam_datatypes.h"
+#include "mongo/client/sdam/sdam_test_base.h"
 #include "mongo/db/repl/optime.h"
 #include "mongo/platform/basic.h"
 #include "mongo/util/clock_source.h"
@@ -138,10 +138,7 @@ private:
 
 bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
 bool operator!=(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
-
 std::ostream& operator<<(std::ostream& os, const ServerDescription& description);
-std::ostream& operator<<(std::ostream& os, const std::vector<ServerDescription>& v);
-
 
 class ServerDescriptionBuilder {
 public:

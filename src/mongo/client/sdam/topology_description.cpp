@@ -26,15 +26,30 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-
 #include "mongo/client/sdam/topology_description.h"
 
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/platform/basic.h"
+#include "mongo/util/assert_util.h"
+#include "mongo/util/log.h"
 
 namespace mongo::sdam {
 TopologyDescription::TopologyDescription(TopologyType topologyType,
                                          std::vector<ServerAddress> seedList,
-                                         StringData setName) {
+                                         boost::optional<std::string> setName)
+    : _type(topologyType), _setName(setName) {
+    if (topologyType == TopologyType::kSingle) {
+        uassert(ErrorCodes::InvalidSeedList,
+                "A single TopologyType must have exactly one entry in the seed list.",
+                seedList.size() == 1);
+    }
+
+    if (_setName) {
+        uassert(ErrorCodes::InvalidTopologyType,
+                "Only ReplicaSetNoPrimary allowed when a setName is provided.",
+                topologyType == TopologyType::kReplicaSetNoPrimary);
+    }
+
     _servers.clear();
     for (auto address : seedList) {
         _servers.push_back(ServerDescription(address));
@@ -79,5 +94,14 @@ const boost::optional<std::string>& TopologyDescription::getWireVersionCompatibl
 }
 const boost::optional<int>& TopologyDescription::getLogicalSessionTimeoutMinutes() const {
     return _logicalSessionTimeoutMinutes;
+}
+const Milliseconds& TopologyDescription::getHeartBeatFrequency() const {
+    return _heartBeatFrequencyMs;
+}
+void TopologyDescription::setHeartBeatFrequency(const Milliseconds& heartBeatFrequencyMs) {
+    uassert(ErrorCodes::InvalidHeartBeatFrequency,
+            "topology heartbeat must be >= 500ms",
+            heartBeatFrequencyMs >= mongo::Milliseconds(500));
+    _heartBeatFrequencyMs = heartBeatFrequencyMs;
 }
 };  // namespace mongo::sdam

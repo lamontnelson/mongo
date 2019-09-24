@@ -26,18 +26,23 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-
+#include "mongo/client/sdam/sdam_test_base.h"
 #include "mongo/client/sdam/topology_description.h"
 
 #include <boost/optional/optional_io.hpp>
 
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/unittest/death_test.h"
 #include "mongo/unittest/unittest.h"
 
+namespace mongo {
+template std::ostream& operator<<(std::ostream& os,
+                                  const std::vector<mongo::sdam::ServerAddress>& s);
 
-namespace mongo::sdam {
+namespace sdam {
+using mongo::operator<<;
 
-class TopologyDescriptionTestFixture : public mongo::unittest::Test {
+class TopologyDescriptionTestFixture : public SdamTestFixture {
 protected:
 };
 
@@ -58,20 +63,77 @@ TEST_F(TopologyDescriptionTestFixture, ShouldHaveCorrectDefaultValues) {
 TEST_F(TopologyDescriptionTestFixture, ShouldNormalizeInitialSeedList) {
     auto seedList = std::vector<ServerAddress>{"FoO:1234", "BaR:1234"};
 
-    TopologyDescription topologyDescription(TopologyType::kUnknown, seedList, "");
+    TopologyDescription topologyDescription(TopologyType::kUnknown, seedList);
 
-    std::vector<ServerAddress> expectedAddresses;
-    std::transform(seedList.begin(),
-                   seedList.end(),
-                   std::back_inserter(expectedAddresses),
-                   [](auto address) { return boost::to_lower_copy(address); });
+    std::vector<ServerAddress> expectedAddresses = map<ServerAddress, ServerAddress>(
+        seedList, [](const ServerAddress& addr) { return boost::to_lower_copy(addr); });
 
-    std::vector<ServerAddress> serverAddresses;
-    std::transform(topologyDescription.getServers().begin(),
-                   topologyDescription.getServers().end(),
-                   std::back_inserter(serverAddresses),
-                   [](const ServerDescription& description) { return description.getAddress(); });
+    std::vector<ServerAddress> serverAddresses = map<ServerDescription, ServerAddress>(
+        topologyDescription.getServers(),
+        [](const ServerDescription& description) { return description.getAddress(); });
 
-    ASSERT(expectedAddresses == serverAddresses);
+    ASSERT_EQUALS(expectedAddresses, serverAddresses);
 }
-};  // namespace mongo::sdam
+
+TEST_F(TopologyDescriptionTestFixture, ShouldAllowTypeSingleWithASingleSeed) {
+    auto seedList = std::vector<ServerAddress>{"foo:1234"};
+    TopologyDescription topologyDescription(TopologyType::kSingle, seedList);
+    ASSERT(TopologyType::kSingle == topologyDescription.getType());
+
+    auto servers = map<ServerDescription, ServerAddress>(
+        topologyDescription.getServers(),
+        [](const ServerDescription& desc) { return desc.getAddress(); });
+    ASSERT_EQUALS(seedList, servers);
+}
+
+TEST_F(TopologyDescriptionTestFixture, DoesNotAllowMultipleSeedsWithSingle) {
+    auto seedList = std::vector<ServerAddress>{"foo:1234", "bar:1234"};
+    ASSERT_THROWS_CODE(
+        { TopologyDescription topologyDescription(TopologyType::kSingle, seedList); },
+        DBException,
+        ErrorCodes::InvalidSeedList);
+}
+
+TEST_F(TopologyDescriptionTestFixture, ShouldAllowSettingTheReplicaSetName) {
+    auto seedList = std::vector<ServerAddress>{"foo:1234"};
+    auto expectedSetName = std::string("baz");
+    TopologyDescription topologyDescription(
+        TopologyType::kReplicaSetNoPrimary, seedList, expectedSetName);
+    ASSERT_EQUALS(expectedSetName, *topologyDescription.getSetName());
+}
+
+TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowSettingTheReplicaSetNameWithWrongType) {
+    auto seedList = std::vector<ServerAddress>{"foo:1234"};
+    auto expectedSetName = std::string("baz");
+    ASSERT_THROWS_CODE(
+        {
+            TopologyDescription topologyDescription(
+                TopologyType::kUnknown, seedList, expectedSetName);
+            ASSERT_EQUALS(expectedSetName, *topologyDescription.getSetName());
+        },
+        DBException,
+        ErrorCodes::InvalidTopologyType);
+}
+
+TEST_F(TopologyDescriptionTestFixture, ShouldDefaultHeartbeatToTenSecs) {
+    TopologyDescription topologyDescription(TopologyType::kSingle,
+                                            std::vector<ServerAddress>{"foo:1234"});
+    ASSERT_EQUALS(mongo::Seconds(10), topologyDescription.getHeartBeatFrequency());
+}
+
+TEST_F(TopologyDescriptionTestFixture, ShouldAllowChangingTheHeartbeatFrequency) {
+    TopologyDescription topologyDescription(TopologyType::kSingle,
+                                            std::vector<ServerAddress>{"foo:1234"});
+    topologyDescription.setHeartBeatFrequency(mongo::Milliseconds(20*1000));
+    ASSERT_EQUALS(mongo::Seconds(20), topologyDescription.getHeartBeatFrequency());
+}
+
+TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowChangingTheHeartbeatFrequencyBelow500Ms) {
+    TopologyDescription topologyDescription(TopologyType::kSingle,
+                                            std::vector<ServerAddress>{"foo:1234"});
+    ASSERT_THROWS_CODE({
+        topologyDescription.setHeartBeatFrequency(mongo::Milliseconds(1));
+    }, DBException, ErrorCodes::InvalidHeartBeatFrequency);
+}
+};  // namespace sdam
+};  // namespace mongo

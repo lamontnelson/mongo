@@ -86,7 +86,8 @@ public:
      */
     TopologyDescription(TopologyType topologyType,
                         std::vector<ServerAddress> seedList,
-                        StringData setName);
+                        boost::optional<std::string> setName = boost::none);
+    void setHeartBeatFrequency(const Milliseconds& heartBeatFrequencyMs);
 
 
     /**
@@ -116,6 +117,8 @@ public:
     bool isWireVersionCompatible() const;
     const boost::optional<std::string>& getWireVersionCompatibleError() const;
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
+    const Milliseconds& getHeartBeatFrequency() const;
+
 private:
     stdx::mutex _mutex;
 
@@ -150,5 +153,7 @@ private:
 
     // logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
+
+    mongo::Milliseconds _heartBeatFrequencyMs = mongo::Seconds(10);
 };
 }  // namespace mongo::sdam
