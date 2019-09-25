@@ -150,6 +150,10 @@ private:
     // a TopologyType enum value.
     TopologyType _type = TopologyType::kUnknown;
 
+public:
+    void setType(TopologyType type);
+
+private:
     // setName: the replica set name. Default null.
     boost::optional<std::string> _setName;
 

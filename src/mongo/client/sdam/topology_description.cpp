@@ -84,13 +84,19 @@ const boost::optional<std::string>& TopologyDescription::getWireVersionCompatibl
 const boost::optional<int>& TopologyDescription::getLogicalSessionTimeoutMinutes() const {
     return _logicalSessionTimeoutMinutes;
 }
+void TopologyDescription::setType(TopologyType type) {
+    _type = type;
+}
 
 
 SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
                                      TopologyType initialType,
                                      mongo::Milliseconds heartBeatFrequencyMs,
                                      boost::optional<std::string> setName)
-    : _seedList(seedList), _initialType(initialType), _heartBeatFrequencyMs(heartBeatFrequencyMs), _setName(setName) {
+    : _seedList(seedList),
+      _initialType(initialType),
+      _heartBeatFrequencyMs(heartBeatFrequencyMs),
+      _setName(setName) {
     if (_initialType == TopologyType::kSingle) {
         uassert(ErrorCodes::InvalidSeedList,
                 "A single TopologyType must have exactly one entry in the seed list.",

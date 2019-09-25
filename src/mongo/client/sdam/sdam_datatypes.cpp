@@ -53,6 +53,27 @@ std::string toString(ServerType serverType) {
     }
 }
 
+const std::vector<ServerType> allServerTypes() {
+    static auto const result = std::vector<ServerType>{ServerType::kStandalone,
+                                   ServerType::kMongos,
+                                   ServerType::kRSPrimary,
+                                   ServerType::kRSSecondary,
+                                   ServerType::kRSArbiter,
+                                   ServerType::kRSOther,
+                                   ServerType::kRSGhost,
+                                   ServerType::kUnknown};
+    return result;
+}
+
+const std::vector<TopologyType> allTopologyTypes() {
+    static auto const result = std::vector<TopologyType>{TopologyType::kSingle,
+                                     TopologyType::kReplicaSetNoPrimary,
+                                     TopologyType::kReplicaSetWithPrimary,
+                                     TopologyType::kSharded,
+                                     TopologyType::kUnknown};
+    return result;
+}
+
 
 const ServerAddress& IsMasterOutcome::getServer() const {
     return _server;

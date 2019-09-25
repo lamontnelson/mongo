@@ -51,18 +51,10 @@ enum class TopologyType {
     kSharded,
     kUnknown
 };
+const std::vector<TopologyType> allTopologyTypes();
 
-enum class ServerType {
-    kStandalone,
-    kMongos,
-    kRSPrimary,
-    kRSSecondary,
-    kRSArbiter,
-    kRSOther,
-    kRSGhost,
-    kUnknown
-};
-
+enum class ServerType { kStandalone, kMongos, kRSPrimary, kRSSecondary, kRSArbiter, kRSOther, kRSGhost, kUnknown };
+const std::vector<ServerType> allServerTypes();
 std::string toString(ServerType serverType);
 
 using ServerAddress = std::string;
