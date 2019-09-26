@@ -52,7 +52,7 @@ public:
     /**
      * This determines if a service description is equivalent according to the SDAM scecification.
      * Members marked with (=) are used to determine equality. Note that these members do not
-     * include Rtt or the server's address.
+     * include RTT or the server's address.
      */
     bool isEquivalent(const ServerDescription& other) const;
 
@@ -127,7 +127,7 @@ private:
     // (=) primary: an address. This server's opinion of who the primary is. Default null.
     boost::optional<ServerAddress> _primary;
     // lastUpdateTime: when this server was last checked. Default "infinity ago".
-    boost::optional<Date_t> _lastUpdateTime;
+    boost::optional<Date_t> _lastUpdateTime = Date_t::min();
     // (=) logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 

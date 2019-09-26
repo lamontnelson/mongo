@@ -104,7 +104,7 @@ const boost::optional<ServerAddress>& ServerDescription::getPrimary() const {
 }
 
 const mongo::Date_t ServerDescription::getLastUpdateTime() const {
-    return (_lastUpdateTime) ? *_lastUpdateTime : Date_t::min();
+    return *_lastUpdateTime;
 }
 
 const boost::optional<int>& ServerDescription::getLogicalSessionTimeoutMinutes() const {
