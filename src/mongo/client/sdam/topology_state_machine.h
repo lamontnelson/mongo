@@ -28,29 +28,39 @@
  */
 #pragma once
 
-#include <unordered_map>
+#include <vector>
 
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/client/sdam/topology_description.h"
+#include "mongo/client/sdam/topology_observer.h"
+#include "mongo/platform/mutex.h"
 
 namespace mongo::sdam {
 using TransitionAction = std::function<void(TopologyDescription&, const ServerDescription&)>;
-using StateTransitionTableRow = std::unordered_map<ServerType, TransitionAction>;
-using StateTransitionTable = std::unordered_map<TopologyType, StateTransitionTableRow>;
+
+// indexed by ServerType
+using StateTransitionTableRow = std::vector<TransitionAction>;
+
+// StateTransitionTable[t][s] returns the action to
+// take given that the topology currently has type t, and we receive a ServerDescription
+// with type s.
+using StateTransitionTable = std::vector<StateTransitionTableRow>;
 
 class TopologyStateMachine {
 public:
-    TopologyStateMachine(const SdamConfiguration& config);
+    TopologyStateMachine(const SdamConfiguration& config,
+                         std::vector<std::shared_ptr<TopologyObserver>> observers);
 
-    // input to the state machine.
-    // safe to call from multiple threads.
-    void nextServerDescription(const ServerDescription& serverDescription);
+    // Provide input to the state machine, and triggers the correct action based on the current
+    // TopologyDescription and the incoming ServerDescription. The topology may be modified as a
+    // result. This is safe to call from multiple threads.
+    void nextServerDescription(TopologyDescription& topologyDescription,
+                               const ServerDescription& serverDescription);
 
 private:
     void initTransitionTable();
 
     // transition actions
-    static inline const TransitionAction NO_OP = TransitionAction();
     void updateUnknownWithStandalone(TopologyDescription&, const ServerDescription&);
     void updateRSWithoutPrimary(TopologyDescription&, const ServerDescription&);
     void updateRSWithPrimaryFromMember(TopologyDescription&, const ServerDescription&);
@@ -62,6 +72,18 @@ private:
     TransitionAction setTopologyTypeAndUpdateRSFromPrimary(TopologyType type);
     TransitionAction setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType type);
 
+    void emitServerRemoved(const ServerDescription& serverDescription);
+    void emitTypeChange(TopologyType topologyType);
+    void emitNewSetName(const boost::optional<std::string>& setName);
+    void emitNewServer(ServerDescription newServerDescription);
+    void emitUpdateServerType(const ServerDescription& serverDescription, ServerType newServerType);
+    void emitReplaceServer(ServerDescription newServerDescription);
+    void emitNewMaxElectionId(const OID& newMaxElectionId);
+    void emitNewMaxSetVersion(int& newMaxSetVersion);
+
+    mongo::Mutex _mutex = mongo::Mutex(StringData("TopologyStateMachine"));
     StateTransitionTable _stt;
+    SdamConfiguration _config;
+    std::vector<std::shared_ptr<TopologyObserver>> _observers;
 };
 }  // namespace mongo::sdam

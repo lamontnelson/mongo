@@ -46,7 +46,6 @@ TopologyDescription::TopologyDescription(SdamConfiguration config)
 }
 
 void TopologyDescription::onNewServerDescription(ServerDescription newDescription) {
-    stdx::lock_guard<stdx::mutex> lock(_mutex);
     // TODO:
 }
 
@@ -57,35 +56,65 @@ bool TopologyDescription::hasReadableServer(boost::optional<ReadPreference> read
 bool TopologyDescription::hasWritableServer() {
     return false;
 }
+
 const UUID& TopologyDescription::getId() const {
     return _id;
 }
+
 TopologyType TopologyDescription::getType() const {
     return _type;
 }
+
 const boost::optional<std::string>& TopologyDescription::getSetName() const {
     return _setName;
 }
+
 const boost::optional<int>& TopologyDescription::getMaxSetVersion() const {
     return _maxSetVersion;
 }
+
 const boost::optional<OID>& TopologyDescription::getMaxElectionId() const {
     return _maxElectionId;
 }
+
 const std::vector<ServerDescription>& TopologyDescription::getServers() const {
     return _servers;
 }
+
 bool TopologyDescription::isWireVersionCompatible() const {
     return _compatible;
 }
+
 const boost::optional<std::string>& TopologyDescription::getWireVersionCompatibleError() const {
     return _compatibleError;
 }
+
 const boost::optional<int>& TopologyDescription::getLogicalSessionTimeoutMinutes() const {
     return _logicalSessionTimeoutMinutes;
 }
+
 void TopologyDescription::setType(TopologyType type) {
     _type = type;
+}
+
+bool TopologyDescription::containsServerAddress(ServerAddress address) const {
+    boost::to_lower(address);
+    for (auto& serverDescription : _servers) {
+        if (serverDescription.getAddress() == address)
+            return true;
+    }
+    return false;
+}
+
+std::vector<ServerDescription> TopologyDescription::findServers(
+    std::function<bool(const ServerDescription&)> predicate) {
+    std::vector<ServerDescription> result;
+    for (const auto& server : _servers) {
+        if (predicate(server)) {
+            result.push_back(server);
+        }
+    }
+    return result;
 }
 
 

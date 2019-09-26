@@ -31,10 +31,17 @@
 #include <functional>
 
 namespace mongo::sdam {
-using namespace std::placeholders;
-
-TopologyStateMachine::TopologyStateMachine(const SdamConfiguration& config) {
+TopologyStateMachine::TopologyStateMachine(const SdamConfiguration& config,
+                                           std::vector<std::shared_ptr<TopologyObserver>> observers)
+    : _config(config), _observers(std::move(observers)) {
     initTransitionTable();
+}
+
+// This is used to make the syntax in initTransitionTable less verbose.
+// Since we have enum class for TopologyType and ServerType there are no implicit int conversions.
+template <typename T>
+inline int idx(T enumType) {
+    return static_cast<int>(enumType);
 }
 
 /**
@@ -42,26 +49,27 @@ TopologyStateMachine::TopologyStateMachine(const SdamConfiguration& config) {
  * https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#topologytype-table
  */
 void mongo::sdam::TopologyStateMachine::initTransitionTable() {
-    // Init all cells to no-op
-    for (auto topologyType : allTopologyTypes()) {
-        _stt[topologyType] = StateTransitionTableRow{};
-        for (auto serverType : allServerTypes()) {
-            _stt[topologyType][serverType] = NO_OP;
-        }
+    using namespace std::placeholders;
+
+    // init the table to No-ops
+    _stt.resize(allTopologyTypes().size());
+    for (auto& row : _stt) {
+        row.resize(allServerTypes().size());
     }
 
     // From TopologyType: Unknown
-    _stt[TopologyType::kUnknown][ServerType::kStandalone] =
+    _stt[idx(TopologyType::kUnknown)][idx(ServerType::kStandalone)] =
         std::bind(&TopologyStateMachine::updateUnknownWithStandalone, this, _1, _2);
-    _stt[TopologyType::kUnknown][ServerType::kMongos] = setTopologyType(TopologyType::kSharded);
-    _stt[TopologyType::kUnknown][ServerType::kRSPrimary] =
+    _stt[idx(TopologyType::kUnknown)][idx(ServerType::kMongos)] =
+        setTopologyType(TopologyType::kSharded);
+    _stt[idx(TopologyType::kUnknown)][idx(ServerType::kRSPrimary)] =
         setTopologyTypeAndUpdateRSFromPrimary(TopologyType::kReplicaSetWithPrimary);
 
     {
         const auto serverTypes = std::vector<ServerType>{
             ServerType::kRSSecondary, ServerType::kRSArbiter, ServerType::kRSOther};
         for (auto newServerType : serverTypes) {
-            _stt[TopologyType::kUnknown][newServerType] =
+            _stt[idx(TopologyType::kUnknown)][idx(newServerType)] =
                 setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType::kReplicaSetNoPrimary);
         }
     }
@@ -75,7 +83,7 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
                                                          ServerType::kRSOther,
                                                          ServerType::kRSGhost};
         for (auto newServerType : serverTypes) {
-            _stt[TopologyType::kSharded][newServerType] =
+            _stt[idx(TopologyType::kSharded)][idx(newServerType)] =
                 std::bind(&TopologyStateMachine::removeAndStopMonitoring, this, _1, _2);
         }
     }
@@ -85,19 +93,19 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
         const auto serverTypes =
             std::vector<ServerType>{ServerType::kStandalone, ServerType::kMongos};
         for (auto serverType : serverTypes) {
-            _stt[TopologyType::kReplicaSetNoPrimary][serverType] =
+            _stt[idx(TopologyType::kReplicaSetNoPrimary)][idx(serverType)] =
                 std::bind(&TopologyStateMachine::removeAndStopMonitoring, this, _1, _2);
         }
     }
 
-    _stt[TopologyType::kReplicaSetNoPrimary][ServerType::kRSPrimary] =
+    _stt[idx(TopologyType::kReplicaSetNoPrimary)][idx(ServerType::kRSPrimary)] =
         setTopologyTypeAndUpdateRSFromPrimary(TopologyType::kReplicaSetWithPrimary);
 
     {
         const auto serverTypes = std::vector<ServerType>{
             ServerType::kRSSecondary, ServerType::kRSArbiter, ServerType::kRSOther};
         for (auto serverType : serverTypes) {
-            _stt[TopologyType::kReplicaSetNoPrimary][serverType] =
+            _stt[idx(TopologyType::kReplicaSetNoPrimary)][idx(serverType)] =
                 std::bind(&TopologyStateMachine::updateRSWithoutPrimary, this, _1, _2);
         }
     }
@@ -107,7 +115,7 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
         const auto serverTypes =
             std::vector<ServerType>{ServerType::kUnknown, ServerType::kRSGhost};
         for (auto serverType : serverTypes) {
-            _stt[TopologyType::kReplicaSetWithPrimary][serverType] =
+            _stt[idx(TopologyType::kReplicaSetWithPrimary)][idx(serverType)] =
                 std::bind(&TopologyStateMachine::checkIfHasPrimary, this, _1, _2);
         }
     }
@@ -116,33 +124,195 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
         const auto serverTypes =
             std::vector<ServerType>{ServerType::kStandalone, ServerType::kMongos};
         for (auto serverType : serverTypes) {
-            _stt[TopologyType::kReplicaSetNoPrimary][serverType] =
+            _stt[idx(TopologyType::kReplicaSetNoPrimary)][idx(serverType)] =
                 std::bind(&TopologyStateMachine::removeAndCheckIfHasPrimary, this, _1, _2);
         }
     }
 
-    _stt[TopologyType::kReplicaSetWithPrimary][ServerType::kRSPrimary] =
+    _stt[idx(TopologyType::kReplicaSetWithPrimary)][idx(ServerType::kRSPrimary)] =
         std::bind(&TopologyStateMachine::updateRSFromPrimary, this, _1, _2);
 
     {
         const auto serverTypes = std::vector<ServerType>{
             ServerType::kRSSecondary, ServerType::kRSArbiter, ServerType::kRSOther};
         for (auto serverType : serverTypes) {
-            _stt[TopologyType::kReplicaSetNoPrimary][serverType] =
+            _stt[idx(TopologyType::kReplicaSetNoPrimary)][idx(serverType)] =
                 std::bind(&TopologyStateMachine::updateRSWithPrimaryFromMember, this, _1, _2);
         }
     }
 }
 
-void TopologyStateMachine::updateUnknownWithStandalone(TopologyDescription&,
-                                                       const ServerDescription&) {}
+inline void TopologyStateMachine::nextServerDescription(
+    TopologyDescription& topologyDescription, const ServerDescription& serverDescription) {
+    stdx::lock_guard<mongo::Mutex> lock(_mutex);
+    auto& action = _stt[idx(topologyDescription.getType())][idx(serverDescription.getType())];
+    action(topologyDescription, serverDescription);
+}
 
-void TopologyStateMachine::updateRSWithoutPrimary(TopologyDescription&, const ServerDescription&) {}
+void TopologyStateMachine::updateUnknownWithStandalone(TopologyDescription& topologyDescription,
+                                                       const ServerDescription& serverDescription) {
+    if (!topologyDescription.containsServerAddress(serverDescription.getAddress()))
+        return;
+
+    if (_config.getSeedList() && (*_config.getSeedList()).size() == 1) {
+        emitTypeChange(TopologyType::kSingle);
+    } else {
+        emitServerRemoved(serverDescription);
+    }
+}
+
+void TopologyStateMachine::updateRSWithoutPrimary(TopologyDescription& topologyDescription,
+                                                  const ServerDescription& serverDescription) {
+    const auto& serverDescAddress = serverDescription.getAddress();
+
+    if (!topologyDescription.containsServerAddress(serverDescAddress))
+        return;
+
+    const auto& currentSetName = topologyDescription.getSetName();
+    const auto& serverDescSetName = serverDescription.getSetName();
+    if (currentSetName == boost::none) {
+        emitNewSetName(serverDescSetName);
+    } else if (currentSetName != serverDescSetName) {
+        emitServerRemoved(serverDescription);
+        return;
+    }
+
+    const std::set<ServerAddress>* addressSets[3]{&serverDescription.getHosts(),
+                                                  &serverDescription.getPassives(),
+                                                  &serverDescription.getArbiters()};
+    for (const auto addresses : addressSets) {
+        for (const auto addressFromSet : *addresses) {
+            if (!topologyDescription.containsServerAddress(addressFromSet)) {
+                emitNewServer(ServerDescription(addressFromSet));
+            }
+        }
+    }
+
+    if (serverDescription.getPrimary()) {
+        const auto& primaryAddress = *serverDescription.getPrimary();
+        auto matchingServers = topologyDescription.findServers(
+            [primaryAddress](const ServerDescription& description) -> bool {
+                return description.getAddress() == primaryAddress;
+            });
+        invariant(matchingServers.size() <= 1);
+        if (matchingServers.size() == 1) {
+            const auto& server = matchingServers.back();
+            if (server.getType() == ServerType::kUnknown) {
+                emitUpdateServerType(server, ServerType::kPossiblePrimary);
+            }
+        }
+    }
+
+    if (serverDescAddress != serverDescription.getMe()) {
+        emitServerRemoved(serverDescription);
+    }
+}
 
 void TopologyStateMachine::updateRSWithPrimaryFromMember(TopologyDescription&,
                                                          const ServerDescription&) {}
 
-void TopologyStateMachine::updateRSFromPrimary(TopologyDescription&, const ServerDescription&) {}
+void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDescription,
+                                               const ServerDescription& serverDescription) {
+    // if description.address not in topologyDescription.servers:
+    //  return
+    const auto& serverDescAddress = serverDescription.getAddress();
+    if (!topologyDescription.containsServerAddress(serverDescAddress)) {
+        return;
+    }
+    //
+    // if topologyDescription.setName is null:
+    //    topologyDescription.setName = description.setName
+    auto topologySetName = topologyDescription.getSetName();
+    auto serverDescSetName = serverDescription.getSetName();
+    if (topologySetName == boost::none) {
+        emitNewSetName(serverDescription.getSetName());
+    }
+    //
+    // else if topologyDescription.setName != description.setName:
+    //    # We found a primary but it doesn't have the setName
+    //    # provided by the user or previously discovered.
+    //    remove this server from topologyDescription and stop monitoring it
+    //    checkIfHasPrimary()
+    //    return
+    else if (topologySetName != serverDescSetName) {
+        // We found a primary but it doesn't have the setName
+        // provided by the user or previously discovered.
+        emitServerRemoved(serverDescription);
+        checkIfHasPrimary(topologyDescription, serverDescription);
+        return;
+    }
+    //
+    // if description.setVersion is not null and description.electionId is not null:
+    //    # Election ids are ObjectIds, see
+    //    # "using setVersion and electionId to detect stale primaries"
+    //    # for comparison rules.
+    //    if (topologyDescription.maxSetVersion is not null and
+    //        topologyDescription.maxElectionId is not null and (
+    //            topologyDescription.maxSetVersion > description.setVersion or (
+    //                topologyDescription.maxSetVersion == description.setVersion and
+    //                topologyDescription.maxElectionId > description.electionId
+    //            )
+    //        ):
+    //
+    //        # Stale primary.
+    //        replace description with a default ServerDescription of type "Unknown"
+    //        checkIfHasPrimary()
+    //        return
+    //
+    //    topologyDescription.maxElectionId = description.electionId
+    auto serverDescSetVersion = serverDescription.getSetVersion();
+    auto serverDescElectionId = serverDescription.getElectionId();
+    auto topologyMaxSetVersion = topologyDescription.getMaxSetVersion();
+    auto topologyMaxElectionId = topologyDescription.getMaxElectionId();
+    if (serverDescSetVersion && serverDescElectionId) {
+        if (topologyMaxSetVersion && topologyMaxElectionId &&
+            ((topologyMaxSetVersion > serverDescSetVersion) ||
+             (topologyMaxSetVersion == serverDescSetVersion &&
+              (*topologyMaxElectionId).compare(*serverDescElectionId) > 0))) {
+            // stale primary
+            emitReplaceServer(ServerDescription(serverDescription.getAddress()));
+            checkIfHasPrimary(topologyDescription, serverDescription);
+            return;
+        }
+        emitNewMaxElectionId(*serverDescription.getElectionId());
+    }
+
+
+    //
+    // if (description.setVersion is not null and
+    //    (topologyDescription.maxSetVersion is null or
+    //        description.setVersion > topologyDescription.maxSetVersion)):
+    //
+    //    topologyDescription.maxSetVersion = description.setVersion
+    if (serverDescSetVersion &&
+        (!topologyMaxSetVersion || (serverDescSetVersion > topologyMaxSetVersion))) {
+        emitNewMaxSetVersion(*serverDescSetVersion);
+    }
+    //
+    // for each server in topologyDescription.servers:
+    //    if server.address != description.address:
+    //        if server.type is RSPrimary:
+    //            # See note below about invalidating an old primary.
+    //            replace the server with a default ServerDescription of type "Unknown"
+    auto oldPrimaries = topologyDescription.findServers([serverDescAddress](const ServerDescription& description) {
+        return (description.getAddress() != serverDescAddress && description.getType() == ServerType::kRSPrimary);
+    });
+    invariant(oldPrimaries.size() <= 1); // TODO: verify this
+    for (const auto& server: oldPrimaries) {
+        emitReplaceServer(ServerDescription(server.getAddress()));
+    }
+    //
+    // for each address in description's "hosts", "passives", and "arbiters":
+    //    if address is not in topologyDescription.servers:
+    //        add new default ServerDescription of type "Unknown"
+    //        begin monitoring the new server
+    //
+    // for each server in topologyDescription.servers:
+    //    if server.address not in description's "hosts", "passives", or "arbiters":
+    //        remove the server and stop monitoring it
+    //
+    // checkIfHasPrimary()
+}
 
 void TopologyStateMachine::removeAndStopMonitoring(TopologyDescription&, const ServerDescription&) {
 }
@@ -153,22 +323,73 @@ void TopologyStateMachine::removeAndCheckIfHasPrimary(TopologyDescription&,
                                                       const ServerDescription&) {}
 
 TransitionAction TopologyStateMachine::setTopologyType(TopologyType type) {
-    return [=](TopologyDescription& topologyDescription, const ServerDescription& newServerDescription) {
-        topologyDescription.setType(type);
-    };
+    return [this, type](TopologyDescription& topologyDescription,
+                        const ServerDescription& newServerDescription) { emitTypeChange(type); };
 }
 
 TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSFromPrimary(TopologyType type) {
-    return [=](TopologyDescription& topologyDescription, const ServerDescription& newServerDescription) {
-      topologyDescription.setType(type);
-      updateRSFromPrimary(topologyDescription, newServerDescription);
+    return [this, type](TopologyDescription& topologyDescription,
+                        const ServerDescription& newServerDescription) {
+        emitTypeChange(type);
+        updateRSFromPrimary(topologyDescription, newServerDescription);
     };
 }
 
 TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType type) {
-    return [=](TopologyDescription& topologyDescription, const ServerDescription& newServerDescription) {
-      topologyDescription.setType(type);
-      updateRSWithoutPrimary(topologyDescription, newServerDescription);
+    return [this, type](TopologyDescription& topologyDescription,
+                        const ServerDescription& newServerDescription) {
+        emitTypeChange(type);
+        updateRSWithoutPrimary(topologyDescription, newServerDescription);
     };
+}
+
+// TODO: refactor these for redundancy
+void TopologyStateMachine::emitServerRemoved(const ServerDescription& serverDescription) {
+    for (auto observer : _observers) {
+        observer->onServerDescriptionRemoved(serverDescription);
+    }
+}
+
+void TopologyStateMachine::emitTypeChange(TopologyType topologyType) {
+    for (auto observer : _observers) {
+        observer->onTypeChange(topologyType);
+    }
+}
+
+void TopologyStateMachine::emitNewSetName(const boost::optional<std::string>& setName) {
+    for (auto observer : _observers) {
+        observer->onNewSetName(setName);
+    }
+}
+
+void TopologyStateMachine::emitNewServer(ServerDescription newServerDescription) {
+    for (auto observer : _observers) {
+        observer->onNewServerDescription(newServerDescription);
+    }
+}
+
+void TopologyStateMachine::emitUpdateServerType(const ServerDescription& serverDescription,
+                                                ServerType newServerType) {
+    for (auto observer : _observers) {
+        observer->onUpdatedServerType(serverDescription, newServerType);
+    }
+}
+
+void TopologyStateMachine::emitReplaceServer(ServerDescription newServerDescription) {
+    for (auto observer : _observers) {
+        observer->onUpdateServerDescription(newServerDescription);
+    }
+}
+
+void TopologyStateMachine::emitNewMaxElectionId(const OID& newMaxElectionId) {
+    for (auto observer : _observers) {
+        observer->onNewMaxElectionId(newMaxElectionId);
+    }
+}
+
+void TopologyStateMachine::emitNewMaxSetVersion(int& newMaxSetVersion) {
+    for (auto observer : _observers) {
+        observer->onNewMaxSetVersion(newMaxSetVersion);
+    }
 }
 }  // namespace mongo::sdam

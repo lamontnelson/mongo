@@ -141,9 +141,10 @@ public:
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
     const Milliseconds& getHeartBeatFrequency() const;
 
-private:
-    stdx::mutex _mutex;
+    bool containsServerAddress(ServerAddress address) const;
+    std::vector<ServerDescription> findServers(std::function<bool(const ServerDescription&)> predicate);
 
+private:
     // unique id for this topology
     UUID _id = UUID::gen();
 
