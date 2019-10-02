@@ -54,9 +54,10 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
     using namespace std::placeholders;
 
     // init the table to No-ops
+    const TransitionAction NO_OP([](TopologyDescription&, const ServerDescription&) {});
     _stt.resize(allTopologyTypes().size() + 1);
     for (auto& row : _stt) {
-        row.resize(allServerTypes().size() + 1);
+        row.resize(allServerTypes().size() + 1, NO_OP);
     }
 
     // From TopologyType: Unknown
