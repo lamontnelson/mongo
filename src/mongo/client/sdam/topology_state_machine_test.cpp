@@ -124,7 +124,7 @@ protected:
 
 TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
     using T = TopologyTypeTestCase;
-    // test cases that should change TopologyType
+    // test cases that should not change TopologyType
     std::vector<TopologyTypeTestCase> testCases{
         T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kUnknown, TopologyType::kUnknown},
         T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kStandalone, TopologyType::kUnknown},
