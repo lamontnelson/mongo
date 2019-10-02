@@ -116,6 +116,16 @@ std::vector<ServerDescription> TopologyDescription::findServers(
     }
     return result;
 }
+void TopologyDescription::installServerDescription(const ServerDescription& newServerDescription) {
+    for (auto it=_servers.begin(); it != _servers.end(); ++it) {
+        const auto& currentDescription = *it;
+        if (currentDescription.getAddress() == newServerDescription.getAddress()) {
+            *it = newServerDescription;
+            return;
+        }
+    }
+    _servers.push_back(newServerDescription);
+}
 
 
 SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,

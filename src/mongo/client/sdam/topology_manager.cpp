@@ -28,11 +28,35 @@
  */
 #include "topology_manager.h"
 namespace mongo::sdam {
-TopologyMangager::TopologyMangager(executor::TaskExecutor* taskExecutor,
-                                   const SdamConfiguration& config)
+TopologyManager::TopologyManager(executor::TaskExecutor* taskExecutor,
+                                 const SdamConfiguration& config)
     : _taskExecutor(taskExecutor), _topologyDescription(config), _stateMachine(config) {
     invariant(_taskExecutor);
+    _stateMachine.addObserver(std::shared_ptr<TopologyObserver>(new TopologyManagerObserver(this)));
 }
 
-void TopologyMangager::onServerDescription(const ServerDescription& description) {}
+void TopologyManager::addObserver(std::shared_ptr<TopologyObserver> observer) {
+    _stateMachine.addObserver(std::move(observer));
+}
+
+void TopologyManager::onServerDescription(const ServerDescription& description) {}
+
+
+TopologyManagerObserver::TopologyManagerObserver(TopologyManager* manager) { _manager = manager; }
+void TopologyManagerObserver::onTypeChange(TopologyType topologyType) {
+    _manager->_topologyDescription.setType(topologyType);
+}
+void TopologyManagerObserver::onNewSetName(boost::optional<std::string> setName) {}
+void TopologyManagerObserver::onUpdatedServerType(const ServerDescription& serverDescription,
+                                                  ServerType newServerType) {}
+void TopologyManagerObserver::onNewMaxElectionId(const OID& newMaxElectionId) {}
+void TopologyManagerObserver::onNewMaxSetVersion(int newMaxSetVersion) {}
+void TopologyManagerObserver::onNewServerDescription(
+    const ServerDescription& newServerDescription) {
+    _manager->_topologyDescription.installServerDescription(newServerDescription);
+}
+void TopologyManagerObserver::onUpdateServerDescription(
+    const ServerDescription& newServerDescription) {}
+void TopologyManagerObserver::onServerDescriptionRemoved(
+    const ServerDescription& serverDescription) {}
 }  // namespace mongo::sdam

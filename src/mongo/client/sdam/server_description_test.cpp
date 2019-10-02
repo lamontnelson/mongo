@@ -40,20 +40,8 @@
 
 namespace mongo {
 using namespace std;
-template std::ostream& operator<<(std::ostream& os,
-                                  const std::vector<mongo::sdam::ServerDescription>& v);
-template std::ostream& operator<<(std::ostream& os, const std::set<std::string>& s);
-template std::ostream& operator<<(std::ostream& os, const std::map<std::string, std::string>& m);
 
 namespace sdam {
-using mongo::operator<<;
-
-ostream& operator<<(ostream& os, ServerType serverType) {
-    os << toString(serverType);
-    return os;
-}
-
-
 TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
     ServerDescription a("foo:1234");
     ServerDescription b("FOo:1234");

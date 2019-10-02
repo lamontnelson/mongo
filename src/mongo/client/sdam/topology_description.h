@@ -40,9 +40,6 @@
 #include "mongo/platform/basic.h"
 
 namespace mongo::sdam {
-
-class SdamConstants {};
-
 class SdamConfiguration {
 public:
     SdamConfiguration() : SdamConfiguration(boost::none){};
@@ -142,7 +139,14 @@ public:
     const Milliseconds& getHeartBeatFrequency() const;
 
     bool containsServerAddress(ServerAddress address) const;
-    std::vector<ServerDescription> findServers(std::function<bool(const ServerDescription&)> predicate);
+    std::vector<ServerDescription> findServers(
+        std::function<bool(const ServerDescription&)> predicate);
+
+    // replaces or adds the given ServerDescription
+    // using the description's ServerAddress as the lookup key.
+    void installServerDescription(const ServerDescription& newServerDescription);
+
+    void setType(TopologyType type);
 
 private:
     // unique id for this topology
@@ -151,10 +155,6 @@ private:
     // a TopologyType enum value.
     TopologyType _type = TopologyType::kUnknown;
 
-public:
-    void setType(TopologyType type);
-
-private:
     // setName: the replica set name. Default null.
     boost::optional<std::string> _setName;
 

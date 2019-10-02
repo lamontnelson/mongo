@@ -27,6 +27,9 @@
  *    it in the license file.
  */
 #pragma once
+
+#include "mongo/client/sdam/sdam_datatypes.h"
+#include "mongo/client/sdam/server_description.h"
 #include "mongo/unittest/unittest.h"
 
 #include <map>
@@ -75,16 +78,24 @@ std::ostream& operator<<(std::ostream& os, const std::map<K, V>& m) {
     return os;
 }
 
+template std::ostream& operator<<(std::ostream& os, const std::vector<mongo::sdam::ServerDescription>& v);
+template std::ostream& operator<<(std::ostream& os, const std::set<std::string>& s);
+template std::ostream& operator<<(std::ostream& os, const std::map<std::string, std::string>& m);
+
 namespace sdam {
+
+std::ostream& operator<<(std::ostream& os, ServerType serverType);
+std::ostream& operator<<(std::ostream& os, TopologyType topologyType);
 
 class SdamTestFixture : public mongo::unittest::Test {
 protected:
     template <typename T, typename U>
     std::vector<U> map(std::vector<T> source, std::function<U(const T&)> f) {
         std::vector<U> result;
-        std::transform(source.begin(), source.end(), std::back_inserter(result), [f](const auto& item) {
-          return f(item);
-        });
+        std::transform(source.begin(),
+                       source.end(),
+                       std::back_inserter(result),
+                       [f](const auto& item) { return f(item); });
         return result;
     }
 

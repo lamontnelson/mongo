@@ -37,8 +37,8 @@ public:
     virtual void onTypeChange(TopologyType topologyType) = 0;
     virtual void onNewSetName(boost::optional<std::string> setName) = 0;
     virtual void onUpdatedServerType(const ServerDescription& serverDescription, ServerType newServerType) = 0;
-    virtual void onNewMaxElectionId(const OID& newMaxElectionId);
-    virtual void onNewMaxSetVersion(int newMaxSetVersion);
+    virtual void onNewMaxElectionId(const OID& newMaxElectionId) = 0;
+    virtual void onNewMaxSetVersion(int newMaxSetVersion) = 0;
     virtual void onNewServerDescription(const ServerDescription& newServerDescription) = 0;
     virtual void onUpdateServerDescription(const ServerDescription& newServerDescription) = 0;
     virtual void onServerDescriptionRemoved(const ServerDescription& serverDescription) = 0;

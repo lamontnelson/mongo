@@ -48,8 +48,8 @@ using StateTransitionTable = std::vector<StateTransitionTableRow>;
 
 class TopologyStateMachine {
 public:
-    TopologyStateMachine(const SdamConfiguration& config,
-                         std::vector<std::shared_ptr<TopologyObserver>> observers);
+    TopologyStateMachine(const SdamConfiguration& config);
+
 
     // Provide input to the state machine, and triggers the correct action based on the current
     // TopologyDescription and the incoming ServerDescription. The topology may be modified as a
@@ -57,8 +57,12 @@ public:
     void nextServerDescription(TopologyDescription& topologyDescription,
                                const ServerDescription& serverDescription);
 
+    void addObserver(std::shared_ptr<TopologyObserver> observer);
+
 private:
     void initTransitionTable();
+    void addUnknownServers(const TopologyDescription& topologyDescription,
+                           const ServerDescription& serverDescription);
 
     // transition actions
     void updateUnknownWithStandalone(TopologyDescription&, const ServerDescription&);

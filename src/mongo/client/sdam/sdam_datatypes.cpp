@@ -55,23 +55,40 @@ std::string toString(ServerType serverType) {
 
 const std::vector<ServerType> allServerTypes() {
     static auto const result = std::vector<ServerType>{ServerType::kStandalone,
-                                   ServerType::kMongos,
-                                   ServerType::kRSPrimary,
-                                   ServerType::kRSSecondary,
-                                   ServerType::kRSArbiter,
-                                   ServerType::kRSOther,
-                                   ServerType::kRSGhost,
-                                   ServerType::kUnknown};
+                                                       ServerType::kMongos,
+                                                       ServerType::kRSPrimary,
+                                                       ServerType::kRSSecondary,
+                                                       ServerType::kRSArbiter,
+                                                       ServerType::kRSOther,
+                                                       ServerType::kRSGhost,
+                                                       ServerType::kUnknown};
     return result;
 }
 
 const std::vector<TopologyType> allTopologyTypes() {
     static auto const result = std::vector<TopologyType>{TopologyType::kSingle,
-                                     TopologyType::kReplicaSetNoPrimary,
-                                     TopologyType::kReplicaSetWithPrimary,
-                                     TopologyType::kSharded,
-                                     TopologyType::kUnknown};
+                                                         TopologyType::kReplicaSetNoPrimary,
+                                                         TopologyType::kReplicaSetWithPrimary,
+                                                         TopologyType::kSharded,
+                                                         TopologyType::kUnknown};
     return result;
+}
+
+std::string toString(TopologyType topologyType) {
+    switch (topologyType) {
+        case TopologyType::kReplicaSetNoPrimary:
+            return "ReplicaSetNoPrimary";
+        case TopologyType::kReplicaSetWithPrimary:
+            return "ReplicaSetWithPrimary";
+        case TopologyType::kSharded:
+            return "Sharded";
+        case TopologyType::kUnknown:
+            return "Unknown";
+        case TopologyType::kSingle:
+            return "Single";
+        default:
+            MONGO_UNREACHABLE
+    }
 }
 
 

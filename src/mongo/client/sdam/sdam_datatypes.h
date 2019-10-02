@@ -52,6 +52,7 @@ enum class TopologyType {
     kUnknown
 };
 const std::vector<TopologyType> allTopologyTypes();
+std::string toString(TopologyType topologyType);
 
 enum class ServerType { kStandalone, kMongos, kRSPrimary, kPossiblePrimary, kRSSecondary, kRSArbiter, kRSOther, kRSGhost, kUnknown };
 const std::vector<ServerType> allServerTypes();

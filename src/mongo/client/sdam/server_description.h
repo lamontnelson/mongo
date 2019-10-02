@@ -36,7 +36,6 @@
 
 #include "mongo/bson/oid.h"
 #include "mongo/client/sdam/sdam_datatypes.h"
-#include "mongo/client/sdam/sdam_test_base.h"
 #include "mongo/db/repl/optime.h"
 #include "mongo/platform/basic.h"
 #include "mongo/util/clock_source.h"
