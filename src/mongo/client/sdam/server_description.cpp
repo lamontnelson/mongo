@@ -153,7 +153,7 @@ BSONObj ServerDescription::toBson() const {
     } else {
         bson.appendNull("opTime");
     }
-    bson.append("type", _type);
+    bson.append("type", toString(_type));
     bson.append("minWireVersion", _minWireVersion);
     bson.append("maxWireVersion", _maxWireVersion);
     if (_me) {

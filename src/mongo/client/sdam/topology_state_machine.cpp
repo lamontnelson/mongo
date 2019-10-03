@@ -149,6 +149,11 @@ void TopologyStateMachine::nextServerDescription(TopologyDescription& topologyDe
                                                  const ServerDescription& serverDescription) {
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
     topologyDescription.installServerDescription(serverDescription);
+    if (topologyDescription.containsServerAddress(serverDescription.getAddress())) {
+        emitNewServer(serverDescription);
+    } else {
+        emitReplaceServer(serverDescription);
+    }
     auto& action = _stt[idx(topologyDescription.getType())][idx(serverDescription.getType())];
     action(topologyDescription, serverDescription);
 }
@@ -408,6 +413,7 @@ void TopologyStateMachine::checkIfHasPrimary(TopologyDescription& topologyDescri
     if (foundPrimaries.size() > 0) {
         emitTypeChange(TopologyType::kReplicaSetWithPrimary);
     } else {
+        std::cout << topologyDescription.getServers() << std::endl;
         emitTypeChange(TopologyType::kReplicaSetNoPrimary);
     }
 }
@@ -426,6 +432,7 @@ TransitionAction TopologyStateMachine::setTopologyType(TopologyType type) {
 TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSFromPrimary(TopologyType type) {
     return [this, type](TopologyDescription& topologyDescription,
                         const ServerDescription& newServerDescription) {
+        std::cout << "change type to " << toString(type) << std::endl;
         emitTypeChange(type);
         updateRSFromPrimary(topologyDescription, newServerDescription);
     };

@@ -27,6 +27,7 @@
  *    it in the license file.
  */
 #include "mongo/client/sdam/topology_description.h"
+#include "mongo/client/sdam/sdam_test_base.h"
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/platform/basic.h"
@@ -35,12 +36,12 @@
 
 namespace mongo::sdam {
 TopologyDescription::TopologyDescription(SdamConfiguration config)
-    : _type(config.getInitialType()), _setName(config.getSetName()) {
+    : _type(config.getInitialType()), _setName(config.getSetName()), _topologyObserver(*this) {
 
     if (auto seeds = config.getSeedList()) {
         _servers.clear();
         for (auto address : *seeds) {
-            _servers.push_back(ServerDescription(address));
+            this->installServerDescription(ServerDescription(address));
         }
     }
 }
@@ -98,6 +99,7 @@ void TopologyDescription::setType(TopologyType type) {
 }
 
 bool TopologyDescription::containsServerAddress(ServerAddress address) const {
+    // TODO: index by address
     boost::to_lower(address);
     for (auto& serverDescription : _servers) {
         if (serverDescription.getAddress() == address)
@@ -117,7 +119,7 @@ std::vector<ServerDescription> TopologyDescription::findServers(
     return result;
 }
 void TopologyDescription::installServerDescription(const ServerDescription& newServerDescription) {
-    for (auto it=_servers.begin(); it != _servers.end(); ++it) {
+    for (auto it = _servers.begin(); it != _servers.end(); ++it) {
         const auto& currentDescription = *it;
         if (currentDescription.getAddress() == newServerDescription.getAddress()) {
             *it = newServerDescription;
@@ -175,5 +177,43 @@ Milliseconds SdamConfiguration::getMinHeartbeatFrequencyMs() const {
 }
 const boost::optional<std::string>& SdamConfiguration::getSetName() const {
     return _setName;
+}
+
+void TopologyDescription::Observer::onTypeChange(TopologyType topologyType) {
+    _parent.setType(topologyType);
+}
+void TopologyDescription::Observer::onNewSetName(boost::optional<std::string> setName) {
+    _parent._setName = setName;
+}
+void TopologyDescription::Observer::onUpdatedServerType(const ServerDescription& serverDescription,
+                                                        ServerType newServerType) {
+    // TODO: need to make ServerDescriptionBuilder start from an existing instance.
+}
+void TopologyDescription::Observer::onNewMaxElectionId(const OID& newMaxElectionId) {
+    _parent._maxElectionId = newMaxElectionId;
+}
+void TopologyDescription::Observer::onNewMaxSetVersion(int newMaxSetVersion) {
+    _parent._maxSetVersion = newMaxSetVersion;
+}
+void TopologyDescription::Observer::onNewServerDescription(
+    const ServerDescription& newServerDescription) {
+    _parent.installServerDescription(newServerDescription);
+    std::cout << "after install: " << _parent.getServers() << std::endl;
+}
+void TopologyDescription::Observer::onUpdateServerDescription(
+    const ServerDescription& serverDescription) {
+    std::cout << "here!!!!!!!!!! " << serverDescription;
+    _parent.installServerDescription(serverDescription);
+}
+void TopologyDescription::Observer::onServerDescriptionRemoved(
+    const ServerDescription& serverDescription) {
+    auto& servers = _parent._servers;
+    auto it = std::find_if(
+        servers.begin(), servers.end(), [serverDescription](const ServerDescription& description) {
+            return serverDescription.getAddress() == description.getAddress();
+        });
+    if (it != servers.end()) {
+        servers.erase(it);
+    }
 }
 };  // namespace mongo::sdam

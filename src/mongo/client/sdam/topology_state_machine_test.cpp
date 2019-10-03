@@ -37,7 +37,7 @@ class TopologyStateMachineTestFixture : public SdamTestFixture {
 protected:
     static inline const auto REPLICA_SET_NAME = "replica_set";
     static inline const auto LOCAL_SERVER = "localhost:123";
-    static inline const auto LOCAL_SERVER2 = "localhost:123";
+    static inline const auto LOCAL_SERVER2 = "localhost:456";
     static inline const auto TWO_SEED_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2});
 
@@ -64,10 +64,12 @@ protected:
             // TODO
         }
         void onNewServerDescription(const ServerDescription& newServerDescription) override {
+            std::cout << "new server: " << newServerDescription << "\n";
             newDescriptions.push_back(newServerDescription);
         }
-        void onUpdateServerDescription(const ServerDescription& newServerDescription) override {
-            updatedDescriptions.push_back(newServerDescription);
+        void onUpdateServerDescription(const ServerDescription& serverDescription) override {
+            std::cout << "update server: " << serverDescription << "\n";
+            updatedDescriptions.push_back(serverDescription);
         }
         void onServerDescriptionRemoved(const ServerDescription& serverDescription) override {
             removedDescriptions.push_back(serverDescription);
@@ -121,6 +123,16 @@ protected:
         return allExceptPrimary;
     }
 };
+
+TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
+    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
+    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
+    stateMachine.addObserver(observer);
+    auto serverDescription = ServerDescriptionBuilder().withAddress("serverDescription:1234").instance();
+    stateMachine.nextServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(serverDescription, observer->updatedDescriptions.front());
+}
 
 TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
     using T = TopologyTypeTestCase;

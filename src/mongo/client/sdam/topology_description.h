@@ -37,6 +37,7 @@
 #include "mongo/client/read_preference.h"
 #include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/client/sdam/topology_observer.h"
 #include "mongo/platform/basic.h"
 
 namespace mongo::sdam {
@@ -148,6 +149,25 @@ public:
 
     void setType(TopologyType type);
 
+protected:
+    class Observer : public TopologyObserver {
+        Observer() = delete;
+    public:
+        Observer(TopologyDescription& parent) : _parent(parent) {}
+        void onTypeChange(TopologyType topologyType) override;
+        void onNewSetName(boost::optional<std::string> setName) override;
+        void onUpdatedServerType(const ServerDescription& serverDescription,
+                                 ServerType newServerType) override;
+        void onNewMaxElectionId(const OID& newMaxElectionId) override;
+        void onNewMaxSetVersion(int newMaxSetVersion) override;
+        void onNewServerDescription(const ServerDescription& newServerDescription) override;
+        void onUpdateServerDescription(const ServerDescription& newServerDescription) override;
+        void onServerDescriptionRemoved(const ServerDescription& serverDescription) override;
+
+    private:
+        TopologyDescription& _parent;
+    };
+
 private:
     // unique id for this topology
     UUID _id = UUID::gen();
@@ -180,5 +200,7 @@ private:
 
     // logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
+
+    Observer _topologyObserver;
 };
 }  // namespace mongo::sdam

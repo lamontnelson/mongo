@@ -83,7 +83,7 @@ template std::ostream& operator<<(std::ostream& os, const std::set<std::string>&
 template std::ostream& operator<<(std::ostream& os, const std::map<std::string, std::string>& m);
 
 namespace sdam {
-
+using mongo::operator<<;
 std::ostream& operator<<(std::ostream& os, ServerType serverType);
 std::ostream& operator<<(std::ostream& os, TopologyType topologyType);
 
