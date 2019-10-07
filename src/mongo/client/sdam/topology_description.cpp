@@ -31,23 +31,22 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/db/wire_version.h"
 #include "mongo/platform/basic.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 
 namespace mongo::sdam {
 TopologyDescription::TopologyDescription(SdamConfiguration config)
-    : _type(config.getInitialType()), _setName(config.getSetName()), _topologyObserver(*this) {
+    : _type(config.getInitialType()),
+      _setName(config.getSetName()),
+      _topologyObserver(std::make_shared<Observer>(*this)) {
     if (auto seeds = config.getSeedList()) {
         _servers.clear();
         for (auto address : *seeds) {
             _servers.push_back(ServerDescription(address));
         }
     }
-}
-
-void TopologyDescription::onNewServerDescription(ServerDescription newDescription) {
-    // TODO:
 }
 
 bool TopologyDescription::hasReadableServer(boost::optional<ReadPreference> readPreference) {
@@ -119,7 +118,8 @@ std::vector<ServerDescription> TopologyDescription::findServers(
     return result;
 }
 
-boost::optional<ServerDescription> TopologyDescription::installServerDescription(const ServerDescription& newServerDescription) {
+boost::optional<ServerDescription> TopologyDescription::installServerDescription(
+    const ServerDescription& newServerDescription) {
     boost::optional<ServerDescription> previousDescription;
     if (getType() == TopologyType::kSingle) {
         // For Single, there is always one ServerDescription in TopologyDescription.servers;
@@ -140,6 +140,63 @@ boost::optional<ServerDescription> TopologyDescription::installServerDescription
         _servers.push_back(newServerDescription);
     }
     return previousDescription;
+}
+
+void TopologyDescription::checkWireCompatibilityVersions() {
+    const WireVersionInfo supportedWireVersion = WireSpec::instance().outgoing;
+    bool compatible = true;
+    std::ostringstream errorOss;
+
+    for (const auto& serverDescription : _servers) {
+        if (serverDescription.getMinWireVersion() > supportedWireVersion.maxWireVersion) {
+            compatible = false;
+            errorOss << "Server at " << serverDescription.getAddress() << " requires wire version "
+                     << serverDescription.getMinWireVersion()
+                     << " but this version of mongo only supports up to "
+                     << supportedWireVersion.maxWireVersion << ".";
+            break;
+        } else if (serverDescription.getMaxWireVersion() < supportedWireVersion.minWireVersion) {
+            compatible = false;
+            const auto& mongoVersion =
+                minimumRequiredMongoVersionString(supportedWireVersion.minWireVersion);
+            errorOss << "Server at " << serverDescription.getAddress() << " requires wire version "
+                     << serverDescription.getMaxWireVersion()
+                     << " but this version of mongo requires at least "
+                     << supportedWireVersion.minWireVersion << " (MongoDB " << mongoVersion << ").";
+            break;
+        }
+    }
+
+    _compatible = compatible;
+    if (!compatible) {
+        _compatibleError = errorOss.str();
+    } else {
+        _compatibleError = boost::none;
+    }
+}
+const std::string TopologyDescription::minimumRequiredMongoVersionString(int version) {
+    // TODO: need versions for AGG_RETURNS_CURSORS, BATCH_COMMANDS, RELEASE_2_4_AND_BEFORE,
+    // FIND_COMMAND, COMMANDS_ACCEPT_WRITE_CONCERN
+    switch (version) {
+        case RELEASE_2_4_AND_BEFORE:
+            return "1.0";
+        case RELEASE_2_7_7:
+            return "2.7.7";
+        case SUPPORTS_OP_MSG:
+            return "3.6";
+        case REPLICA_SET_TRANSACTIONS:
+            return "4.0";
+        case SHARDED_TRANSACTIONS:
+            return "4.2";
+        case PLACEHOLDER_FOR_44:
+            return "4.4";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+const std::shared_ptr<TopologyObserver> TopologyDescription::getTopologyObserver() const {
+    return checked_pointer_cast<TopologyObserver>(_topologyObserver);
 }
 
 SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,

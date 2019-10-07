@@ -111,13 +111,6 @@ public:
 
 
     /**
-     * Each time the client checks a server, it processes the outcome (successful or not) to create
-     * a ServerDescription, and this method is called to update its TopologyDescription
-     * @param newDescription
-     */
-    void onNewServerDescription(ServerDescription newDescription);
-
-    /**
      * Determines if the topology has a readable server available.
      */
     bool hasReadableServer(
@@ -149,6 +142,7 @@ public:
         const ServerDescription& newServerDescription);
 
     void setType(TopologyType type);
+    const std::shared_ptr<TopologyObserver> getTopologyObserver() const;
 
 protected:
     class Observer : public TopologyObserver {
@@ -171,6 +165,17 @@ protected:
     };
 
 private:
+    /**
+     * Checks if all server descriptions are compatible with this server's WireVersion. If an
+     * incompatible description is found, we set the topologyDescription's _compatible flag to false
+     * and store an error message in _compatibleError. A ServerDescription which is not Unknown is
+     * incompatible if:
+     *  minWireVersion > serverMaxWireVersion, or maxWireVersion < serverMinWireVersion
+     */
+    void checkWireCompatibilityVersions();
+
+    const std::string minimumRequiredMongoVersionString(int version);
+
     // unique id for this topology
     UUID _id = UUID::gen();
 
@@ -203,6 +208,6 @@ private:
     // logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 
-    Observer _topologyObserver;
+    std::shared_ptr<Observer> _topologyObserver;
 };
 }  // namespace mongo::sdam

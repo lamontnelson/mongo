@@ -50,7 +50,6 @@ class TopologyStateMachine {
 public:
     TopologyStateMachine(const SdamConfiguration& config);
 
-
     // Provide input to the state machine, and triggers the correct action based on the current
     // TopologyDescription and the incoming ServerDescription. The topology may be modified as a
     // result. This is safe to call from multiple threads.
