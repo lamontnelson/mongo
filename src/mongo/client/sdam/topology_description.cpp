@@ -143,23 +143,23 @@ boost::optional<ServerDescription> TopologyDescription::installServerDescription
 
 void TopologyDescription::checkWireCompatibilityVersions() {
     const WireVersionInfo supportedWireVersion = WireSpec::instance().outgoing;
-    bool compatible = true;
     std::ostringstream errorOss;
 
+    _compatible = true;
     for (const auto& serverDescription : _servers) {
         if (serverDescription.getType() == ServerType::kUnknown) {
             continue;
         }
 
         if (serverDescription.getMinWireVersion() > supportedWireVersion.maxWireVersion) {
-            compatible = false;
+            _compatible = false;
             errorOss << "Server at " << serverDescription.getAddress() << " requires wire version "
                      << serverDescription.getMinWireVersion()
                      << " but this version of mongo only supports up to "
                      << supportedWireVersion.maxWireVersion << ".";
             break;
         } else if (serverDescription.getMaxWireVersion() < supportedWireVersion.minWireVersion) {
-            compatible = false;
+            _compatible = false;
             const auto& mongoVersion =
                 minimumRequiredMongoVersionString(supportedWireVersion.minWireVersion);
             errorOss << "Server at " << serverDescription.getAddress() << " requires wire version "
@@ -170,12 +170,7 @@ void TopologyDescription::checkWireCompatibilityVersions() {
         }
     }
 
-    _compatible = compatible;
-    if (!compatible) {
-        _compatibleError = errorOss.str();
-    } else {
-        _compatibleError = boost::none;
-    }
+    _compatibleError = (_compatible) ? boost::none : boost::make_optional(errorOss.str());
 }
 const std::string TopologyDescription::minimumRequiredMongoVersionString(int version) {
     // TODO: need versions for AGG_RETURNS_CURSORS, BATCH_COMMANDS, RELEASE_2_4_AND_BEFORE,
