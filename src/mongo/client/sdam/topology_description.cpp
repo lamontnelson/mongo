@@ -147,6 +147,10 @@ void TopologyDescription::checkWireCompatibilityVersions() {
     std::ostringstream errorOss;
 
     for (const auto& serverDescription : _servers) {
+        if (serverDescription.getType() == ServerType::kUnknown) {
+            continue;
+        }
+
         if (serverDescription.getMinWireVersion() > supportedWireVersion.maxWireVersion) {
             compatible = false;
             errorOss << "Server at " << serverDescription.getAddress() << " requires wire version "

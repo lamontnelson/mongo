@@ -187,5 +187,23 @@ TEST_F(TopologyDescriptionTestFixture,
     ASSERT_NOT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
     // TODO: assert exact text
 }
+
+TEST_F(TopologyDescriptionTestFixture, ShouldNotSetWireCompatibilityErrorWhenServerTypeIsUnknown) {
+    const auto outgoingMinWireVersion = WireSpec::instance().outgoing.minWireVersion;
+    const auto config =
+        SdamConfiguration(ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
+    TopologyDescription topologyDescription(config);
+    const auto serverDescriptionMinVersion = ServerDescriptionBuilder()
+                                                 .withAddress(ONE_SERVER[0])
+                                                 .withMe(ONE_SERVER[0])
+                                                 .withType(ServerType::kUnknown)
+                                                 .withMaxWireVersion(outgoingMinWireVersion - 1)
+                                                 .instance();
+
+    ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
+    topologyDescription.getTopologyObserver()->onUpdateServerDescription(
+        serverDescriptionMinVersion);
+    ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
+}
 };  // namespace sdam
 };  // namespace mongo
