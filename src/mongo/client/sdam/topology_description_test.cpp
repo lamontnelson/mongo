@@ -32,9 +32,9 @@
 #include <boost/optional/optional_io.hpp>
 
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/db/wire_version.h"
 #include "mongo/unittest/death_test.h"
 #include "mongo/unittest/unittest.h"
-#include "mongo/db/wire_version.h"
 
 namespace mongo {
 template std::ostream& operator<<(std::ostream& os,
@@ -148,38 +148,42 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowChangingTheHeartbeatFrequen
         ErrorCodes::InvalidHeartBeatFrequency);
 }
 
-TEST_F(TopologyDescriptionTestFixture, ShouldSetWireCompatibilityErrorForMinWireVersionWhenMinWireVersionIsGreater) {
+TEST_F(TopologyDescriptionTestFixture,
+       ShouldSetWireCompatibilityErrorForMinWireVersionWhenMinWireVersionIsGreater) {
     const auto outgoingMaxWireVersion = WireSpec::instance().outgoing.maxWireVersion;
-    const auto config = SdamConfiguration(
-        ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
+    const auto config =
+        SdamConfiguration(ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
     const auto serverDescriptionMinVersion = ServerDescriptionBuilder()
-        .withAddress(ONE_SERVER[0])
-        .withMe(ONE_SERVER[0])
-        .withType(ServerType::kRSSecondary)
-        .withMinWireVersion(outgoingMaxWireVersion+1)
-        .instance();
+                                                 .withAddress(ONE_SERVER[0])
+                                                 .withMe(ONE_SERVER[0])
+                                                 .withType(ServerType::kRSSecondary)
+                                                 .withMinWireVersion(outgoingMaxWireVersion + 1)
+                                                 .instance();
 
-    ASSERT_EQUALS( boost::none, topologyDescription.getWireVersionCompatibleError());
-    topologyDescription.getTopologyObserver()->onUpdateServerDescription(serverDescriptionMinVersion);
+    ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
+    topologyDescription.getTopologyObserver()->onUpdateServerDescription(
+        serverDescriptionMinVersion);
     ASSERT_NOT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
     // TODO: assert exact text
 }
 
-TEST_F(TopologyDescriptionTestFixture, ShouldSetWireCompatibilityErrorForMinWireVersionWhenMaxWireVersionIsLess) {
+TEST_F(TopologyDescriptionTestFixture,
+       ShouldSetWireCompatibilityErrorForMinWireVersionWhenMaxWireVersionIsLess) {
     const auto outgoingMinWireVersion = WireSpec::instance().outgoing.minWireVersion;
-    const auto config = SdamConfiguration(
-        ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
+    const auto config =
+        SdamConfiguration(ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
     const auto serverDescriptionMinVersion = ServerDescriptionBuilder()
-        .withAddress(ONE_SERVER[0])
-        .withMe(ONE_SERVER[0])
-        .withType(ServerType::kRSSecondary)
-        .withMaxWireVersion(outgoingMinWireVersion-1)
-        .instance();
+                                                 .withAddress(ONE_SERVER[0])
+                                                 .withMe(ONE_SERVER[0])
+                                                 .withType(ServerType::kRSSecondary)
+                                                 .withMaxWireVersion(outgoingMinWireVersion - 1)
+                                                 .instance();
 
-    ASSERT_EQUALS( boost::none, topologyDescription.getWireVersionCompatibleError());
-    topologyDescription.getTopologyObserver()->onUpdateServerDescription(serverDescriptionMinVersion);
+    ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
+    topologyDescription.getTopologyObserver()->onUpdateServerDescription(
+        serverDescriptionMinVersion);
     ASSERT_NOT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
     // TODO: assert exact text
 }

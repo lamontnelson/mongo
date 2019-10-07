@@ -32,7 +32,6 @@
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/db/wire_version.h"
-#include "mongo/platform/basic.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 
@@ -251,28 +250,38 @@ const boost::optional<std::string>& SdamConfiguration::getSetName() const {
 void TopologyDescription::Observer::onTypeChange(TopologyType topologyType) {
     _parent.setType(topologyType);
 }
+
 void TopologyDescription::Observer::onNewSetName(boost::optional<std::string> setName) {
     _parent._setName = setName;
 }
+
 void TopologyDescription::Observer::onUpdatedServerType(const ServerDescription& serverDescription,
                                                         ServerType newServerType) {
     // TODO: need to make ServerDescriptionBuilder start from an existing instance.
 }
+
 void TopologyDescription::Observer::onNewMaxElectionId(const OID& newMaxElectionId) {
     _parent._maxElectionId = newMaxElectionId;
 }
+
 void TopologyDescription::Observer::onNewMaxSetVersion(int newMaxSetVersion) {
     _parent._maxSetVersion = newMaxSetVersion;
 }
+
 void TopologyDescription::Observer::onNewServerDescription(
     const ServerDescription& newServerDescription) {
     LOG(3) << "SDAM: Install new server description: " << newServerDescription << std::endl;
     _parent.installServerDescription(newServerDescription);
+    _parent.checkWireCompatibilityVersions();
 }
+
 void TopologyDescription::Observer::onUpdateServerDescription(
     const ServerDescription& serverDescription) {
+    LOG(3) << "SDAM: Replace existing server description: " << serverDescription << std::endl;
     _parent.installServerDescription(serverDescription);
+    _parent.checkWireCompatibilityVersions();
 }
+
 void TopologyDescription::Observer::onServerDescriptionRemoved(
     const ServerDescription& serverDescription) {
     auto& servers = _parent._servers;
