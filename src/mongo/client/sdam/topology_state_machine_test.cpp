@@ -133,6 +133,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
                                  .instance();
     stateMachine.nextServerDescription(topologyDescription, serverDescription);
     ASSERT_EQUALS(std::vector<ServerDescription>{serverDescription}, observer->updatedDescriptions);
+    ASSERT_EQUALS(TopologyType::kSingle, topologyDescription.getType());
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
