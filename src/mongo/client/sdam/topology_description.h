@@ -143,15 +143,17 @@ public:
     std::vector<ServerDescription> findServers(
         std::function<bool(const ServerDescription&)> predicate);
 
-    // replaces or adds the given ServerDescription
-    // using the description's ServerAddress as the lookup key.
-    void installServerDescription(const ServerDescription& newServerDescription);
+    // Replaces or adds the given ServerDescription using the description's ServerAddress as the
+    // lookup key. If present, the previous server description is returned.
+    boost::optional<ServerDescription> installServerDescription(
+        const ServerDescription& newServerDescription);
 
     void setType(TopologyType type);
 
 protected:
     class Observer : public TopologyObserver {
         Observer() = delete;
+
     public:
         Observer(TopologyDescription& parent) : _parent(parent) {}
         void onTypeChange(TopologyType topologyType) override;

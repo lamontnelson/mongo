@@ -148,14 +148,20 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
 void TopologyStateMachine::nextServerDescription(TopologyDescription& topologyDescription,
                                                  const ServerDescription& serverDescription) {
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
+    bool isExistingServer =
+        topologyDescription.containsServerAddress(serverDescription.getAddress());
     topologyDescription.installServerDescription(serverDescription);
-    if (topologyDescription.containsServerAddress(serverDescription.getAddress())) {
-        emitNewServer(serverDescription);
-    } else {
+
+    if (isExistingServer) {
         emitReplaceServer(serverDescription);
+    } else {
+        emitNewServer(serverDescription);
     }
-    auto& action = _stt[idx(topologyDescription.getType())][idx(serverDescription.getType())];
-    action(topologyDescription, serverDescription);
+
+    if (topologyDescription.getType() != TopologyType::kSingle) {
+        auto& action = _stt[idx(topologyDescription.getType())][idx(serverDescription.getType())];
+        action(topologyDescription, serverDescription);
+    }
 }
 
 void TopologyStateMachine::updateUnknownWithStandalone(TopologyDescription& topologyDescription,

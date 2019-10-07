@@ -38,11 +38,10 @@
 namespace mongo::sdam {
 TopologyDescription::TopologyDescription(SdamConfiguration config)
     : _type(config.getInitialType()), _setName(config.getSetName()), _topologyObserver(*this) {
-
     if (auto seeds = config.getSeedList()) {
         _servers.clear();
         for (auto address : *seeds) {
-            this->installServerDescription(ServerDescription(address));
+            _servers.push_back(ServerDescription(address));
         }
     }
 }
@@ -119,17 +118,29 @@ std::vector<ServerDescription> TopologyDescription::findServers(
     }
     return result;
 }
-void TopologyDescription::installServerDescription(const ServerDescription& newServerDescription) {
-    for (auto it = _servers.begin(); it != _servers.end(); ++it) {
-        const auto& currentDescription = *it;
-        if (currentDescription.getAddress() == newServerDescription.getAddress()) {
-            *it = newServerDescription;
-            return;
-        }
-    }
-    _servers.push_back(newServerDescription);
-}
 
+boost::optional<ServerDescription> TopologyDescription::installServerDescription(const ServerDescription& newServerDescription) {
+    boost::optional<ServerDescription> previousDescription;
+    if (getType() == TopologyType::kSingle) {
+        // For Single, there is always one ServerDescription in TopologyDescription.servers;
+        // the ServerDescription in TopologyDescription.servers MUST be replaced with the new
+        // ServerDescription.
+        invariant(_servers.size() == 1);
+        previousDescription = _servers[0];
+        _servers[0] = newServerDescription;
+    } else {
+        for (auto it = _servers.begin(); it != _servers.end(); ++it) {
+            const auto& currentDescription = *it;
+            if (currentDescription.getAddress() == newServerDescription.getAddress()) {
+                previousDescription = *it;
+                *it = newServerDescription;
+                return previousDescription;
+            }
+        }
+        _servers.push_back(newServerDescription);
+    }
+    return previousDescription;
+}
 
 SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
                                      TopologyType initialType,

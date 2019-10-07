@@ -40,6 +40,8 @@ protected:
     static inline const auto LOCAL_SERVER2 = "localhost:456";
     static inline const auto TWO_SEED_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2});
+    static inline const auto SINGLE_CONFIG =
+        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER}, TopologyType::kSingle);
 
     // Given we in 'starting' state with initial config 'initialConfig'. We receive a
     // ServerDescription with type 'incoming', and expected the ending topology state to be
@@ -119,7 +121,21 @@ protected:
     }
 };
 
-TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
+TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTopology) {
+    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    TopologyDescription topologyDescription(SINGLE_CONFIG);
+    TopologyStateMachine stateMachine(SINGLE_CONFIG);
+    stateMachine.addObserver(observer);
+    auto serverDescription = ServerDescriptionBuilder()
+                                 .withAddress(LOCAL_SERVER)
+                                 .withMe("foo:1234")
+                                 .withType(ServerType::kStandalone)
+                                 .instance();
+    stateMachine.nextServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(std::vector<ServerDescription>{serverDescription}, observer->updatedDescriptions);
+}
+
+ TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
@@ -127,17 +143,17 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     auto serverDescription =
         ServerDescriptionBuilder().withAddress("serverDescription:1234").instance();
     stateMachine.nextServerDescription(topologyDescription, serverDescription);
-    ASSERT_EQUALS(serverDescription, observer->updatedDescriptions.front());
+    ASSERT_EQUALS(serverDescription, observer->newDescriptions.front());
 }
 
-TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
+ TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
     using T = TopologyTypeTestCase;
     // test cases that should not change TopologyType
     std::vector<TopologyTypeTestCase> testCases{
         T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kUnknown, TopologyType::kUnknown},
-        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kStandalone, TopologyType::kUnknown},
-        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kRSGhost, TopologyType::kUnknown},
-        T{TWO_SEED_CONFIG,
+        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kStandalone,
+        TopologyType::kUnknown}, T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kRSGhost,
+        TopologyType::kUnknown}, T{TWO_SEED_CONFIG,
           TopologyType::kReplicaSetNoPrimary,
           ServerType::kUnknown,
           TopologyType::kReplicaSetNoPrimary},
@@ -171,7 +187,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
 }
 
 
-TEST_F(TopologyStateMachineTestFixture, ShouldUpdateToCorrectToplogyType) {
+ TEST_F(TopologyStateMachineTestFixture, ShouldUpdateToCorrectToplogyType) {
     using T = TopologyTypeTestCase;
 
     // test cases that should change TopologyType
