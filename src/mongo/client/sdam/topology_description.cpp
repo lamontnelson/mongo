@@ -134,7 +134,7 @@ boost::optional<ServerDescription> TopologyDescription::installServerDescription
             if (currentDescription.getAddress() == newServerDescription.getAddress()) {
                 previousDescription = *it;
                 *it = newServerDescription;
-                return previousDescription;
+                break;
             }
         }
         _servers.push_back(newServerDescription);
