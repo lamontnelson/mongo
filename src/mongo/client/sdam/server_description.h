@@ -78,6 +78,7 @@ public:
 
     bool isDataBearingServer() const;
     BSONObj toBson() const;
+    std::string toString() const;
 
 private:
     static inline const std::set<ServerType> DATA_SERVER_TYPES{ServerType::kMongos,

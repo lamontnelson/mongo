@@ -84,8 +84,6 @@ template std::ostream& operator<<(std::ostream& os, const std::map<std::string, 
 
 namespace sdam {
 using mongo::operator<<;
-std::ostream& operator<<(std::ostream& os, ServerType serverType);
-std::ostream& operator<<(std::ostream& os, TopologyType topologyType);
 
 class SdamTestFixture : public mongo::unittest::Test {
 protected:

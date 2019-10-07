@@ -25,18 +25,18 @@ env.Library(
 
 env.CppUnitTest(
     target='topology_description_test',
-    source=['topology_description_test.cpp', 'sdam_test_base.cpp'],
+    source=['topology_description_test.cpp'],
     LIBDEPS=['sdam'],
 )
 
 env.CppUnitTest(
     target='server_description_test',
-    source=['server_description_test.cpp', 'sdam_test_base.cpp'],
+    source=['server_description_test.cpp'],
     LIBDEPS=['sdam'],
 )
 
 env.CppUnitTest(
     target='topology_state_machine_test',
-    source=['topology_state_machine_test.cpp', 'sdam_test_base.cpp'],
+    source=['topology_state_machine_test.cpp'],
     LIBDEPS=['sdam'],
 )

@@ -52,11 +52,23 @@ enum class TopologyType {
     kUnknown
 };
 const std::vector<TopologyType> allTopologyTypes();
-std::string toString(TopologyType topologyType);
+std::string toString(const TopologyType topologyType);
+std::ostream& operator<<(std::ostream& os, const TopologyType topologyType);
 
-enum class ServerType { kStandalone, kMongos, kRSPrimary, kPossiblePrimary, kRSSecondary, kRSArbiter, kRSOther, kRSGhost, kUnknown };
+enum class ServerType {
+    kStandalone,
+    kMongos,
+    kRSPrimary,
+    kPossiblePrimary,
+    kRSSecondary,
+    kRSArbiter,
+    kRSOther,
+    kRSGhost,
+    kUnknown
+};
 const std::vector<ServerType> allServerTypes();
-std::string toString(ServerType serverType);
+std::string toString(const ServerType serverType);
+std::ostream& operator<<(std::ostream& os, const ServerType serverType);
 
 using ServerAddress = std::string;
 using IsMasterLatency = mongo::Nanoseconds;

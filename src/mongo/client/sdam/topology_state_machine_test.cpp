@@ -53,22 +53,17 @@ protected:
 
     struct StateMachineObserver : public TopologyObserver {
         void onTypeChange(TopologyType t) override {
-            std::cout << "type change to " << toString(t) << "\n";
             topologyType = t;
         }
         void onNewSetName(boost::optional<std::string> name) override {
             setName = name;
         }
         void onUpdatedServerType(const ServerDescription& serverDescription,
-                                 ServerType newServerType) override {
-            // TODO
-        }
+                                 ServerType newServerType) override {}
         void onNewServerDescription(const ServerDescription& newServerDescription) override {
-            std::cout << "new server: " << newServerDescription << "\n";
             newDescriptions.push_back(newServerDescription);
         }
         void onUpdateServerDescription(const ServerDescription& serverDescription) override {
-            std::cout << "update server: " << serverDescription << "\n";
             updatedDescriptions.push_back(serverDescription);
         }
         void onServerDescriptionRemoved(const ServerDescription& serverDescription) override {
@@ -129,7 +124,8 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
     stateMachine.addObserver(observer);
-    auto serverDescription = ServerDescriptionBuilder().withAddress("serverDescription:1234").instance();
+    auto serverDescription =
+        ServerDescriptionBuilder().withAddress("serverDescription:1234").instance();
     stateMachine.nextServerDescription(topologyDescription, serverDescription);
     ASSERT_EQUALS(serverDescription, observer->updatedDescriptions.front());
 }

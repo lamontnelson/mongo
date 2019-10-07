@@ -153,7 +153,12 @@ BSONObj ServerDescription::toBson() const {
     } else {
         bson.appendNull("opTime");
     }
-    bson.append("type", toString(_type));
+
+    {
+        using mongo::sdam::toString;
+        bson.append("type", toString(_type));
+    }
+
     bson.append("minWireVersion", _minWireVersion);
     bson.append("maxWireVersion", _maxWireVersion);
     if (_me) {
@@ -200,6 +205,10 @@ int ServerDescription::getMinWireVersion() const {
 
 int ServerDescription::getMaxWireVersion() const {
     return _maxWireVersion;
+}
+
+std::string ServerDescription::toString() const {
+    return toBson().toString();
 }
 
 ServerDescriptionBuilder::ServerDescriptionBuilder(ClockSource* clockSource,

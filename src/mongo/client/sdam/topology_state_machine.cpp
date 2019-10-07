@@ -223,47 +223,22 @@ void TopologyStateMachine::addUnknownServers(const TopologyDescription& topology
 
 void TopologyStateMachine::updateRSWithPrimaryFromMember(
     TopologyDescription& topologyDescription, const ServerDescription& serverDescription) {
-    // if description.address not in topologyDescription.servers:
-    //  # While we were checking this server, another thread heard from the
-    //  # primary that this server is not in the replica set.
-    //  return
-    //
     const auto& serverDescAddress = serverDescription.getAddress();
     if (!topologyDescription.containsServerAddress(serverDescAddress)) {
         return;
     }
 
-    //# SetName is never null here.
-    // if topologyDescription.setName != description.setName:
-    //    remove this server from topologyDescription and stop monitoring it
-    //    checkIfHasPrimary()
-    //    return
-    //
     invariant(serverDescription.getSetName() != boost::none);
     if (topologyDescription.getSetName() != serverDescription.getSetName()) {
         removeAndCheckIfHasPrimary(topologyDescription, serverDescription);
         return;
     }
 
-
-    // if description.address != description.me:
-    //    remove this server from topologyDescription and stop monitoring it
-    //    checkIfHasPrimary()
-    //    return
     if (serverDescription.getAddress() != serverDescription.getMe()) {
         removeAndCheckIfHasPrimary(topologyDescription, serverDescription);
         return;
     }
 
-    //# Had this member been the primary?
-    // if there is no primary in topologyDescription.servers:
-    //    topologyDescription.type = ReplicaSetNoPrimary
-    //
-    //    if description.primary is not null:
-    //        find the ServerDescription in topologyDescription.servers whose
-    //        address equals description.primary
-    //
-    //        if its type is Unknown, change its type to PossiblePrimary
     auto primaries = topologyDescription.findServers([](const ServerDescription& description) {
         return description.getType() == ServerType::kRSPrimary;
     });
@@ -285,52 +260,22 @@ void TopologyStateMachine::updateRSWithPrimaryFromMember(
 
 void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDescription,
                                                const ServerDescription& serverDescription) {
-    // if description.address not in topologyDescription.servers:
-    //  return
     const auto& serverDescAddress = serverDescription.getAddress();
     if (!topologyDescription.containsServerAddress(serverDescAddress)) {
         return;
     }
 
-    // if topologyDescription.setName is null:
-    //    topologyDescription.setName = description.setName
     auto topologySetName = topologyDescription.getSetName();
     auto serverDescSetName = serverDescription.getSetName();
     if (topologySetName == boost::none) {
         emitNewSetName(serverDescSetName);
-    }
-
-    // else if topologyDescription.setName != description.setName:
-    //    # We found a primary but it doesn't have the setName
-    //    # provided by the user or previously discovered.
-    //    remove this server from topologyDescription and stop monitoring it
-    //    checkIfHasPrimary()
-    //    return
-    else if (topologySetName != serverDescSetName) {
+    } else if (topologySetName != serverDescSetName) {
         // We found a primary but it doesn't have the setName
         // provided by the user or previously discovered.
         removeAndCheckIfHasPrimary(topologyDescription, serverDescription);
         return;
     }
-    //
-    // if description.setVersion is not null and description.electionId is not null:
-    //    # Election ids are ObjectIds, see
-    //    # "using setVersion and electionId to detect stale primaries"
-    //    # for comparison rules.
-    //    if (topologyDescription.maxSetVersion is not null and
-    //        topologyDescription.maxElectionId is not null and (
-    //            topologyDescription.maxSetVersion > description.setVersion or (
-    //                topologyDescription.maxSetVersion == description.setVersion and
-    //                topologyDescription.maxElectionId > description.electionId
-    //            )
-    //        ):
-    //
-    //        # Stale primary.
-    //        replace description with a default ServerDescription of type "Unknown"
-    //        checkIfHasPrimary()
-    //        return
-    //
-    //    topologyDescription.maxElectionId = description.electionId
+
     auto serverDescSetVersion = serverDescription.getSetVersion();
     auto serverDescElectionId = serverDescription.getElectionId();
     auto topologyMaxSetVersion = topologyDescription.getMaxSetVersion();
@@ -348,23 +293,11 @@ void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDesc
         emitNewMaxElectionId(*serverDescription.getElectionId());
     }
 
-
-    //
-    // if (description.setVersion is not null and
-    //    (topologyDescription.maxSetVersion is null or
-    //        description.setVersion > topologyDescription.maxSetVersion)):
-    //
-    //    topologyDescription.maxSetVersion = description.setVersion
     if (serverDescSetVersion &&
         (!topologyMaxSetVersion || (serverDescSetVersion > topologyMaxSetVersion))) {
         emitNewMaxSetVersion(*serverDescSetVersion);
     }
-    //
-    // for each server in topologyDescription.servers:
-    //    if server.address != description.address:
-    //        if server.type is RSPrimary:
-    //            # See note below about invalidating an old primary.
-    //            replace the server with a default ServerDescription of type "Unknown"
+
     auto oldPrimaries =
         topologyDescription.findServers([serverDescAddress](const ServerDescription& description) {
             return (description.getAddress() != serverDescAddress &&
@@ -375,15 +308,8 @@ void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDesc
         emitReplaceServer(ServerDescription(server.getAddress()));
     }
 
-    // for each address in description's "hosts", "passives", and "arbiters":
-    //    if address is not in topologyDescription.servers:
-    //        add new default ServerDescription of type "Unknown"
-    //        begin monitoring the new server
     addUnknownServers(topologyDescription, serverDescription);
 
-    // for each server in topologyDescription.servers:
-    //    if server.address not in description's "hosts", "passives", or "arbiters":
-    //        remove the server and stop monitoring it
     for (const auto& currentServerDescription : topologyDescription.getServers()) {
         const auto serverAddress = currentServerDescription.getAddress();
         auto hosts = currentServerDescription.getHosts().find(serverAddress);
@@ -413,7 +339,6 @@ void TopologyStateMachine::checkIfHasPrimary(TopologyDescription& topologyDescri
     if (foundPrimaries.size() > 0) {
         emitTypeChange(TopologyType::kReplicaSetWithPrimary);
     } else {
-        std::cout << topologyDescription.getServers() << std::endl;
         emitTypeChange(TopologyType::kReplicaSetNoPrimary);
     }
 }
@@ -446,7 +371,6 @@ TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(
     };
 }
 
-// TODO: refactor these for redundancy
 void TopologyStateMachine::emitServerRemoved(const ServerDescription& serverDescription) {
     for (auto& observer : _observers) {
         observer->onServerDescriptionRemoved(serverDescription);
@@ -496,7 +420,7 @@ void TopologyStateMachine::emitNewMaxSetVersion(int& newMaxSetVersion) {
     }
 }
 
-void mongo::sdam::TopologyStateMachine::addObserver(std::shared_ptr<TopologyObserver> observer) {
+void TopologyStateMachine::addObserver(std::shared_ptr<TopologyObserver> observer) {
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
     _observers.push_back(std::move(observer));
 }

@@ -30,6 +30,7 @@
 #include "mongo/client/sdam/sdam_test_base.h"
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
+#include "mongo/client/sdam/server_description.h"
 #include "mongo/platform/basic.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
@@ -197,12 +198,11 @@ void TopologyDescription::Observer::onNewMaxSetVersion(int newMaxSetVersion) {
 }
 void TopologyDescription::Observer::onNewServerDescription(
     const ServerDescription& newServerDescription) {
+    LOG(3) << "SDAM: Install new server description: " << newServerDescription << std::endl;
     _parent.installServerDescription(newServerDescription);
-    std::cout << "after install: " << _parent.getServers() << std::endl;
 }
 void TopologyDescription::Observer::onUpdateServerDescription(
     const ServerDescription& serverDescription) {
-    std::cout << "here!!!!!!!!!! " << serverDescription;
     _parent.installServerDescription(serverDescription);
 }
 void TopologyDescription::Observer::onServerDescriptionRemoved(

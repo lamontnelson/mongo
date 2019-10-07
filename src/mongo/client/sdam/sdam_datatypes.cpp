@@ -30,7 +30,7 @@
 #include "mongo/client/sdam/sdam_datatypes.h"
 
 namespace mongo::sdam {
-std::string toString(ServerType serverType) {
+std::string toString(const ServerType serverType) {
     switch (serverType) {
         case ServerType::kStandalone:
             return "Standalone";
@@ -53,6 +53,11 @@ std::string toString(ServerType serverType) {
     }
 }
 
+std::ostream& operator<<(std::ostream& os, const ServerType serverType) {
+    os << toString(serverType);
+    return os;
+}
+
 const std::vector<ServerType> allServerTypes() {
     static auto const result = std::vector<ServerType>{ServerType::kStandalone,
                                                        ServerType::kMongos,
@@ -65,16 +70,8 @@ const std::vector<ServerType> allServerTypes() {
     return result;
 }
 
-const std::vector<TopologyType> allTopologyTypes() {
-    static auto const result = std::vector<TopologyType>{TopologyType::kSingle,
-                                                         TopologyType::kReplicaSetNoPrimary,
-                                                         TopologyType::kReplicaSetWithPrimary,
-                                                         TopologyType::kSharded,
-                                                         TopologyType::kUnknown};
-    return result;
-}
 
-std::string toString(TopologyType topologyType) {
+std::string toString(const TopologyType topologyType) {
     switch (topologyType) {
         case TopologyType::kReplicaSetNoPrimary:
             return "ReplicaSetNoPrimary";
@@ -91,6 +88,19 @@ std::string toString(TopologyType topologyType) {
     }
 }
 
+std::ostream& operator<<(std::ostream& os, const TopologyType topologyType) {
+    os << toString(topologyType);
+    return os;
+}
+
+const std::vector<TopologyType> allTopologyTypes() {
+    static auto const result = std::vector<TopologyType>{TopologyType::kSingle,
+                                                         TopologyType::kReplicaSetNoPrimary,
+                                                         TopologyType::kReplicaSetWithPrimary,
+                                                         TopologyType::kSharded,
+                                                         TopologyType::kUnknown};
+    return result;
+}
 
 const ServerAddress& IsMasterOutcome::getServer() const {
     return _server;
