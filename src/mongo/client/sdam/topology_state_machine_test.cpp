@@ -135,7 +135,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
     ASSERT_EQUALS(std::vector<ServerDescription>{serverDescription}, observer->updatedDescriptions);
 }
 
- TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
+TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
@@ -146,14 +146,14 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
     ASSERT_EQUALS(serverDescription, observer->newDescriptions.front());
 }
 
- TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
+TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
     using T = TopologyTypeTestCase;
     // test cases that should not change TopologyType
     std::vector<TopologyTypeTestCase> testCases{
         T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kUnknown, TopologyType::kUnknown},
-        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kStandalone,
-        TopologyType::kUnknown}, T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kRSGhost,
-        TopologyType::kUnknown}, T{TWO_SEED_CONFIG,
+        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kStandalone, TopologyType::kUnknown},
+        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kRSGhost, TopologyType::kUnknown},
+        T{TWO_SEED_CONFIG,
           TopologyType::kReplicaSetNoPrimary,
           ServerType::kUnknown,
           TopologyType::kReplicaSetNoPrimary},
@@ -187,7 +187,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
 }
 
 
- TEST_F(TopologyStateMachineTestFixture, ShouldUpdateToCorrectToplogyType) {
+TEST_F(TopologyStateMachineTestFixture, ShouldUpdateToCorrectToplogyType) {
     using T = TopologyTypeTestCase;
 
     // test cases that should change TopologyType
