@@ -36,7 +36,7 @@
 #include "mongo/platform/mutex.h"
 
 namespace mongo::sdam {
-// Actions that mutate the state of the state machine via events.
+// Actions that mutate the state of the topology description via events.
 using TransitionAction = std::function<void(TopologyDescription&, const ServerDescription&)>;
 
 // indexed by ServerType
@@ -66,9 +66,9 @@ public:
      * Observers are notified in a single thread under the protection of the state machine's mutex.
      * Accordingly, observers actions should be fast so that we don't block the application of new
      * ServerDescriptions. Currently this is used internally (to sdam) to propagate state changes
-     * through the sub-system. It is also used to test this component in isolation. There shouldn't
-     * be a need for external components, with the exception of the RSM, to observe these low level
-     * events.
+     * through the sub-system. It is also used to facilitate testing the components in isolation.
+     * There shouldn't be a need for external components, with possibly the exception of the RSM, to
+     * observe these low level events.
      */
     void addObserver(std::shared_ptr<TopologyObserver> observer);
 
@@ -93,7 +93,7 @@ private:
     void addUnknownServers(const TopologyDescription& topologyDescription,
                            const ServerDescription& serverDescription);
 
-    // observable events emitted by the state machine
+    // Notify observers that an event occurred.
     void emitServerRemoved(const ServerDescription& serverDescription);
     void emitTypeChange(TopologyType topologyType);
     void emitNewSetName(const boost::optional<std::string>& setName);
@@ -102,8 +102,6 @@ private:
     void emitReplaceServer(ServerDescription updatedServerDescription);
     void emitNewMaxElectionId(const OID& newMaxElectionId);
     void emitNewMaxSetVersion(int& newMaxSetVersion);
-
-    // Notify observers that an event occurred.
     void emit(std::shared_ptr<TopologyStateMachineEvent> event);
 
     mongo::Mutex _mutex = mongo::Mutex(StringData("TopologyStateMachine"));
