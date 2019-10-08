@@ -148,9 +148,9 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
 void TopologyStateMachine::nextServerDescription(TopologyDescription& topologyDescription,
                                                  const ServerDescription& serverDescription) {
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
+
     bool isExistingServer =
         topologyDescription.containsServerAddress(serverDescription.getAddress());
-    topologyDescription.installServerDescription(serverDescription);
 
     if (isExistingServer) {
         emitReplaceServer(serverDescription);
@@ -273,7 +273,7 @@ void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDesc
 
     auto topologySetName = topologyDescription.getSetName();
     auto serverDescSetName = serverDescription.getSetName();
-    if (topologySetName == boost::none) {
+    if (!topologySetName && serverDescSetName) {
         emitNewSetName(serverDescSetName);
     } else if (topologySetName != serverDescSetName) {
         // We found a primary but it doesn't have the setName
@@ -317,14 +317,14 @@ void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDesc
     addUnknownServers(topologyDescription, serverDescription);
 
     for (const auto& currentServerDescription : topologyDescription.getServers()) {
-        const auto serverAddress = currentServerDescription.getAddress();
-        auto hosts = currentServerDescription.getHosts().find(serverAddress);
-        auto passives = currentServerDescription.getPassives().find(serverAddress);
-        auto arbiters = currentServerDescription.getArbiters().find(serverAddress);
+        const auto currentServerAddress = currentServerDescription.getAddress();
+        auto hosts = serverDescription.getHosts().find(currentServerAddress);
+        auto passives = serverDescription.getPassives().find(currentServerAddress);
+        auto arbiters = serverDescription.getArbiters().find(currentServerAddress);
 
-        if (hosts == currentServerDescription.getHosts().end() &&
-            passives == currentServerDescription.getPassives().end() &&
-            arbiters == currentServerDescription.getArbiters().end()) {
+        if (hosts == serverDescription.getHosts().end() &&
+            passives == serverDescription.getPassives().end() &&
+            arbiters == serverDescription.getArbiters().end()) {
             emitServerRemoved(currentServerDescription);
         }
     }

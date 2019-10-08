@@ -86,16 +86,31 @@ protected:
     void assertTopologyTypeTestCase(TopologyTypeTestCase testCase) {
         auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
         TopologyStateMachine stateMachine(testCase.initialConfig);
-        stateMachine.addObserver(checked_pointer_cast<TopologyObserver>(observer));
 
         // setup the initial state
         TopologyDescription topologyDescription(testCase.initialConfig);
         topologyDescription.setType(testCase.starting);
+        stateMachine.addObserver(topologyDescription.getTopologyObserver());
+        stateMachine.addObserver(checked_pointer_cast<TopologyObserver>(observer));
         observer->topologyType = testCase.starting;
 
-        // create new ServerDescription and simulate it being received
+        // create new ServerDescription and
         auto serverDescriptionBuilder =
             ServerDescriptionBuilder().withType(testCase.incoming).withAddress(LOCAL_SERVER);
+
+        // update the known hosts in the ServerDescription
+        if (testCase.initialConfig.getSeedList()) {
+            for (auto address : *testCase.initialConfig.getSeedList()) {
+                serverDescriptionBuilder.withHost(address);
+            }
+        }
+
+        // set the primary if we are creating one
+        if (testCase.incoming == ServerType::kRSPrimary) {
+            serverDescriptionBuilder.withPrimary(LOCAL_SERVER);
+        }
+
+        // set the replica set name if appropriate
         const std::vector<ServerType>& replicaSetServerTypes = std::vector<ServerType>{
             ServerType::kRSOther, ServerType::kRSSecondary, ServerType::kRSArbiter};
         if (std::find(replicaSetServerTypes.begin(),
@@ -103,10 +118,12 @@ protected:
                       testCase.incoming) != replicaSetServerTypes.end()) {
             serverDescriptionBuilder.withSetName(REPLICA_SET_NAME);
         }
+
         const auto serverDescription = serverDescriptionBuilder.instance();
+
+        // simulate the ServerDescription being received
         stateMachine.nextServerDescription(topologyDescription, serverDescription);
 
-        // assert ending TopologyType
         ASSERT_EQUALS(observer->topologyType, testCase.ending);
     }
 
@@ -125,21 +142,25 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
     TopologyDescription topologyDescription(SINGLE_CONFIG);
     TopologyStateMachine stateMachine(SINGLE_CONFIG);
+    stateMachine.addObserver(topologyDescription.getTopologyObserver());
     stateMachine.addObserver(observer);
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(LOCAL_SERVER)
                                  .withMe("foo:1234")
                                  .withType(ServerType::kStandalone)
                                  .instance();
+
     stateMachine.nextServerDescription(topologyDescription, serverDescription);
     ASSERT_EQUALS(std::vector<ServerDescription>{serverDescription}, observer->updatedDescriptions);
     ASSERT_EQUALS(TopologyType::kSingle, topologyDescription.getType());
 }
 
+
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
+    stateMachine.addObserver(topologyDescription.getTopologyObserver());
     stateMachine.addObserver(observer);
     auto serverDescription =
         ServerDescriptionBuilder().withAddress("serverDescription:1234").instance();
@@ -178,8 +199,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
 
     int count = 0;
     for (auto testCase : testCases) {
-        ++count;
-        std::cout << "case " << count << " starting TopologyType: " << toString(testCase.starting)
+        std::cout << "case " << ++count << " starting TopologyType: " << toString(testCase.starting)
                   << "; incoming ServerType: " << toString(testCase.incoming)
                   << "; expect ending TopologyType: " << toString(testCase.ending) << std::endl;
 
@@ -249,8 +269,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldUpdateToCorrectToplogyType) {
 
     int count = 0;
     for (auto testCase : testCases) {
-        ++count;
-        std::cout << "case " << count << " starting TopologyType: " << toString(testCase.starting)
+        std::cout << "case " << ++count << " starting TopologyType: " << toString(testCase.starting)
                   << "; incoming ServerType: " << toString(testCase.incoming)
                   << "; expect ending TopologyType: " << toString(testCase.ending) << std::endl;
 
