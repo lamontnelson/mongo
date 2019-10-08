@@ -134,7 +134,7 @@ public:
 
     bool containsServerAddress(ServerAddress address) const;
     std::vector<ServerDescription> findServers(
-        std::function<bool(const ServerDescription&)> predicate);
+        std::function<bool(const ServerDescription&)> predicate) const;
 
     // Replaces or adds the given ServerDescription using the description's ServerAddress as the
     // lookup key. If present, the previous server description is returned.

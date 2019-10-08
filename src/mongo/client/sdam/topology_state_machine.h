@@ -37,7 +37,7 @@
 
 namespace mongo::sdam {
 // Actions that mutate the state of the topology description via events.
-using TransitionAction = std::function<void(TopologyDescription&, const ServerDescription&)>;
+using TransitionAction = std::function<void(const TopologyDescription&, const ServerDescription&)>;
 
 // indexed by ServerType
 using StateTransitionTableRow = std::vector<TransitionAction>;
@@ -59,7 +59,7 @@ public:
      * result. This is safe to call from multiple threads, and only one action will be
      * executed at a time.
      */
-    void nextServerDescription(TopologyDescription& topologyDescription,
+    void nextServerDescription(const TopologyDescription& topologyDescription,
                                const ServerDescription& serverDescription);
 
     /**
@@ -79,13 +79,13 @@ private:
     // These are implemented, in an almost verbatim fashion, from the description
     // here:
     // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#actions
-    void updateUnknownWithStandalone(TopologyDescription&, const ServerDescription&);
-    void updateRSWithoutPrimary(TopologyDescription&, const ServerDescription&);
-    void updateRSWithPrimaryFromMember(TopologyDescription&, const ServerDescription&);
-    void updateRSFromPrimary(TopologyDescription&, const ServerDescription&);
-    void removeAndStopMonitoring(TopologyDescription&, const ServerDescription&);
-    void checkIfHasPrimary(TopologyDescription&, const ServerDescription&);
-    void removeAndCheckIfHasPrimary(TopologyDescription&, const ServerDescription&);
+    void updateUnknownWithStandalone(const TopologyDescription&, const ServerDescription&);
+    void updateRSWithoutPrimary(const TopologyDescription&, const ServerDescription&);
+    void updateRSWithPrimaryFromMember(const TopologyDescription&, const ServerDescription&);
+    void updateRSFromPrimary(const TopologyDescription&, const ServerDescription&);
+    void removeAndStopMonitoring(const TopologyDescription&, const ServerDescription&);
+    void checkIfHasPrimary(const TopologyDescription&, const ServerDescription&);
+    void removeAndCheckIfHasPrimary(const TopologyDescription&, const ServerDescription&);
     TransitionAction setTopologyType(TopologyType t);
     TransitionAction setTopologyTypeAndUpdateRSFromPrimary(TopologyType type);
     TransitionAction setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType type);

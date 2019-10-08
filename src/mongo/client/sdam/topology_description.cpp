@@ -110,7 +110,7 @@ bool TopologyDescription::containsServerAddress(ServerAddress address) const {
 }
 
 std::vector<ServerDescription> TopologyDescription::findServers(
-    std::function<bool(const ServerDescription&)> predicate) {
+    std::function<bool(const ServerDescription&)> predicate) const {
     std::vector<ServerDescription> result;
     for (const auto& server : _servers) {
         if (predicate(server)) {

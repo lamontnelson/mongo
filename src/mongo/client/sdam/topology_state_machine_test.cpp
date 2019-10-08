@@ -116,6 +116,8 @@ protected:
         std::vector<ServerDescription> removedDescriptions;
     };
 
+    // Setup the test scenario, and simulate receiving a ServerDescription.
+    // Asserts that the final topology type is in the correct state.
     void assertTopologyTypeTestCase(TopologyTypeTestCase testCase) {
         auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
         TopologyStateMachine stateMachine(testCase.initialConfig);

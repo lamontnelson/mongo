@@ -54,7 +54,7 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
     using namespace std::placeholders;
 
     // init the table to No-ops
-    const TransitionAction NO_OP([](TopologyDescription&, const ServerDescription&) {});
+    const TransitionAction NO_OP([](const TopologyDescription&, const ServerDescription&) {});
     _stt.resize(allTopologyTypes().size() + 1);
     for (auto& row : _stt) {
         row.resize(allServerTypes().size() + 1, NO_OP);
@@ -145,7 +145,7 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
     }
 }
 
-void TopologyStateMachine::nextServerDescription(TopologyDescription& topologyDescription,
+void TopologyStateMachine::nextServerDescription(const TopologyDescription& topologyDescription,
                                                  const ServerDescription& serverDescription) {
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
 
@@ -164,7 +164,7 @@ void TopologyStateMachine::nextServerDescription(TopologyDescription& topologyDe
     }
 }
 
-void TopologyStateMachine::updateUnknownWithStandalone(TopologyDescription& topologyDescription,
+void TopologyStateMachine::updateUnknownWithStandalone(const TopologyDescription& topologyDescription,
                                                        const ServerDescription& serverDescription) {
     if (!topologyDescription.containsServerAddress(serverDescription.getAddress()))
         return;
@@ -176,7 +176,7 @@ void TopologyStateMachine::updateUnknownWithStandalone(TopologyDescription& topo
     }
 }
 
-void TopologyStateMachine::updateRSWithoutPrimary(TopologyDescription& topologyDescription,
+void TopologyStateMachine::updateRSWithoutPrimary(const TopologyDescription& topologyDescription,
                                                   const ServerDescription& serverDescription) {
     const auto& serverDescAddress = serverDescription.getAddress();
 
@@ -228,7 +228,7 @@ void TopologyStateMachine::addUnknownServers(const TopologyDescription& topology
 }
 
 void TopologyStateMachine::updateRSWithPrimaryFromMember(
-    TopologyDescription& topologyDescription, const ServerDescription& serverDescription) {
+    const TopologyDescription& topologyDescription, const ServerDescription& serverDescription) {
     const auto& serverDescAddress = serverDescription.getAddress();
     if (!topologyDescription.containsServerAddress(serverDescAddress)) {
         return;
@@ -264,7 +264,7 @@ void TopologyStateMachine::updateRSWithPrimaryFromMember(
     }
 }
 
-void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDescription,
+void TopologyStateMachine::updateRSFromPrimary(const TopologyDescription& topologyDescription,
                                                const ServerDescription& serverDescription) {
     const auto& serverDescAddress = serverDescription.getAddress();
     if (!topologyDescription.containsServerAddress(serverDescAddress)) {
@@ -332,12 +332,12 @@ void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDesc
     checkIfHasPrimary(topologyDescription, serverDescription);
 }
 
-void TopologyStateMachine::removeAndStopMonitoring(TopologyDescription&,
+void TopologyStateMachine::removeAndStopMonitoring(const TopologyDescription&,
                                                    const ServerDescription& serverDescription) {
     emitServerRemoved(serverDescription);
 }
 
-void TopologyStateMachine::checkIfHasPrimary(TopologyDescription& topologyDescription,
+void TopologyStateMachine::checkIfHasPrimary(const TopologyDescription& topologyDescription,
                                              const ServerDescription& serverDescription) {
     auto foundPrimaries = topologyDescription.findServers([](const ServerDescription& description) {
         return description.getType() == ServerType::kRSPrimary;
@@ -349,19 +349,19 @@ void TopologyStateMachine::checkIfHasPrimary(TopologyDescription& topologyDescri
     }
 }
 
-void TopologyStateMachine::removeAndCheckIfHasPrimary(TopologyDescription& topologyDescription,
+void TopologyStateMachine::removeAndCheckIfHasPrimary(const TopologyDescription& topologyDescription,
                                                       const ServerDescription& serverDescription) {
     removeAndStopMonitoring(topologyDescription, serverDescription);
     checkIfHasPrimary(topologyDescription, serverDescription);
 }
 
 TransitionAction TopologyStateMachine::setTopologyType(TopologyType type) {
-    return [this, type](TopologyDescription& topologyDescription,
+    return [this, type](const TopologyDescription& topologyDescription,
                         const ServerDescription& newServerDescription) { emitTypeChange(type); };
 }
 
 TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSFromPrimary(TopologyType type) {
-    return [this, type](TopologyDescription& topologyDescription,
+    return [this, type](const TopologyDescription& topologyDescription,
                         const ServerDescription& newServerDescription) {
         std::cout << "change type to " << toString(type) << std::endl;
         emitTypeChange(type);
@@ -370,7 +370,7 @@ TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSFromPrimary(Top
 }
 
 TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType type) {
-    return [this, type](TopologyDescription& topologyDescription,
+    return [this, type](const TopologyDescription& topologyDescription,
                         const ServerDescription& newServerDescription) {
         emitTypeChange(type);
         updateRSWithoutPrimary(topologyDescription, newServerDescription);
