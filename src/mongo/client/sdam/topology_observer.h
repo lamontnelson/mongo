@@ -32,15 +32,77 @@
 #include "mongo/client/sdam/server_description.h"
 
 namespace mongo::sdam {
+enum class TopologyStateMachineEventType {
+    kTopologyTypeChange,
+    kNewSetName,
+    kUpdateServerType,
+    kNewMaxElectionId,
+    kNewMaxSetVersion,
+    kNewServerDescription,
+    kUpdateServerDescription,
+    kRemoveServerDescription
+};
+
+/**
+ * Base type for events emitted by the state machine
+ */
+struct TopologyStateMachineEvent {
+    explicit TopologyStateMachineEvent(TopologyStateMachineEventType type);
+    virtual ~TopologyStateMachineEvent() = default;
+    const TopologyStateMachineEventType type;
+};
+
+/**
+ * Concrete event types for the state machine
+ */
+
+struct TopologyTypeChangeEvent : public TopologyStateMachineEvent {
+    explicit TopologyTypeChangeEvent(TopologyType newType);
+    const TopologyType newType;
+};
+
+struct NewSetNameEvent : public TopologyStateMachineEvent {
+    explicit NewSetNameEvent(boost::optional<std::string> newSetName);
+    const boost::optional<std::string> newSetName;
+};
+
+struct UpdateServerTypeEvent : public TopologyStateMachineEvent {
+    UpdateServerTypeEvent(ServerDescription serverDescription, const ServerType newServerType);
+    const ServerDescription serverDescription;
+    const ServerType newServerType;
+};
+
+struct NewMaxElectionIdEvent : public TopologyStateMachineEvent {
+    explicit NewMaxElectionIdEvent(const OID& newMaxElectionId);
+    OID newMaxElectionId;
+};
+
+struct NewMaxSetVersionEvent : public TopologyStateMachineEvent {
+    explicit NewMaxSetVersionEvent(int newMaxSetVersion);
+    int newMaxSetVersion;
+};
+
+struct NewServerDescriptionEvent : public TopologyStateMachineEvent {
+    explicit NewServerDescriptionEvent(ServerDescription updatedServerDescription);
+    ServerDescription newServerDescription;
+};
+
+struct UpdateServerDescriptionEvent : public TopologyStateMachineEvent {
+    explicit UpdateServerDescriptionEvent(ServerDescription updatedServerDescription);
+    ServerDescription updatedServerDescription;
+};
+
+struct RemoveServerDescriptionEvent : public TopologyStateMachineEvent {
+    RemoveServerDescriptionEvent(ServerDescription removedServerDescription);
+    ServerDescription removedServerDescription;
+};
+
+/**
+ * Classes interested in state machine events should inherit from this and check for the event type
+ * in e->type.
+ */
 class TopologyObserver {
 public:
-    virtual void onTypeChange(TopologyType topologyType) = 0;
-    virtual void onNewSetName(boost::optional<std::string> setName) = 0;
-    virtual void onUpdatedServerType(const ServerDescription& serverDescription, ServerType newServerType) = 0;
-    virtual void onNewMaxElectionId(const OID& newMaxElectionId) = 0;
-    virtual void onNewMaxSetVersion(int newMaxSetVersion) = 0;
-    virtual void onNewServerDescription(const ServerDescription& newServerDescription) = 0;
-    virtual void onUpdateServerDescription(const ServerDescription& newServerDescription) = 0;
-    virtual void onServerDescriptionRemoved(const ServerDescription& serverDescription) = 0;
+    virtual void onTopologyStateMachineEvent(std::shared_ptr<TopologyStateMachineEvent> e) = 0;
 };
-}  // namespace mongo
+}  // namespace mongo::sdam

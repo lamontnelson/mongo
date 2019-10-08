@@ -27,3 +27,45 @@
  *    it in the license file.
  */
 #include "topology_observer.h"
+
+#include <utility>
+namespace mongo::sdam {
+TopologyStateMachineEvent::TopologyStateMachineEvent(TopologyStateMachineEventType type)
+    : type(type) {}
+
+TopologyTypeChangeEvent::TopologyTypeChangeEvent(TopologyType newType)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kTopologyTypeChange),
+      newType(newType) {}
+
+NewSetNameEvent::NewSetNameEvent(boost::optional<std::string> newSetName)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewSetName),
+      newSetName(std::move(newSetName)) {}
+
+UpdateServerTypeEvent::UpdateServerTypeEvent(ServerDescription serverDescription,
+                                             const ServerType newServerType)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kUpdateServerDescription),
+      serverDescription(std::move(serverDescription)),
+      newServerType(newServerType) {}
+
+NewMaxElectionIdEvent::NewMaxElectionIdEvent(const OID& newMaxElectionId)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewMaxElectionId),
+      newMaxElectionId(newMaxElectionId) {}
+
+NewServerDescriptionEvent::NewServerDescriptionEvent(ServerDescription newServerDescription)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewServerDescription),
+      newServerDescription(newServerDescription) {}
+
+UpdateServerDescriptionEvent::UpdateServerDescriptionEvent(
+    ServerDescription updatedServerDescription)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kUpdateServerDescription),
+      updatedServerDescription(std::move(updatedServerDescription)) {}
+
+RemoveServerDescriptionEvent::RemoveServerDescriptionEvent(
+    ServerDescription removedServerDescription)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kRemoveServerDescription),
+      removedServerDescription(std::move(removedServerDescription)) {}
+
+NewMaxSetVersionEvent::NewMaxSetVersionEvent(int newMaxSetVersion)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewMaxSetVersion),
+      newMaxSetVersion(newMaxSetVersion) {}
+}  // namespace mongo::sdam

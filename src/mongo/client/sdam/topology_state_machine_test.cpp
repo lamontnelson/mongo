@@ -54,25 +54,58 @@ protected:
     };
 
     struct StateMachineObserver : public TopologyObserver {
-        void onTypeChange(TopologyType t) override {
-            topologyType = t;
+        void onTopologyStateMachineEvent(std::shared_ptr<TopologyStateMachineEvent> e) override {
+            switch (e->type) {
+                case TopologyStateMachineEventType::kTopologyTypeChange:
+                    topologyType = std::dynamic_pointer_cast<TopologyTypeChangeEvent>(e)->newType;
+                    break;
+                case TopologyStateMachineEventType::kNewSetName:
+                    setName = std::dynamic_pointer_cast<NewSetNameEvent>(e)->newSetName;
+                    std::cout << "new set name: " << (setName ? *setName : std::string(""))
+                              << std::endl;
+                    break;
+                case TopologyStateMachineEventType::kUpdateServerType: {
+                    auto& newServerType =
+                        std::dynamic_pointer_cast<UpdateServerTypeEvent>(e)->newServerType;
+                    std::cout << "(TODO) new server type: " << newServerType << std::endl;
+                    break;
+                }
+                case TopologyStateMachineEventType::kNewServerDescription: {
+                    auto& newServerDescription =
+                        std::dynamic_pointer_cast<NewServerDescriptionEvent>(e)
+                            ->newServerDescription;
+                    std::cout << "new server desc:" << newServerDescription << std::endl;
+                    newDescriptions.push_back(newServerDescription);
+                    break;
+                }
+                case TopologyStateMachineEventType::kUpdateServerDescription: {
+                    auto& updateServerDescription =
+                        std::dynamic_pointer_cast<UpdateServerDescriptionEvent>(e)
+                            ->updatedServerDescription;
+                    std::cout << "update server desc:" << updateServerDescription << std::endl;
+                    updatedDescriptions.push_back(updateServerDescription);
+                    break;
+                }
+                case TopologyStateMachineEventType::kRemoveServerDescription: {
+                    auto& removeServerDescription =
+                        std::dynamic_pointer_cast<RemoveServerDescriptionEvent>(e)
+                            ->removedServerDescription;
+                    std::cout << "remove server desc:" << removeServerDescription << std::endl;
+                    removedDescriptions.push_back(removeServerDescription);
+                    break;
+                }
+                case TopologyStateMachineEventType::kNewMaxElectionId:
+                    maxElectionId =
+                        std::dynamic_pointer_cast<NewMaxElectionIdEvent>(e)->newMaxElectionId;
+                    std::cout << "new max election id: " << maxElectionId << std::endl;
+                    break;
+                case TopologyStateMachineEventType::kNewMaxSetVersion:
+                    maxSetVersion =
+                        std::dynamic_pointer_cast<NewMaxSetVersionEvent>(e)->newMaxSetVersion;
+                    std::cout << "new max set version: " << maxSetVersion << std::endl;
+                    break;
+            }
         }
-        void onNewSetName(boost::optional<std::string> name) override {
-            setName = name;
-        }
-        void onUpdatedServerType(const ServerDescription& serverDescription,
-                                 ServerType newServerType) override {}
-        void onNewServerDescription(const ServerDescription& newServerDescription) override {
-            newDescriptions.push_back(newServerDescription);
-        }
-        void onUpdateServerDescription(const ServerDescription& serverDescription) override {
-            updatedDescriptions.push_back(serverDescription);
-        }
-        void onServerDescriptionRemoved(const ServerDescription& serverDescription) override {
-            removedDescriptions.push_back(serverDescription);
-        }
-        void onNewMaxElectionId(const OID& newMaxElectionId) override {}
-        void onNewMaxSetVersion(int newMaxSetVersion) override {}
 
         TopologyType topologyType = TopologyType::kUnknown;
         boost::optional<std::string> setName;

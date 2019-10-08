@@ -36,6 +36,9 @@
 #include "mongo/util/log.h"
 
 namespace mongo::sdam {
+////////////////////////
+// TopologyDescription
+////////////////////////
 TopologyDescription::TopologyDescription(SdamConfiguration config)
     : _type(config.getInitialType()),
       _setName(config.getSetName()),
@@ -141,6 +144,17 @@ boost::optional<ServerDescription> TopologyDescription::installServerDescription
     return previousDescription;
 }
 
+void TopologyDescription::removeServerDescription(const ServerDescription& serverDescription) {
+    auto it = std::find_if(_servers.begin(),
+                           _servers.end(),
+                           [serverDescription](const ServerDescription& description) {
+                               return serverDescription.getAddress() == description.getAddress();
+                           });
+    if (it != _servers.end()) {
+        _servers.erase(it);
+    }
+}
+
 void TopologyDescription::checkWireCompatibilityVersions() {
     const WireVersionInfo supportedWireVersion = WireSpec::instance().outgoing;
     std::ostringstream errorOss;
@@ -172,6 +186,7 @@ void TopologyDescription::checkWireCompatibilityVersions() {
 
     _compatibleError = (_compatible) ? boost::none : boost::make_optional(errorOss.str());
 }
+
 const std::string TopologyDescription::minimumRequiredMongoVersionString(int version) {
     // TODO: need versions for AGG_RETURNS_CURSORS, BATCH_COMMANDS, RELEASE_2_4_AND_BEFORE,
     // FIND_COMMAND, COMMANDS_ACCEPT_WRITE_CONCERN
@@ -194,9 +209,59 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
 }
 
 const std::shared_ptr<TopologyObserver> TopologyDescription::getTopologyObserver() const {
-    return checked_pointer_cast<TopologyObserver>(_topologyObserver);
+    return _topologyObserver;
 }
 
+void TopologyDescription::Observer::onTopologyStateMachineEvent(
+    std::shared_ptr<TopologyStateMachineEvent> e) {
+    switch (e->type) {
+        case TopologyStateMachineEventType::kNewMaxElectionId:
+            _parent._maxElectionId =
+                checked_pointer_cast<NewMaxElectionIdEvent>(e)->newMaxElectionId;
+            break;
+        case TopologyStateMachineEventType::kNewMaxSetVersion:
+            _parent._maxSetVersion =
+                checked_pointer_cast<NewMaxSetVersionEvent>(e)->newMaxSetVersion;
+            break;
+        case TopologyStateMachineEventType::kNewSetName:
+            _parent._setName = checked_pointer_cast<NewSetNameEvent>(e)->newSetName;
+            break;
+        case TopologyStateMachineEventType::kTopologyTypeChange:
+            _parent.setType(checked_pointer_cast<TopologyTypeChangeEvent>(e)->newType);
+            break;
+        case TopologyStateMachineEventType::kUpdateServerType:
+            // TODO: need to make ServerDescriptionBuilder start from an existing instance.
+            break;
+        case TopologyStateMachineEventType::kNewServerDescription: {
+            const auto& serverDescription =
+                checked_pointer_cast<NewServerDescriptionEvent>(e)->newServerDescription;
+            LOG(3) << "SDAM: Install new server description: " << serverDescription << std::endl;
+            _parent.installServerDescription(serverDescription);
+            _parent.checkWireCompatibilityVersions();
+            break;
+        }
+        case TopologyStateMachineEventType::kUpdateServerDescription: {
+            const auto& serverDescription =
+                checked_pointer_cast<UpdateServerDescriptionEvent>(e)->updatedServerDescription;
+            LOG(3) << "SDAM: Replace existing server description: " << serverDescription
+                   << std::endl;
+            _parent.installServerDescription(serverDescription);
+            _parent.checkWireCompatibilityVersions();
+            break;
+        }
+        case TopologyStateMachineEventType::kRemoveServerDescription: {
+            const auto& serverDescription =
+                checked_pointer_cast<RemoveServerDescriptionEvent>(e)->removedServerDescription;
+            _parent.removeServerDescription(serverDescription);
+            break;
+        }
+    }
+}
+
+
+////////////////////////
+// SdamConfiguration
+////////////////////////
 SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
                                      TopologyType initialType,
                                      mongo::Milliseconds heartBeatFrequencyMs,
@@ -244,52 +309,5 @@ Milliseconds SdamConfiguration::getMinHeartbeatFrequencyMs() const {
 }
 const boost::optional<std::string>& SdamConfiguration::getSetName() const {
     return _setName;
-}
-
-void TopologyDescription::Observer::onTypeChange(TopologyType topologyType) {
-    _parent.setType(topologyType);
-}
-
-void TopologyDescription::Observer::onNewSetName(boost::optional<std::string> setName) {
-    _parent._setName = setName;
-}
-
-void TopologyDescription::Observer::onUpdatedServerType(const ServerDescription& serverDescription,
-                                                        ServerType newServerType) {
-    // TODO: need to make ServerDescriptionBuilder start from an existing instance.
-}
-
-void TopologyDescription::Observer::onNewMaxElectionId(const OID& newMaxElectionId) {
-    _parent._maxElectionId = newMaxElectionId;
-}
-
-void TopologyDescription::Observer::onNewMaxSetVersion(int newMaxSetVersion) {
-    _parent._maxSetVersion = newMaxSetVersion;
-}
-
-void TopologyDescription::Observer::onNewServerDescription(
-    const ServerDescription& newServerDescription) {
-    LOG(3) << "SDAM: Install new server description: " << newServerDescription << std::endl;
-    _parent.installServerDescription(newServerDescription);
-    _parent.checkWireCompatibilityVersions();
-}
-
-void TopologyDescription::Observer::onUpdateServerDescription(
-    const ServerDescription& serverDescription) {
-    LOG(3) << "SDAM: Replace existing server description: " << serverDescription << std::endl;
-    _parent.installServerDescription(serverDescription);
-    _parent.checkWireCompatibilityVersions();
-}
-
-void TopologyDescription::Observer::onServerDescriptionRemoved(
-    const ServerDescription& serverDescription) {
-    auto& servers = _parent._servers;
-    auto it = std::find_if(
-        servers.begin(), servers.end(), [serverDescription](const ServerDescription& description) {
-            return serverDescription.getAddress() == description.getAddress();
-        });
-    if (it != servers.end()) {
-        servers.erase(it);
-    }
 }
 };  // namespace mongo::sdam

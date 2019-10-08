@@ -162,8 +162,8 @@ TEST_F(TopologyDescriptionTestFixture,
                                                  .instance();
 
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
-    topologyDescription.getTopologyObserver()->onUpdateServerDescription(
-        serverDescriptionMinVersion);
+    auto event = std::make_shared<UpdateServerDescriptionEvent>(serverDescriptionMinVersion);
+    topologyDescription.getTopologyObserver()->onTopologyStateMachineEvent(event);
     ASSERT_NOT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
     // TODO: assert exact text
 }
@@ -174,7 +174,7 @@ TEST_F(TopologyDescriptionTestFixture,
     const auto config =
         SdamConfiguration(ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
-    const auto serverDescriptionMinVersion = ServerDescriptionBuilder()
+    const auto serverDescriptionMaxVersion = ServerDescriptionBuilder()
                                                  .withAddress(ONE_SERVER[0])
                                                  .withMe(ONE_SERVER[0])
                                                  .withType(ServerType::kRSSecondary)
@@ -182,8 +182,8 @@ TEST_F(TopologyDescriptionTestFixture,
                                                  .instance();
 
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
-    topologyDescription.getTopologyObserver()->onUpdateServerDescription(
-        serverDescriptionMinVersion);
+    auto event = std::make_shared<UpdateServerDescriptionEvent>(serverDescriptionMaxVersion);
+    topologyDescription.getTopologyObserver()->onTopologyStateMachineEvent(event);
     ASSERT_NOT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
     // TODO: assert exact text
 }
@@ -193,16 +193,12 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNotSetWireCompatibilityErrorWhenSer
     const auto config =
         SdamConfiguration(ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
-    const auto serverDescriptionMinVersion = ServerDescriptionBuilder()
-                                                 .withAddress(ONE_SERVER[0])
-                                                 .withMe(ONE_SERVER[0])
-                                                 .withType(ServerType::kUnknown)
-                                                 .withMaxWireVersion(outgoingMinWireVersion - 1)
-                                                 .instance();
+    const auto serverDescriptionMaxVersion =
+        ServerDescriptionBuilder().withMaxWireVersion(outgoingMinWireVersion - 1).instance();
 
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
-    topologyDescription.getTopologyObserver()->onUpdateServerDescription(
-        serverDescriptionMinVersion);
+    auto event = std::make_shared<UpdateServerDescriptionEvent>(serverDescriptionMaxVersion);
+    topologyDescription.getTopologyObserver()->onTopologyStateMachineEvent(event);
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
 }
 };  // namespace sdam

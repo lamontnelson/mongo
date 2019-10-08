@@ -377,53 +377,58 @@ TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(
     };
 }
 
-void TopologyStateMachine::emitServerRemoved(const ServerDescription& serverDescription) {
+void TopologyStateMachine::emit(std::shared_ptr<TopologyStateMachineEvent> event) {
     for (auto& observer : _observers) {
-        observer->onServerDescriptionRemoved(serverDescription);
+        observer->onTopologyStateMachineEvent(event);
     }
+}
+
+void TopologyStateMachine::emitServerRemoved(const ServerDescription& serverDescription) {
+    std::shared_ptr<TopologyStateMachineEvent> event =
+        std::make_shared<RemoveServerDescriptionEvent>(serverDescription);
+    emit(event);
 }
 
 void TopologyStateMachine::emitTypeChange(TopologyType topologyType) {
-    for (auto& observer : _observers) {
-        observer->onTypeChange(topologyType);
-    }
+    std::shared_ptr<TopologyStateMachineEvent> event =
+        std::make_shared<TopologyTypeChangeEvent>(topologyType);
+    emit(event);
 }
 
 void TopologyStateMachine::emitNewSetName(const boost::optional<std::string>& setName) {
-    for (auto& observer : _observers) {
-        observer->onNewSetName(setName);
-    }
+    std::shared_ptr<TopologyStateMachineEvent> event = std::make_shared<NewSetNameEvent>(setName);
+    emit(event);
 }
 
 void TopologyStateMachine::emitNewServer(ServerDescription newServerDescription) {
-    for (auto& observer : _observers) {
-        observer->onNewServerDescription(newServerDescription);
-    }
+    std::shared_ptr<TopologyStateMachineEvent> event =
+        std::make_shared<NewServerDescriptionEvent>(newServerDescription);
+    emit(event);
 }
 
 void TopologyStateMachine::emitUpdateServerType(const ServerDescription& serverDescription,
                                                 ServerType newServerType) {
-    for (auto& observer : _observers) {
-        observer->onUpdatedServerType(serverDescription, newServerType);
-    }
+    std::shared_ptr<TopologyStateMachineEvent> event =
+        std::make_shared<UpdateServerTypeEvent>(serverDescription, newServerType);
+    emit(event);
 }
 
-void TopologyStateMachine::emitReplaceServer(ServerDescription newServerDescription) {
-    for (auto& observer : _observers) {
-        observer->onUpdateServerDescription(newServerDescription);
-    }
+void TopologyStateMachine::emitReplaceServer(ServerDescription updatedServerDescription) {
+    std::shared_ptr<TopologyStateMachineEvent> event =
+        std::make_shared<UpdateServerDescriptionEvent>(updatedServerDescription);
+    emit(event);
 }
 
 void TopologyStateMachine::emitNewMaxElectionId(const OID& newMaxElectionId) {
-    for (auto& observer : _observers) {
-        observer->onNewMaxElectionId(newMaxElectionId);
-    }
+    std::shared_ptr<TopologyStateMachineEvent> event =
+        std::make_shared<NewMaxElectionIdEvent>(newMaxElectionId);
+    emit(event);
 }
 
 void TopologyStateMachine::emitNewMaxSetVersion(int& newMaxSetVersion) {
-    for (auto& observer : _observers) {
-        observer->onNewMaxSetVersion(newMaxSetVersion);
-    }
+    std::shared_ptr<TopologyStateMachineEvent> event =
+        std::make_shared<NewMaxSetVersionEvent>(newMaxSetVersion);
+    emit(event);
 }
 
 void TopologyStateMachine::addObserver(std::shared_ptr<TopologyObserver> observer) {

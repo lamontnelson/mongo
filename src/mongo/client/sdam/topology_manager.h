@@ -31,22 +31,4 @@ private:
 
     friend class TopologyManagerObserver;
 };
-
-class TopologyManagerObserver : public TopologyObserver {
-    TopologyManagerObserver() = delete;
-public:
-    TopologyManagerObserver(TopologyManager* manager);
-    void onTypeChange(TopologyType topologyType) override;
-    void onNewSetName(boost::optional<std::string> setName) override;
-    void onUpdatedServerType(const ServerDescription& serverDescription,
-                             ServerType newServerType) override;
-    void onNewMaxElectionId(const OID& newMaxElectionId) override;
-    void onNewMaxSetVersion(int newMaxSetVersion) override;
-    void onNewServerDescription(const ServerDescription& newServerDescription) override;
-    void onUpdateServerDescription(const ServerDescription& newServerDescription) override;
-    void onServerDescriptionRemoved(const ServerDescription& serverDescription) override;
-
-private:
-    TopologyManager* _manager;
-};
 }  // namespace mongo::sdam

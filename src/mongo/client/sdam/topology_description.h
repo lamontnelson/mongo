@@ -141,25 +141,17 @@ public:
     boost::optional<ServerDescription> installServerDescription(
         const ServerDescription& newServerDescription);
 
+    void removeServerDescription(const ServerDescription& serverDescription);
+
     void setType(TopologyType type);
     const std::shared_ptr<TopologyObserver> getTopologyObserver() const;
 
 protected:
     class Observer : public TopologyObserver {
         Observer() = delete;
-
     public:
         Observer(TopologyDescription& parent) : _parent(parent) {}
-        void onTypeChange(TopologyType topologyType) override;
-        void onNewSetName(boost::optional<std::string> setName) override;
-        void onUpdatedServerType(const ServerDescription& serverDescription,
-                                 ServerType newServerType) override;
-        void onNewMaxElectionId(const OID& newMaxElectionId) override;
-        void onNewMaxSetVersion(int newMaxSetVersion) override;
-        void onNewServerDescription(const ServerDescription& newServerDescription) override;
-        void onUpdateServerDescription(const ServerDescription& newServerDescription) override;
-        void onServerDescriptionRemoved(const ServerDescription& serverDescription) override;
-
+        void onTopologyStateMachineEvent(std::shared_ptr<TopologyStateMachineEvent> e) override;
     private:
         TopologyDescription& _parent;
     };
@@ -174,6 +166,9 @@ private:
      */
     void checkWireCompatibilityVersions();
 
+    /**
+     * Used in error string for wire compatibility check.
+     */
     const std::string minimumRequiredMongoVersionString(int version);
 
     // unique id for this topology
