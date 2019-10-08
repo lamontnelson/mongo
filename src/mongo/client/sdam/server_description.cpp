@@ -254,6 +254,9 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(ClockSource* clockSource,
     }
 }
 
+ServerDescriptionBuilder::ServerDescriptionBuilder(const ServerDescription& source)
+    : _instance(ServerDescription(source)) {}
+
 void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
     if (electionId.type() == jstOID) {
         withElectionId(electionId.OID());

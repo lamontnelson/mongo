@@ -152,7 +152,16 @@ public:
                              const IsMasterOutcome& isMasterOutcome,
                              boost::optional<IsMasterLatency> lastRtt = boost::none);
 
+    /**
+     * Build a new ServerDescription using the given ServerDescription as a starting point.
+     */
+    explicit ServerDescriptionBuilder(const ServerDescription& source);
+
+    /**
+     * Return the configured ServerDescription instance.
+     */
     ServerDescription instance() const;
+
     ServerDescriptionBuilder& withError(const std::string& error);
     ServerDescriptionBuilder& withAddress(const ServerAddress& address);
     ServerDescriptionBuilder& withRtt(const IsMasterLatency& rtt,

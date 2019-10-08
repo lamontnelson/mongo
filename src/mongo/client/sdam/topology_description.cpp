@@ -215,20 +215,32 @@ const std::shared_ptr<TopologyObserver> TopologyDescription::getTopologyObserver
 void TopologyDescription::Observer::onTopologyStateMachineEvent(
     std::shared_ptr<TopologyStateMachineEvent> e) {
     switch (e->type) {
-        case TopologyStateMachineEventType::kNewMaxElectionId:
-            _parent._maxElectionId =
+        case TopologyStateMachineEventType::kNewMaxElectionId: {
+            OID& newMaxElectionId =
                 checked_pointer_cast<NewMaxElectionIdEvent>(e)->newMaxElectionId;
+            _parent._maxElectionId = newMaxElectionId;
+            LOG(3) << "SDAM: Topology max election id changed to: " << newMaxElectionId
+                   << std::endl;
             break;
-        case TopologyStateMachineEventType::kNewMaxSetVersion:
-            _parent._maxSetVersion =
-                checked_pointer_cast<NewMaxSetVersionEvent>(e)->newMaxSetVersion;
+        }
+        case TopologyStateMachineEventType::kNewMaxSetVersion: {
+            int newMaxSetVersion = checked_pointer_cast<NewMaxSetVersionEvent>(e)->newMaxSetVersion;
+            LOG(3) << "SDAM: Topology set name changed to: " << newMaxSetVersion << std::endl;
+            _parent._maxSetVersion = newMaxSetVersion;
+        } break;
+        case TopologyStateMachineEventType::kNewSetName: {
+            const boost::optional<std::string>& newSetName =
+                checked_pointer_cast<NewSetNameEvent>(e)->newSetName;
+            LOG(3) << "SDAM: Topology set name changed to: " << newSetName << std::endl;
+            _parent._setName = newSetName;
             break;
-        case TopologyStateMachineEventType::kNewSetName:
-            _parent._setName = checked_pointer_cast<NewSetNameEvent>(e)->newSetName;
+        }
+        case TopologyStateMachineEventType::kTopologyTypeChange: {
+            const TopologyType newType = checked_pointer_cast<TopologyTypeChangeEvent>(e)->newType;
+            LOG(3) << "SDAM: Topology type changed to: " << toString(newType) << std::endl;
+            _parent.setType(newType);
             break;
-        case TopologyStateMachineEventType::kTopologyTypeChange:
-            _parent.setType(checked_pointer_cast<TopologyTypeChangeEvent>(e)->newType);
-            break;
+        }
         case TopologyStateMachineEventType::kUpdateServerType:
             // TODO: need to make ServerDescriptionBuilder start from an existing instance.
             break;
