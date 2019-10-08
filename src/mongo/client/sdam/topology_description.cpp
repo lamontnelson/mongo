@@ -188,7 +188,7 @@ void TopologyDescription::checkWireCompatibilityVersions() {
 }
 
 const std::string TopologyDescription::minimumRequiredMongoVersionString(int version) {
-    // TODO: need versions for AGG_RETURNS_CURSORS, BATCH_COMMANDS, RELEASE_2_4_AND_BEFORE,
+    // TODO: need versions for AGG_RETURNS_CURSORS, BATCH_COMMANDS,
     // FIND_COMMAND, COMMANDS_ACCEPT_WRITE_CONCERN
     switch (version) {
         case RELEASE_2_4_AND_BEFORE:
