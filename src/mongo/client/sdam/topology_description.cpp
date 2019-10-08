@@ -102,9 +102,12 @@ void TopologyDescription::setType(TopologyType type) {
 bool TopologyDescription::containsServerAddress(ServerAddress address) const {
     // TODO: index by address
     boost::to_lower(address);
-    for (auto& serverDescription : _servers) {
-        if (serverDescription.getAddress() == address)
-            return true;
+    auto it = std::find_if(
+        _servers.begin(), _servers.end(), [address](const ServerDescription& serverDescription) {
+            return serverDescription.getAddress() == address;
+        });
+    if (it != _servers.end()) {
+        return true;
     }
     return false;
 }
