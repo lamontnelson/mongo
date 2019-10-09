@@ -186,27 +186,36 @@ public:
      */
     ServerDescription instance() const;
 
-    ServerDescriptionBuilder& withError(const std::string& error);
+    // server identity
     ServerDescriptionBuilder& withAddress(const ServerAddress& address);
+    ServerDescriptionBuilder& withType(const ServerType type);
+    ServerDescriptionBuilder& withMe(const ServerAddress& me);
+    ServerDescriptionBuilder& withTag(const std::string key, const std::string value);
+    ServerDescriptionBuilder& withSetName(const std::string setName);
+
+    // network attributes
     ServerDescriptionBuilder& withRtt(const IsMasterLatency& rtt,
                                       boost::optional<IsMasterLatency> lastRtt = boost::none);
-    ServerDescriptionBuilder& withLastWriteDate(const Date_t& lastWriteDate);
-    ServerDescriptionBuilder& withOpTime(const repl::OpTime opTime);
-    ServerDescriptionBuilder& withType(const ServerType type);
+    ServerDescriptionBuilder& withError(const std::string& error);
+    ServerDescriptionBuilder& withLogicalSessionTimeoutMinutes(
+        const int logicalSessionTimeoutMinutes);
+
+    // server capabilities
     ServerDescriptionBuilder& withMinWireVersion(int minVersion);
     ServerDescriptionBuilder& withMaxWireVersion(int maxVersion);
-    ServerDescriptionBuilder& withMe(const ServerAddress& me);
+
+
+    ServerDescriptionBuilder& withLastWriteDate(const Date_t& lastWriteDate);
+    ServerDescriptionBuilder& withOpTime(const repl::OpTime opTime);
+    ServerDescriptionBuilder& withLastUpdateTime(const Date_t& lastUpdateTime);
+
+    // topology membership
+    ServerDescriptionBuilder& withPrimary(const ServerAddress& primary);
     ServerDescriptionBuilder& withHost(const ServerAddress& host);
     ServerDescriptionBuilder& withPassive(const ServerAddress& passive);
     ServerDescriptionBuilder& withArbiter(const ServerAddress& arbiter);
-    ServerDescriptionBuilder& withTag(const std::string key, const std::string value);
-    ServerDescriptionBuilder& withSetName(const std::string setName);
     ServerDescriptionBuilder& withSetVersion(const int setVersion);
     ServerDescriptionBuilder& withElectionId(const OID& electionId);
-    ServerDescriptionBuilder& withPrimary(const ServerAddress& primary);
-    ServerDescriptionBuilder& withLastUpdateTime(const Date_t& lastUpdateTime);
-    ServerDescriptionBuilder& withLogicalSessionTimeoutMinutes(
-        const int logicalSessionTimeoutMinutes);
 
 private:
     /**
