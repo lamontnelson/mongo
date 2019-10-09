@@ -229,11 +229,14 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
                    << std::endl;
             break;
         }
+
         case TopologyStateMachineEventType::kNewMaxSetVersion: {
             int newMaxSetVersion = checked_pointer_cast<NewMaxSetVersionEvent>(e)->newMaxSetVersion;
             LOG(3) << "SDAM: Topology set name changed to: " << newMaxSetVersion << std::endl;
             _parent._maxSetVersion = newMaxSetVersion;
-        } break;
+            break;
+        }
+
         case TopologyStateMachineEventType::kNewSetName: {
             const boost::optional<std::string>& newSetName =
                 checked_pointer_cast<NewSetNameEvent>(e)->newSetName;
@@ -241,12 +244,14 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             _parent._setName = newSetName;
             break;
         }
+
         case TopologyStateMachineEventType::kTopologyTypeChange: {
             const TopologyType newType = checked_pointer_cast<TopologyTypeChangeEvent>(e)->newType;
             LOG(3) << "SDAM: Topology type changed to: " << toString(newType) << std::endl;
             _parent.setType(newType);
             break;
         }
+
         case TopologyStateMachineEventType::kUpdateServerType: {
             auto event = checked_pointer_cast<UpdateServerTypeEvent>(e);
             auto newServerDescription = ServerDescriptionBuilder(event->serverDescription)
@@ -255,6 +260,7 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             _parent.installServerDescription(newServerDescription);
             break;
         }
+
         case TopologyStateMachineEventType::kNewServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<NewServerDescriptionEvent>(e)->newServerDescription;
@@ -263,6 +269,7 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             _parent.checkWireCompatibilityVersions();
             break;
         }
+
         case TopologyStateMachineEventType::kUpdateServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<UpdateServerDescriptionEvent>(e)->updatedServerDescription;
@@ -272,6 +279,7 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             _parent.checkWireCompatibilityVersions();
             break;
         }
+
         case TopologyStateMachineEventType::kRemoveServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<RemoveServerDescriptionEvent>(e)->removedServerDescription;
