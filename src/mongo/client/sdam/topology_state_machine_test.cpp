@@ -228,6 +228,29 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHost
     ASSERT_EQUALS(expectedRemovedServer, observer->removedDescriptions.front().getAddress());
 }
 
+TEST_F(TopologyStateMachineTestFixture, ShouldAddServerDescriptionIfInHostsListButNotInTopologyDescription) {
+    const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
+    const auto secondary = (*TWO_SEED_CONFIG.getSeedList()).back();
+    const auto newHost = ServerAddress("newhost:123");
+
+    auto observer = std::make_shared<StateMachineObserver>();
+    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
+    stateMachine.addObserver(observer);
+
+    auto serverDescription = ServerDescriptionBuilder()
+        .withAddress(primary)
+        .withType(ServerType::kRSPrimary)
+        .withPrimary(primary)
+        .withHost(primary)
+        .withHost(secondary)
+        .withHost(newHost)
+        .instance();
+
+    stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
+    ASSERT_EQUALS(static_cast<size_t>(1), observer->newDescriptions.size());
+    ASSERT_EQUALS(newHost, observer->newDescriptions.front().getAddress());
+}
+
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
     auto observer = std::make_shared<StateMachineObserver>();
