@@ -44,6 +44,11 @@ protected:
     static inline const auto TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
                           TopologyType::kReplicaSetNoPrimary);
+    static inline const auto TWO_SEED_REPLICA_SET_WITH_PRIMARY_CONFIG =
+        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
+                          TopologyType::kReplicaSetNoPrimary,
+                          mongo::Milliseconds(500),
+                          boost::make_optional(std::string("setName")));
     static inline const auto SINGLE_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER}, TopologyType::kSingle);
 
@@ -466,6 +471,48 @@ TEST_F(TopologyStateMachineTestFixture,
                   topologyDescription.getServerByAdress(expectedPossiblePrimary)->getType());
 
     stateMachine.nextServerDescription(topologyDescription, serverDescriptionFollowsPrimary);
+
+    auto it = observer->serverTypes.find(expectedPossiblePrimary);
+    ASSERT(it != observer->serverTypes.end());
+    ASSERT_EQUALS(ServerType::kPossiblePrimary, observer->serverTypes[expectedPossiblePrimary]);
+}
+
+TEST_F(TopologyStateMachineTestFixture,
+       ShouldChangeServerDescriptionTypeToPossiblePrimaryWhenTopologyTypeIsReplicaSetWithPrimary) {
+    const SdamConfiguration& config = TWO_SEED_REPLICA_SET_WITH_PRIMARY_CONFIG;
+    const auto previousPrimary = (*config.getSeedList())[0];
+    const auto expectedPossiblePrimary = (*config.getSeedList())[1];
+
+    TopologyDescription topologyDescription(config);
+    TopologyStateMachine stateMachine(config);
+    auto observer = std::make_shared<StateMachineObserver>();
+    stateMachine.addObserver(topologyDescription.getTopologyObserver());
+    stateMachine.addObserver(observer);
+
+    const auto serverDescriptionPreviousPrimary =
+        ServerDescriptionBuilder()
+            .withAddress(previousPrimary)
+            .withMe(previousPrimary)
+            .withType(ServerType::kRSSecondary)
+            .withPrimary(expectedPossiblePrimary)
+            .withSetName(*TWO_SEED_REPLICA_SET_WITH_PRIMARY_CONFIG.getSetName())
+            .withHost(previousPrimary)
+            .withHost(expectedPossiblePrimary)
+            .instance();
+
+    // setup the initial primary
+    const auto serverDescriptionPrimary = ServerDescriptionBuilder(serverDescriptionPreviousPrimary)
+                                              .withType(ServerType::kRSPrimary)
+                                              .withPrimary(previousPrimary)
+                                              .instance();
+    stateMachine.nextServerDescription(topologyDescription, serverDescriptionPrimary);
+
+    // Assert pre-condition required to change the server type in updateRSWithPrimaryFromMember
+    ASSERT_EQUALS(ServerType::kUnknown,
+                  topologyDescription.getServerByAdress(expectedPossiblePrimary)->getType());
+
+    // initial primary steps down
+    stateMachine.nextServerDescription(topologyDescription, serverDescriptionPreviousPrimary);
 
     auto it = observer->serverTypes.find(expectedPossiblePrimary);
     ASSERT(it != observer->serverTypes.end());
