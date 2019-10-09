@@ -196,7 +196,6 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
     ASSERT_EQUALS(std::vector<ServerDescription>{serverDescription}, observer->updatedDescriptions);
 }
 
-
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
@@ -333,15 +332,14 @@ TEST_F(TopologyStateMachineTestFixture,
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
     stateMachine.addObserver(observer);
 
-    const auto serverDescriptionFollowsPrimary =
-        ServerDescriptionBuilder()
-            .withAddress(follower)
-            .withMe(follower)
-            .withType(ServerType::kRSSecondary)
-            .withPrimary(expectedPossiblePrimary)
-            .instance();
+    const auto serverDescriptionFollowsPrimary = ServerDescriptionBuilder()
+                                                     .withAddress(follower)
+                                                     .withMe(follower)
+                                                     .withType(ServerType::kRSSecondary)
+                                                     .withPrimary(expectedPossiblePrimary)
+                                                     .instance();
 
-    // Assert pre-condition to change the server type in updateRSWithoutPrimary
+    // Assert pre-condition required to change the server type in updateRSWithoutPrimary
     TopologyDescription topologyDescription(config);
     ASSERT_EQUALS(ServerType::kUnknown,
                   topologyDescription.getServerByAdress(expectedPossiblePrimary)->getType());
