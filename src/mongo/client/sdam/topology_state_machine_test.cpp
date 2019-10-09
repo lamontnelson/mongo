@@ -121,8 +121,9 @@ protected:
         std::map<ServerAddress, ServerType> serverTypes;
     };
 
-    // Setup the test scenario, and simulate receiving a ServerDescription.
-    // Asserts that the final topology type is in the correct state.
+    // This function sets up the test scenario defined by the given TopologyTypeTestCase. It
+    // simulates receiving a ServerDescription, and asserts that the final topology type is in the
+    // correct state.
     void assertTopologyTypeTestCase(TopologyTypeTestCase testCase) {
         auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
         TopologyStateMachine stateMachine(testCase.initialConfig);
@@ -208,8 +209,14 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     ASSERT_EQUALS(serverDescription, observer->newDescriptions.front());
 }
 
+// The following two tests (ShouldNotUpdateToplogyType, ShouldUpdateToCorrectToplogyType) assert
+// that the topology type is correct given an initial state and a ServerType. Together, they
+// cover all the cases specified in the SDAM spec here:
+// https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#topologytype-table
+
 TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
     using T = TopologyTypeTestCase;
+
     // test cases that should not change TopologyType
     std::vector<TopologyTypeTestCase> testCases{
         T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kUnknown, TopologyType::kUnknown},
@@ -246,7 +253,6 @@ TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
         assertTopologyTypeTestCase(testCase);
     }
 }
-
 
 TEST_F(TopologyStateMachineTestFixture, ShouldUpdateToCorrectToplogyType) {
     using T = TopologyTypeTestCase;
