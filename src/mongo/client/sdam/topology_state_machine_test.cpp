@@ -242,7 +242,6 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
     stateMachine.addObserver(topologyDescription.getTopologyObserver());
     stateMachine.addObserver(observer);
 
-
     const OID oidOne(std::string("000000000000000000000001"));
     const OID oidTwo(std::string("000000000000000000000002"));
 
