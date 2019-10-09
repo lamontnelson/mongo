@@ -64,6 +64,7 @@ const std::vector<ServerType> allServerTypes() {
     static auto const result = std::vector<ServerType>{ServerType::kStandalone,
                                                        ServerType::kMongos,
                                                        ServerType::kRSPrimary,
+                                                       ServerType::kPossiblePrimary,
                                                        ServerType::kRSSecondary,
                                                        ServerType::kRSArbiter,
                                                        ServerType::kRSOther,
