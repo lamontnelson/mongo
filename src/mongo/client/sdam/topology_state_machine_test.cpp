@@ -228,6 +228,25 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHost
     ASSERT_EQUALS(expectedRemovedServer, observer->removedDescriptions.front().getAddress());
 }
 
+TEST_F(TopologyStateMachineTestFixture, ShouldRemoveNonPrimaryServerWhenReplicaSetNoPrimaryAndMeDoesntMatchAddress) {
+    const auto serverAddress = (*TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG.getSeedList()).front();
+    const auto me = "someotherhost:123";
+
+    TopologyStateMachine stateMachine(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG);
+    auto observer = std::make_shared<StateMachineObserver>();
+    stateMachine.addObserver(observer);
+
+    auto serverDescription = ServerDescriptionBuilder()
+        .withAddress(serverAddress)
+        .withMe(me)
+        .withType(ServerType::kRSSecondary)
+        .instance();
+
+    stateMachine.nextServerDescription(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG, serverDescription);
+    ASSERT_EQUALS(static_cast<size_t>(1), observer->removedDescriptions.size());
+    ASSERT_EQUALS(serverDescription.getAddress(), observer->removedDescriptions.front().getAddress());
+}
+
 TEST_F(TopologyStateMachineTestFixture, ShouldAddServerDescriptionIfInHostsListButNotInTopologyDescription) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
     const auto secondary = (*TWO_SEED_CONFIG.getSeedList()).back();
