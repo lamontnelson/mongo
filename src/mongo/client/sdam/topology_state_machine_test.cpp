@@ -216,7 +216,6 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
     stateMachine.addObserver(topologyDescription.getTopologyObserver());
     stateMachine.addObserver(observer);
 
-
     auto serverDescription = ServerDescriptionBuilder()
                                  .withType(ServerType::kRSPrimary)
                                  .withPrimary(primary)
