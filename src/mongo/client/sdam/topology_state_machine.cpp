@@ -164,8 +164,8 @@ void TopologyStateMachine::nextServerDescription(const TopologyDescription& topo
     }
 }
 
-void TopologyStateMachine::updateUnknownWithStandalone(const TopologyDescription& topologyDescription,
-                                                       const ServerDescription& serverDescription) {
+void TopologyStateMachine::updateUnknownWithStandalone(
+    const TopologyDescription& topologyDescription, const ServerDescription& serverDescription) {
     if (!topologyDescription.containsServerAddress(serverDescription.getAddress()))
         return;
 
@@ -349,8 +349,8 @@ void TopologyStateMachine::checkIfHasPrimary(const TopologyDescription& topology
     }
 }
 
-void TopologyStateMachine::removeAndCheckIfHasPrimary(const TopologyDescription& topologyDescription,
-                                                      const ServerDescription& serverDescription) {
+void TopologyStateMachine::removeAndCheckIfHasPrimary(
+    const TopologyDescription& topologyDescription, const ServerDescription& serverDescription) {
     removeAndStopMonitoring(topologyDescription, serverDescription);
     checkIfHasPrimary(topologyDescription, serverDescription);
 }
