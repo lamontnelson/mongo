@@ -61,6 +61,7 @@ protected:
             switch (e->type) {
                 case TopologyStateMachineEventType::kTopologyTypeChange:
                     topologyType = std::dynamic_pointer_cast<TopologyTypeChangeEvent>(e)->newType;
+                    std::cout << "new topology type: " << toString(topologyType) << std::endl;
                     break;
                 case TopologyStateMachineEventType::kNewSetName:
                     setName = std::dynamic_pointer_cast<NewSetNameEvent>(e)->newSetName;
@@ -181,31 +182,29 @@ protected:
 
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTopology) {
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
-    TopologyDescription topologyDescription(SINGLE_CONFIG);
     TopologyStateMachine stateMachine(SINGLE_CONFIG);
-    stateMachine.addObserver(topologyDescription.getTopologyObserver());
     stateMachine.addObserver(observer);
+
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(LOCAL_SERVER)
                                  .withMe("foo:1234")
                                  .withType(ServerType::kStandalone)
                                  .instance();
 
-    stateMachine.nextServerDescription(topologyDescription, serverDescription);
+    stateMachine.nextServerDescription(SINGLE_CONFIG, serverDescription);
     ASSERT_EQUALS(std::vector<ServerDescription>{serverDescription}, observer->updatedDescriptions);
-    ASSERT_EQUALS(TopologyType::kSingle, topologyDescription.getType());
 }
 
 
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
-    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
-    stateMachine.addObserver(topologyDescription.getTopologyObserver());
     stateMachine.addObserver(observer);
+
     auto serverDescription =
         ServerDescriptionBuilder().withAddress("serverDescription:1234").instance();
-    stateMachine.nextServerDescription(topologyDescription, serverDescription);
+
+    stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
     ASSERT_EQUALS(serverDescription, observer->newDescriptions.front());
 }
 
@@ -329,18 +328,20 @@ TEST_F(TopologyStateMachineTestFixture,
     const auto follower = (*config.getSeedList())[0];
     const auto expectedPossiblePrimary = (*config.getSeedList())[1];
 
-    TopologyDescription topologyDescription(config);
     TopologyStateMachine stateMachine(config);
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
     stateMachine.addObserver(observer);
 
     const auto serverDescriptionFollowsPrimary =
-        ServerDescriptionBuilder(*topologyDescription.getServerByAdress(follower))
-            .withType(ServerType::kRSSecondary)
+        ServerDescriptionBuilder()
+            .withAddress(follower)
             .withMe(follower)
+            .withType(ServerType::kRSSecondary)
             .withPrimary(expectedPossiblePrimary)
             .instance();
 
+    // Assert pre-condition to change the server type in updateRSWithoutPrimary
+    TopologyDescription topologyDescription(config);
     ASSERT_EQUALS(ServerType::kUnknown,
                   topologyDescription.getServerByAdress(expectedPossiblePrimary)->getType());
 
