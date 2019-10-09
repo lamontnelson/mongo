@@ -112,27 +112,31 @@ public:
     const UUID& getId() const;
     TopologyType getType() const;
     const boost::optional<std::string>& getSetName() const;
+
     const boost::optional<int>& getMaxSetVersion() const;
     const boost::optional<OID>& getMaxElectionId() const;
+
     const std::vector<ServerDescription>& getServers() const;
+
     bool isWireVersionCompatible() const;
     const boost::optional<std::string>& getWireVersionCompatibleError() const;
+
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
     const Milliseconds& getHeartBeatFrequency() const;
 
+    const boost::optional<ServerDescription> getServerByAdress(ServerAddress address);
     bool containsServerAddress(ServerAddress address) const;
     std::vector<ServerDescription> findServers(
         std::function<bool(const ServerDescription&)> predicate) const;
-    const boost::optional<ServerDescription> getServerByAdress(ServerAddress address);
 
     // Replaces or adds the given ServerDescription using the description's ServerAddress as the
     // lookup key. If present, the previous server description is returned.
     boost::optional<ServerDescription> installServerDescription(
         const ServerDescription& newServerDescription);
-
     void removeServerDescription(const ServerDescription& serverDescription);
 
     void setType(TopologyType type);
+
     const std::shared_ptr<TopologyObserver> getTopologyObserver() const;
 
 protected:
