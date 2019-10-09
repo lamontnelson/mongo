@@ -40,6 +40,9 @@ protected:
     static inline const auto LOCAL_SERVER2 = "localhost:456";
     static inline const auto TWO_SEED_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2});
+    static inline const auto TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG =
+        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
+                          TopologyType::kReplicaSetNoPrimary);
     static inline const auto SINGLE_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER}, TopologyType::kSingle);
 
@@ -65,9 +68,10 @@ protected:
                               << std::endl;
                     break;
                 case TopologyStateMachineEventType::kUpdateServerType: {
-                    auto& newServerType =
-                        std::dynamic_pointer_cast<UpdateServerTypeEvent>(e)->newServerType;
-                    std::cout << "(TODO) new server type: " << newServerType << std::endl;
+                    const std::shared_ptr<UpdateServerTypeEvent>& event =
+                        std::dynamic_pointer_cast<UpdateServerTypeEvent>(e);
+                    std::cout << "new server type: " << event->newServerType << std::endl;
+                    serverTypes[event->serverDescription.getAddress()] = event->newServerType;
                     break;
                 }
                 case TopologyStateMachineEventType::kNewServerDescription: {
@@ -79,7 +83,7 @@ protected:
                     break;
                 }
                 case TopologyStateMachineEventType::kUpdateServerDescription: {
-                    auto& updateServerDescription =
+                    const auto& updateServerDescription =
                         std::dynamic_pointer_cast<UpdateServerDescriptionEvent>(e)
                             ->updatedServerDescription;
                     std::cout << "update server desc:" << updateServerDescription << std::endl;
@@ -114,6 +118,7 @@ protected:
         std::vector<ServerDescription> newDescriptions;
         std::vector<ServerDescription> updatedDescriptions;
         std::vector<ServerDescription> removedDescriptions;
+        std::map<ServerAddress, ServerType> serverTypes;
     };
 
     // Setup the test scenario, and simulate receiving a ServerDescription.
@@ -310,5 +315,33 @@ TEST_F(TopologyStateMachineTestFixture, ShouldUpdateToCorrectToplogyType) {
 
         assertTopologyTypeTestCase(testCase);
     }
+}
+
+TEST_F(TopologyStateMachineTestFixture,
+       ShouldChangeServerDescriptionTypeToPossiblePrimaryWhenTopologyTypeIsReplicaSetNoPrimary) {
+    const SdamConfiguration& config = TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG;
+    const auto follower = (*config.getSeedList())[0];
+    const auto expectedPossiblePrimary = (*config.getSeedList())[1];
+
+    TopologyDescription topologyDescription(config);
+    TopologyStateMachine stateMachine(config);
+    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    stateMachine.addObserver(observer);
+
+    const auto serverDescriptionFollowsPrimary =
+        ServerDescriptionBuilder(*topologyDescription.getServerByAdress(follower))
+            .withType(ServerType::kRSSecondary)
+            .withMe(follower)
+            .withPrimary(expectedPossiblePrimary)
+            .instance();
+
+    ASSERT_EQUALS(ServerType::kUnknown,
+                  topologyDescription.getServerByAdress(expectedPossiblePrimary)->getType());
+
+    stateMachine.nextServerDescription(topologyDescription, serverDescriptionFollowsPrimary);
+
+    auto it = observer->serverTypes.find(expectedPossiblePrimary);
+    ASSERT(it != observer->serverTypes.end());
+    ASSERT_EQUALS(ServerType::kPossiblePrimary, observer->serverTypes[expectedPossiblePrimary]);
 }
 }  // namespace mongo::sdam

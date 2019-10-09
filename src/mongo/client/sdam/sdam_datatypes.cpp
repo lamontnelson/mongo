@@ -46,6 +46,8 @@ std::string toString(const ServerType serverType) {
             return "RSOther";
         case ServerType::kRSGhost:
             return "RSGhost";
+        case ServerType::kPossiblePrimary:
+            return "PossiblePrimary";
         case ServerType::kUnknown:
             return "Unknown";
         default:

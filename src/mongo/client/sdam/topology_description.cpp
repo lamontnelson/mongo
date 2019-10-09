@@ -106,10 +106,7 @@ bool TopologyDescription::containsServerAddress(ServerAddress address) const {
         _servers.begin(), _servers.end(), [address](const ServerDescription& serverDescription) {
             return serverDescription.getAddress() == address;
         });
-    if (it != _servers.end()) {
-        return true;
-    }
-    return false;
+    return it != _servers.end();
 }
 
 std::vector<ServerDescription> TopologyDescription::findServers(
@@ -138,7 +135,10 @@ boost::optional<ServerDescription> TopologyDescription::installServerDescription
                 break;
             }
         }
-        _servers.push_back(newServerDescription);
+
+        if (!previousDescription) {
+            _servers.push_back(newServerDescription);
+        }
     }
     return previousDescription;
 }
@@ -211,6 +211,14 @@ const std::shared_ptr<TopologyObserver> TopologyDescription::getTopologyObserver
     return _topologyObserver;
 }
 
+const boost::optional<ServerDescription> TopologyDescription::getServerByAdress(
+    ServerAddress address) {
+    auto it = std::find_if(_servers.begin(), _servers.end(), [address](const ServerDescription& serverDescription) {
+        return serverDescription.getAddress() == address;
+    });
+    return (it != _servers.end()) ? boost::make_optional(*it) : boost::none;
+}
+
 void TopologyDescription::Observer::onTopologyStateMachineEvent(
     std::shared_ptr<TopologyStateMachineEvent> e) {
     switch (e->type) {
@@ -240,9 +248,14 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             _parent.setType(newType);
             break;
         }
-        case TopologyStateMachineEventType::kUpdateServerType:
-            // TODO: need to make ServerDescriptionBuilder start from an existing instance.
+        case TopologyStateMachineEventType::kUpdateServerType: {
+            auto event = checked_pointer_cast<UpdateServerTypeEvent>(e);
+            auto newServerDescription = ServerDescriptionBuilder(event->serverDescription)
+                                            .withType(event->newServerType)
+                                            .instance();
+            _parent.installServerDescription(newServerDescription);
             break;
+        }
         case TopologyStateMachineEventType::kNewServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<NewServerDescriptionEvent>(e)->newServerDescription;

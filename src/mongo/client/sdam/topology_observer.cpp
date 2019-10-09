@@ -43,7 +43,7 @@ NewSetNameEvent::NewSetNameEvent(boost::optional<std::string> newSetName)
 
 UpdateServerTypeEvent::UpdateServerTypeEvent(ServerDescription serverDescription,
                                              const ServerType newServerType)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kUpdateServerDescription),
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kUpdateServerType),
       serverDescription(std::move(serverDescription)),
       newServerType(newServerType) {}
 
