@@ -255,10 +255,9 @@ void TopologyStateMachine::updateRSWithPrimaryFromMember(
                 [serverDescription](const ServerDescription& description) {
                     return description.getAddress() == serverDescription.getPrimary();
                 });
-            invariant(possiblePrimary.size() == 1);  // TODO: verify this
+            invariant(possiblePrimary.size() == 1);
             if (possiblePrimary[0].getType() == ServerType::kUnknown) {
-                // TODO: complete when we move the ServerDescription mutation code
-                throw "not implemented yet";
+                emitUpdateServerType(possiblePrimary.front(), ServerType::kPossiblePrimary);
             }
         }
     }
