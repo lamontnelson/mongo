@@ -38,6 +38,7 @@ protected:
     static inline const auto REPLICA_SET_NAME = "replica_set";
     static inline const auto LOCAL_SERVER = "localhost:123";
     static inline const auto LOCAL_SERVER2 = "localhost:456";
+
     static inline const auto TWO_SEED_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2});
     static inline const auto TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG =
