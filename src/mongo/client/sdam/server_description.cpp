@@ -228,8 +228,9 @@ ServerDescriptionBuilder::ServerDescriptionBuilder(ClockSource* clockSource,
     withAddress(boost::to_lower_copy(isMasterOutcome.getServer()));
     if (isMasterOutcome.isSuccess()) {
         const auto response = *isMasterOutcome.getResponse();
-        parseTypeFromIsMaster(response);
 
+        // type must be parsed before RTT is calculated.
+        parseTypeFromIsMaster(response);
         calculateRtt(*isMasterOutcome.getRtt(), lastRtt);
 
         withLastUpdateTime(clockSource->now());
@@ -276,12 +277,17 @@ void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
 
 void ServerDescriptionBuilder::calculateRtt(const IsMasterLatency currentRtt,
                                             const boost::optional<IsMasterLatency> lastRtt) {
-    if (_instance.getType() != ServerType::kUnknown) {
-        if (lastRtt) {
-            withRtt(currentRtt, *lastRtt);
-        } else {
-            withRtt(currentRtt);
-        }
+    if (_instance.getType() == ServerType::kUnknown) {
+        // if a server's type is Unknown, it's RTT is null
+        // see:
+        // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#roundtriptime
+        return;
+    }
+
+    if (lastRtt) {
+        withRtt(currentRtt, *lastRtt);
+    } else {
+        withRtt(currentRtt);
     }
 }
 
