@@ -228,7 +228,8 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHost
     ASSERT_EQUALS(expectedRemovedServer, observer->removedDescriptions.front().getAddress());
 }
 
-TEST_F(TopologyStateMachineTestFixture, ShouldRemoveNonPrimaryServerWhenReplicaSetNoPrimaryAndMeDoesntMatchAddress) {
+TEST_F(TopologyStateMachineTestFixture,
+       ShouldRemoveNonPrimaryServerWhenTopologyIsReplicaSetNoPrimaryAndMeDoesntMatchAddress) {
     const auto serverAddress = (*TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG.getSeedList()).front();
     const auto me = "someotherhost:123";
 
@@ -237,17 +238,19 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveNonPrimaryServerWhenReplicaS
     stateMachine.addObserver(observer);
 
     auto serverDescription = ServerDescriptionBuilder()
-        .withAddress(serverAddress)
-        .withMe(me)
-        .withType(ServerType::kRSSecondary)
-        .instance();
+                                 .withAddress(serverAddress)
+                                 .withMe(me)
+                                 .withType(ServerType::kRSSecondary)
+                                 .instance();
 
     stateMachine.nextServerDescription(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG, serverDescription);
     ASSERT_EQUALS(static_cast<size_t>(1), observer->removedDescriptions.size());
-    ASSERT_EQUALS(serverDescription.getAddress(), observer->removedDescriptions.front().getAddress());
+    ASSERT_EQUALS(serverDescription.getAddress(),
+                  observer->removedDescriptions.front().getAddress());
 }
 
-TEST_F(TopologyStateMachineTestFixture, ShouldAddServerDescriptionIfInHostsListButNotInTopologyDescription) {
+TEST_F(TopologyStateMachineTestFixture,
+       ShouldAddServerDescriptionIfInHostsListButNotInTopologyDescription) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
     const auto secondary = (*TWO_SEED_CONFIG.getSeedList()).back();
     const auto newHost = ServerAddress("newhost:123");
@@ -257,13 +260,13 @@ TEST_F(TopologyStateMachineTestFixture, ShouldAddServerDescriptionIfInHostsListB
     stateMachine.addObserver(observer);
 
     auto serverDescription = ServerDescriptionBuilder()
-        .withAddress(primary)
-        .withType(ServerType::kRSPrimary)
-        .withPrimary(primary)
-        .withHost(primary)
-        .withHost(secondary)
-        .withHost(newHost)
-        .instance();
+                                 .withAddress(primary)
+                                 .withType(ServerType::kRSPrimary)
+                                 .withPrimary(primary)
+                                 .withHost(primary)
+                                 .withHost(secondary)
+                                 .withHost(newHost)
+                                 .instance();
 
     stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
     ASSERT_EQUALS(static_cast<size_t>(1), observer->newDescriptions.size());

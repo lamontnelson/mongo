@@ -112,22 +112,33 @@ const boost::optional<int>& ServerDescription::getLogicalSessionTimeoutMinutes()
 }
 
 bool ServerDescription::isEquivalent(const ServerDescription& other) const {
-    auto typeEqual = _type == other._type;
-    auto minWireVersionEqual = _minWireVersion == other._minWireVersion;
-    auto maxWireVersionEqual = _maxWireVersion == other._maxWireVersion;
-    auto meEqual = _me == other._me;
-    auto hostsEqual = _hosts == other._hosts;
-    auto passivesEqual = _passives == other._passives;
-    auto arbitersEqual = _arbiters == other._arbiters;
-    auto tagsEqual = _tags == other._tags;
-    auto namesEqual = _setName == other._setName;
-    auto versionsEqual = _setVersion == other._setVersion;
-    auto electionIdEqual = _electionId == other._electionId;
-    auto primaryEqual = _primary == other._primary;
-    auto lsTimeoutEqual = _logicalSessionTimeoutMinutes == other._logicalSessionTimeoutMinutes;
-    return typeEqual && minWireVersionEqual && maxWireVersionEqual && meEqual && hostsEqual &&
-        passivesEqual && arbitersEqual && tagsEqual && namesEqual && versionsEqual &&
-        electionIdEqual && primaryEqual && lsTimeoutEqual;
+    auto otherValues = std::tie(other._type,
+                                other._minWireVersion,
+                                other._maxWireVersion,
+                                other._me,
+                                other._hosts,
+                                other._passives,
+                                other._arbiters,
+                                other._tags,
+                                other._setName,
+                                other._setVersion,
+                                other._electionId,
+                                other._primary,
+                                other._logicalSessionTimeoutMinutes);
+    auto thisValues = std::tie(_type,
+                               _minWireVersion,
+                               _maxWireVersion,
+                               _me,
+                               _hosts,
+                               _passives,
+                               _arbiters,
+                               _tags,
+                               _setName,
+                               _setVersion,
+                               _electionId,
+                               _primary,
+                               _logicalSessionTimeoutMinutes);
+    return thisValues == otherValues;
 }
 
 bool ServerDescription::isDataBearingServer() const {
