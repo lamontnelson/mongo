@@ -78,7 +78,8 @@ std::ostream& operator<<(std::ostream& os, const std::map<K, V>& m) {
     return os;
 }
 
-template std::ostream& operator<<(std::ostream& os, const std::vector<mongo::sdam::ServerDescription>& v);
+template std::ostream& operator<<(std::ostream& os,
+                                  const std::vector<mongo::sdam::ServerDescription>& v);
 template std::ostream& operator<<(std::ostream& os, const std::set<std::string>& s);
 template std::ostream& operator<<(std::ostream& os, const std::map<std::string, std::string>& m);
 

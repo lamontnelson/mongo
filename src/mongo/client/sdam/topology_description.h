@@ -150,9 +150,11 @@ public:
 protected:
     class Observer : public TopologyObserver {
         Observer() = delete;
+
     public:
         Observer(TopologyDescription& parent) : _parent(parent) {}
         void onTopologyStateMachineEvent(std::shared_ptr<TopologyStateMachineEvent> e) override;
+
     private:
         TopologyDescription& _parent;
     };
