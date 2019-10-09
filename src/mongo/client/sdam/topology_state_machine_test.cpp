@@ -208,9 +208,30 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
     ASSERT_EQUALS(serverDescription, observer->newDescriptions.front());
 }
 
+TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHostsList) {
+    const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
+    const auto expectedRemovedServer = (*TWO_SEED_CONFIG.getSeedList()).back();
+
+    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
+    stateMachine.addObserver(observer);
+
+    auto serverDescription = ServerDescriptionBuilder()
+                                 .withAddress(primary)
+                                 .withType(ServerType::kRSPrimary)
+                                 .withPrimary(primary)
+                                 .withHost(primary)
+                                 .instance();
+
+    stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
+    ASSERT_EQUALS(static_cast<size_t>(1), observer->removedDescriptions.size());
+    ASSERT_EQUALS(expectedRemovedServer, observer->removedDescriptions.front().getAddress());
+}
+
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
     auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
     stateMachine.addObserver(topologyDescription.getTopologyObserver());
@@ -256,9 +277,8 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
     stateMachine.nextServerDescription(topologyDescription, serverDescription);
     ASSERT_EQUALS(oidOne, observer->maxElectionId);
 
-    auto serverDescriptionEvenBiggerElectionId = ServerDescriptionBuilder(serverDescription)
-                                                     .withElectionId(oidTwo)
-                                                     .instance();
+    auto serverDescriptionEvenBiggerElectionId =
+        ServerDescriptionBuilder(serverDescription).withElectionId(oidTwo).instance();
     stateMachine.nextServerDescription(topologyDescription, serverDescriptionEvenBiggerElectionId);
     ASSERT_EQUALS(oidTwo, observer->maxElectionId);
 }
