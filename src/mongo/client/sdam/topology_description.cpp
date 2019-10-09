@@ -201,7 +201,7 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
         case PLACEHOLDER_FOR_44:
             return "4.4";
         default:
-            return "UNKNOWN";
+            MONGO_UNREACHABLE;
     }
 }
 
@@ -257,6 +257,7 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             auto newServerDescription = ServerDescriptionBuilder(event->serverDescription)
                                             .withType(event->newServerType)
                                             .instance();
+            LOG(3) << "SDAM: server " << newServerDescription.getAddress() << " type changed to: " << toString(newServerDescription.getType()) << std::endl;
             _parent.installServerDescription(newServerDescription);
             break;
         }
@@ -283,6 +284,7 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
         case TopologyStateMachineEventType::kRemoveServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<RemoveServerDescriptionEvent>(e)->removedServerDescription;
+            LOG(3) << "SDAM: remove server description: " << serverDescription << std::endl;
             _parent.removeServerDescription(serverDescription);
             break;
         }
