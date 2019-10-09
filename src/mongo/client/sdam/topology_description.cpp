@@ -27,12 +27,10 @@
  *    it in the license file.
  */
 #include "mongo/client/sdam/topology_description.h"
-#include "mongo/client/sdam/sdam_test_base.h"
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/db/wire_version.h"
-#include "mongo/util/assert_util.h"
 #include "mongo/util/log.h"
 
 namespace mongo::sdam {
