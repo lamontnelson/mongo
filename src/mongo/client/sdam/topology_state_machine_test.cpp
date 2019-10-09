@@ -115,7 +115,7 @@ protected:
 
         TopologyType topologyType = TopologyType::kUnknown;
         boost::optional<std::string> setName;
-        OID maxElectionId = OID::max();
+        OID maxElectionId = OID(std::string("000000000000000000000000"));
         int maxSetVersion = -1;
         std::vector<ServerDescription> newDescriptions;
         std::vector<ServerDescription> updatedDescriptions;
@@ -206,6 +206,63 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
 
     stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
     ASSERT_EQUALS(serverDescription, observer->newDescriptions.front());
+}
+
+TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
+    const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
+    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
+    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
+    stateMachine.addObserver(topologyDescription.getTopologyObserver());
+    stateMachine.addObserver(observer);
+
+
+    auto serverDescription = ServerDescriptionBuilder()
+                                 .withType(ServerType::kRSPrimary)
+                                 .withPrimary(primary)
+                                 .withMe(primary)
+                                 .withAddress(primary)
+                                 .withSetVersion(100)
+                                 .instance();
+
+    stateMachine.nextServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(100, observer->maxSetVersion);
+
+    auto serverDescriptionEvenBiggerSetVersion =
+        ServerDescriptionBuilder(serverDescription).withSetVersion(200).instance();
+    stateMachine.nextServerDescription(topologyDescription, serverDescriptionEvenBiggerSetVersion);
+    ASSERT_EQUALS(200, observer->maxSetVersion);
+}
+
+TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
+    const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
+    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
+    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
+    stateMachine.addObserver(topologyDescription.getTopologyObserver());
+    stateMachine.addObserver(observer);
+
+
+    const OID oidOne(std::string("000000000000000000000001"));
+    const OID oidTwo(std::string("000000000000000000000002"));
+
+    auto serverDescription = ServerDescriptionBuilder()
+                                 .withType(ServerType::kRSPrimary)
+                                 .withPrimary(primary)
+                                 .withMe(primary)
+                                 .withAddress(primary)
+                                 .withSetVersion(1)
+                                 .withElectionId(oidOne)
+                                 .instance();
+
+    stateMachine.nextServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(oidOne, observer->maxElectionId);
+
+    auto serverDescriptionEvenBiggerElectionId = ServerDescriptionBuilder(serverDescription)
+                                                     .withElectionId(oidTwo)
+                                                     .instance();
+    stateMachine.nextServerDescription(topologyDescription, serverDescriptionEvenBiggerElectionId);
+    ASSERT_EQUALS(oidTwo, observer->maxElectionId);
 }
 
 // The following two tests (ShouldNotUpdateToplogyType, ShouldUpdateToCorrectToplogyType) assert
