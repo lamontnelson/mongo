@@ -127,7 +127,7 @@ protected:
     // simulates receiving a ServerDescription, and asserts that the final topology type is in the
     // correct state.
     void assertTopologyTypeTestCase(TopologyTypeTestCase testCase) {
-        auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+        auto observer = std::make_shared<StateMachineObserver>();
         TopologyStateMachine stateMachine(testCase.initialConfig);
 
         // setup the initial state
@@ -182,7 +182,7 @@ protected:
 };
 
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTopology) {
-    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    auto observer = std::make_shared<StateMachineObserver>();
     TopologyStateMachine stateMachine(SINGLE_CONFIG);
     stateMachine.addObserver(observer);
 
@@ -193,11 +193,11 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
                                  .instance();
 
     stateMachine.nextServerDescription(SINGLE_CONFIG, serverDescription);
-    ASSERT_EQUALS(std::vector<ServerDescription>{serverDescription}, observer->updatedDescriptions);
+    ASSERT_EQUALS(serverDescription, observer->updatedDescriptions.front());
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
-    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    auto observer = std::make_shared<StateMachineObserver>();
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
     stateMachine.addObserver(observer);
 
@@ -212,7 +212,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHost
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
     const auto expectedRemovedServer = (*TWO_SEED_CONFIG.getSeedList()).back();
 
-    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    auto observer = std::make_shared<StateMachineObserver>();
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
     stateMachine.addObserver(observer);
 
@@ -230,7 +230,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHost
 
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
-    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    auto observer = std::make_shared<StateMachineObserver>();
 
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
@@ -256,7 +256,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
 
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
-    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    auto observer = std::make_shared<StateMachineObserver>();
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
     stateMachine.addObserver(topologyDescription.getTopologyObserver());
@@ -404,7 +404,7 @@ TEST_F(TopologyStateMachineTestFixture,
     const auto expectedPossiblePrimary = (*config.getSeedList())[1];
 
     TopologyStateMachine stateMachine(config);
-    auto observer = std::shared_ptr<StateMachineObserver>(new StateMachineObserver());
+    auto observer = std::make_shared<StateMachineObserver>();
     stateMachine.addObserver(observer);
 
     const auto serverDescriptionFollowsPrimary = ServerDescriptionBuilder()
