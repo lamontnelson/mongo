@@ -38,10 +38,7 @@
 #include "mongo/db/repl/optime.h"
 #include "mongo/util/system_clock_source.h"
 
-namespace mongo {
-using namespace std;
-
-namespace sdam {
+namespace mongo::sdam {
 TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
     ServerDescription a("foo:1234");
     ServerDescription b("FOo:1234");
@@ -182,7 +179,8 @@ class ServerDescriptionBuilderTestFixture : public SdamTestFixture {
 protected:
     // returns a set containing the elements in the given bson array with lowercase values.
     std::set<std::string> toHostSet(std::vector<BSONElement> bsonArray) {
-        return mapSet<BSONElement, std::string>(bsonArray, [](const BSONElement& e) {return boost::to_lower_copy(e.String());});
+        return mapSet<BSONElement, std::string>(
+            bsonArray, [](const BSONElement& e) { return boost::to_lower_copy(e.String()); });
     }
 
     std::map<std::string, std::string> toStringMap(BSONObj bsonObj) {
@@ -474,5 +472,4 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnFai
     ASSERT_EQUALS(boost::none, description.getPrimary());
     ASSERT_EQUALS(boost::none, description.getLogicalSessionTimeoutMinutes());
 }
-}  // namespace sdam
-};  // namespace mongo
+};  // namespace mongo::sdam

@@ -73,7 +73,7 @@ public:
     int getMaxWireVersion() const;
     bool isDataBearingServer() const;
 
-    // server 'time' statistics
+    // server 'time'
     const Date_t getLastUpdateTime() const;
     const boost::optional<Date_t>& getLastWriteDate() const;
     const boost::optional<repl::OpTime>& getOpTime() const;
@@ -204,7 +204,7 @@ public:
     ServerDescriptionBuilder& withMinWireVersion(int minVersion);
     ServerDescriptionBuilder& withMaxWireVersion(int maxVersion);
 
-
+    // server 'time'
     ServerDescriptionBuilder& withLastWriteDate(const Date_t& lastWriteDate);
     ServerDescriptionBuilder& withOpTime(const repl::OpTime opTime);
     ServerDescriptionBuilder& withLastUpdateTime(const Date_t& lastUpdateTime);
@@ -230,6 +230,7 @@ private:
     void calculateRtt(const IsMasterLatency currentRtt,
                       const boost::optional<IsMasterLatency> lastRtt);
     void saveLastWriteInfo(BSONObj lastWriteBson);
+
     void storeHostListIfPresent(const std::string key,
                                 const BSONObj response,
                                 std::set<ServerAddress>& destination);
