@@ -249,6 +249,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldAddServerDescriptionIfInHostsListB
     stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
     ASSERT_EQUALS(static_cast<size_t>(1), observer->newDescriptions.size());
     ASSERT_EQUALS(newHost, observer->newDescriptions.front().getAddress());
+    ASSERT_EQUALS(ServerType::kUnknown, observer->newDescriptions.front().getType());
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
