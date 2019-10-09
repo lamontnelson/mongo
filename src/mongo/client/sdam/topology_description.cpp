@@ -187,7 +187,8 @@ void TopologyDescription::checkWireCompatibilityVersions() {
 }
 
 const std::string TopologyDescription::minimumRequiredMongoVersionString(int version) {
-    // TODO: need versions for AGG_RETURNS_CURSORS, BATCH_COMMANDS, FIND_COMMAND, COMMANDS_ACCEPT_WRITE_CONCERN
+    // TODO: need versions for AGG_RETURNS_CURSORS, BATCH_COMMANDS, FIND_COMMAND,
+    // COMMANDS_ACCEPT_WRITE_CONCERN
     switch (version) {
         case RELEASE_2_4_AND_BEFORE:
             return "1.0";
@@ -212,9 +213,10 @@ const std::shared_ptr<TopologyObserver> TopologyDescription::getTopologyObserver
 
 const boost::optional<ServerDescription> TopologyDescription::getServerByAdress(
     ServerAddress address) {
-    auto it = std::find_if(_servers.begin(), _servers.end(), [address](const ServerDescription& serverDescription) {
-        return serverDescription.getAddress() == address;
-    });
+    auto it = std::find_if(
+        _servers.begin(), _servers.end(), [address](const ServerDescription& serverDescription) {
+            return serverDescription.getAddress() == address;
+        });
     return (it != _servers.end()) ? boost::make_optional(*it) : boost::none;
 }
 
