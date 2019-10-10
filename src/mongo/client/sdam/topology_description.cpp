@@ -257,7 +257,8 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             auto newServerDescription = ServerDescriptionBuilder(event->serverDescription)
                                             .withType(event->newServerType)
                                             .instance();
-            LOG(3) << "SDAM: server " << newServerDescription.getAddress() << " type changed to: " << toString(newServerDescription.getType()) << std::endl;
+            LOG(3) << "SDAM: server " << newServerDescription.getAddress()
+                   << " type changed to: " << toString(newServerDescription.getType()) << std::endl;
             _parent.installServerDescription(newServerDescription);
             break;
         }
