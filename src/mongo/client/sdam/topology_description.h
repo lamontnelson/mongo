@@ -117,13 +117,13 @@ public:
         std::function<bool(const ServerDescription&)> predicate) const;
 
     /**
-     * Adds the given ServerDescription or swaps it with the existing one
+     * Adds the given ServerDescription or swaps it with an existing one
      * using the description's ServerAddress as the lookup key. If present, the previous server
      * description is returned.
      */
     boost::optional<ServerDescription> installServerDescription(
         const ServerDescription& newServerDescription);
-    void removeServerDescription(const ServerDescription& serverDescription);
+    void removeServerDescription(const ServerAddress& serverAddress);
 
     void setType(TopologyType type);
 

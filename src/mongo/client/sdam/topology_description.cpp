@@ -136,11 +136,11 @@ boost::optional<ServerDescription> TopologyDescription::installServerDescription
     return previousDescription;
 }
 
-void TopologyDescription::removeServerDescription(const ServerDescription& serverDescription) {
+void TopologyDescription::removeServerDescription(const ServerAddress& serverAddress) {
     auto it = std::find_if(_servers.begin(),
                            _servers.end(),
-                           [serverDescription](const ServerDescription& description) {
-                               return serverDescription.getAddress() == description.getAddress();
+                           [serverAddress](const ServerDescription& description) {
+                               return description.getAddress() == serverAddress;
                            });
     if (it != _servers.end()) {
         _servers.erase(it);
@@ -266,7 +266,7 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             const auto& serverDescription =
                 checked_pointer_cast<RemoveServerDescriptionEvent>(e)->removedServerDescription;
             LOG(3) << "SDAM: remove server description: " << serverDescription << std::endl;
-            _parent.removeServerDescription(serverDescription);
+            _parent.removeServerDescription(serverDescription.getAddress());
             break;
         }
     }
