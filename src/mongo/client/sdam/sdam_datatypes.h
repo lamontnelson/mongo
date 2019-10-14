@@ -71,7 +71,7 @@ std::string toString(const ServerType serverType);
 std::ostream& operator<<(std::ostream& os, const ServerType serverType);
 
 using ServerAddress = std::string;
-using IsMasterLatency = mongo::Nanoseconds;
+using IsMasterRTT = mongo::Nanoseconds;
 
 // The result of an attempt to call the "ismaster" command on a server.
 class IsMasterOutcome {
@@ -79,7 +79,7 @@ class IsMasterOutcome {
 
 public:
     // success constructor
-    IsMasterOutcome(ServerAddress server, BSONObj response, IsMasterLatency rtt)
+    IsMasterOutcome(ServerAddress server, BSONObj response, IsMasterRTT rtt)
         : _server(std::move(server)), _success(true), _response(response), _rtt(rtt) {}
 
     // failure constructor
@@ -89,7 +89,7 @@ public:
     const ServerAddress& getServer() const;
     bool isSuccess() const;
     const boost::optional<BSONObj>& getResponse() const;
-    const boost::optional<IsMasterLatency>& getRtt() const;
+    const boost::optional<IsMasterRTT>& getRtt() const;
     const std::string& getErrorMsg() const;
 
 private:
@@ -101,6 +101,6 @@ private:
     // a document containing the command response (or boost::none if it failed)
     boost::optional<BSONObj> _response;
     // the round trip time to execute the command (or null if it failed)
-    boost::optional<IsMasterLatency> _rtt;
+    boost::optional<IsMasterRTT> _rtt;
 };
 };  // namespace mongo::sdam

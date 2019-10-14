@@ -51,7 +51,7 @@ const boost::optional<std::string>& ServerDescription::getError() const {
     return _error;
 }
 
-const boost::optional<IsMasterLatency>& ServerDescription::getRtt() const {
+const boost::optional<IsMasterRTT>& ServerDescription::getRtt() const {
     return _rtt;
 }
 
@@ -224,7 +224,7 @@ std::string ServerDescription::toString() const {
 
 ServerDescriptionBuilder::ServerDescriptionBuilder(ClockSource* clockSource,
                                                    const IsMasterOutcome& isMasterOutcome,
-                                                   boost::optional<IsMasterLatency> lastRtt) {
+                                                   boost::optional<IsMasterRTT> lastRtt) {
     withAddress(boost::to_lower_copy(isMasterOutcome.getServer()));
     if (isMasterOutcome.isSuccess()) {
         const auto response = *isMasterOutcome.getResponse();
@@ -275,8 +275,8 @@ void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
     }
 }
 
-void ServerDescriptionBuilder::calculateRtt(const IsMasterLatency currentRtt,
-                                            const boost::optional<IsMasterLatency> lastRtt) {
+void ServerDescriptionBuilder::calculateRtt(const IsMasterRTT currentRtt,
+                                            const boost::optional<IsMasterRTT> lastRtt) {
     if (_instance.getType() == ServerType::kUnknown) {
         // if a server's type is Unknown, it's RTT is null
         // see:
@@ -348,10 +348,10 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withError(const std::string&
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(
-    const IsMasterLatency& rtt, boost::optional<IsMasterLatency> lastRtt) {
+    const IsMasterRTT& rtt, boost::optional<IsMasterRTT> lastRtt) {
     if (lastRtt) {
         // new_rtt = alpha * x + (1 - alpha) * old_rtt
-        _instance._rtt = IsMasterLatency(static_cast<IsMasterLatency::rep>(
+        _instance._rtt = IsMasterRTT(static_cast<IsMasterRTT::rep>(
             RTT_ALPHA * rtt.count() + (1 - RTT_ALPHA) * lastRtt.get().count()));
     } else {
         _instance._rtt = rtt;

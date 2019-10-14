@@ -152,7 +152,7 @@ TEST_F(TopologyDescriptionTestFixture,
        ShouldSetWireCompatibilityErrorForMinWireVersionWhenMinWireVersionIsGreater) {
     const auto outgoingMaxWireVersion = WireSpec::instance().outgoing.maxWireVersion;
     const auto config =
-        SdamConfiguration(ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
+        SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
     const auto serverDescriptionMinVersion = ServerDescriptionBuilder()
                                                  .withAddress(ONE_SERVER[0])
@@ -172,7 +172,7 @@ TEST_F(TopologyDescriptionTestFixture,
        ShouldSetWireCompatibilityErrorForMinWireVersionWhenMaxWireVersionIsLess) {
     const auto outgoingMinWireVersion = WireSpec::instance().outgoing.minWireVersion;
     const auto config =
-        SdamConfiguration(ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
+        SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
     const auto serverDescriptionMaxVersion = ServerDescriptionBuilder()
                                                  .withAddress(ONE_SERVER[0])
@@ -191,7 +191,7 @@ TEST_F(TopologyDescriptionTestFixture,
 TEST_F(TopologyDescriptionTestFixture, ShouldNotSetWireCompatibilityErrorWhenServerTypeIsUnknown) {
     const auto outgoingMinWireVersion = WireSpec::instance().outgoing.minWireVersion;
     const auto config =
-        SdamConfiguration(ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10));
+        SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
     const auto serverDescriptionMaxVersion =
         ServerDescriptionBuilder().withMaxWireVersion(outgoingMinWireVersion - 1).instance();

@@ -327,6 +327,7 @@ error_codes:
     - {code: 291,name: InvalidSeedList}
     - {code: 292,name: InvalidTopologyType}
     - {code: 293,name: InvalidHeartBeatFrequency}
+    - {code: 294,name: TopologySetNameRequired}
 
     # Error codes 4000-8999 are reserved.
 

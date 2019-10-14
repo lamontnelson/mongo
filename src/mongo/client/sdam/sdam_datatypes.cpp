@@ -114,7 +114,7 @@ bool IsMasterOutcome::isSuccess() const {
 const boost::optional<BSONObj>& IsMasterOutcome::getResponse() const {
     return _response;
 }
-const boost::optional<IsMasterLatency>& IsMasterOutcome::getRtt() const {
+const boost::optional<IsMasterRTT>& IsMasterOutcome::getRtt() const {
     return _rtt;
 }
 const std::string& IsMasterOutcome::getErrorMsg() const {

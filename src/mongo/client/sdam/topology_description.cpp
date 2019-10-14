@@ -49,14 +49,6 @@ TopologyDescription::TopologyDescription(SdamConfiguration config)
     }
 }
 
-bool TopologyDescription::hasReadableServer(boost::optional<ReadPreference> readPreference) {
-    return false;
-}
-
-bool TopologyDescription::hasWritableServer() {
-    return false;
-}
-
 const UUID& TopologyDescription::getId() const {
     return _id;
 }
@@ -100,11 +92,7 @@ void TopologyDescription::setType(TopologyType type) {
 bool TopologyDescription::containsServerAddress(ServerAddress address) const {
     // TODO: maybe index by address
     boost::to_lower(address);
-    auto it = std::find_if(
-        _servers.begin(), _servers.end(), [address](const ServerDescription& serverDescription) {
-            return serverDescription.getAddress() == address;
-        });
-    return it != _servers.end();
+    return findServerByAddress(address) != boost::none;
 }
 
 std::vector<ServerDescription> TopologyDescription::findServers(
@@ -112,6 +100,14 @@ std::vector<ServerDescription> TopologyDescription::findServers(
     std::vector<ServerDescription> result;
     std::copy_if(_servers.begin(), _servers.end(), std::back_inserter(result), predicate);
     return result;
+}
+
+const boost::optional<ServerDescription> TopologyDescription::findServerByAddress(
+    ServerAddress address) const {
+    auto results = findServers([address](const ServerDescription& serverDescription) {
+        return serverDescription.getAddress() == address;
+    });
+    return (results.size() > 0) ? boost::make_optional(results.front()) : boost::none;
 }
 
 boost::optional<ServerDescription> TopologyDescription::installServerDescription(
@@ -185,21 +181,26 @@ void TopologyDescription::checkWireCompatibilityVersions() {
 }
 
 const std::string TopologyDescription::minimumRequiredMongoVersionString(int version) {
-    // TODO: need versions for AGG_RETURNS_CURSORS, BATCH_COMMANDS, FIND_COMMAND,
-    // COMMANDS_ACCEPT_WRITE_CONCERN
+    // TODO: need version BATCH_COMMANDS
     switch (version) {
-        case RELEASE_2_4_AND_BEFORE:
-            return "1.0";
-        case RELEASE_2_7_7:
-            return "2.7.7";
-        case SUPPORTS_OP_MSG:
-            return "3.6";
-        case REPLICA_SET_TRANSACTIONS:
-            return "4.0";
-        case SHARDED_TRANSACTIONS:
-            return "4.2";
         case PLACEHOLDER_FOR_44:
             return "4.4";
+        case SHARDED_TRANSACTIONS:
+            return "4.2";
+        case REPLICA_SET_TRANSACTIONS:
+            return "4.0";
+        case SUPPORTS_OP_MSG:
+            return "3.6";
+        case RELEASE_2_7_7:
+            return "3.0";
+        case FIND_COMMAND:
+            return "3.2";
+        case AGG_RETURNS_CURSORS:
+            return "2.6";
+        case COMMANDS_ACCEPT_WRITE_CONCERN:
+            return "2.4";
+        case RELEASE_2_4_AND_BEFORE:
+            return "1.0";
         default:
             MONGO_UNREACHABLE;
     }
@@ -207,15 +208,6 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
 
 const std::shared_ptr<TopologyObserver> TopologyDescription::getTopologyObserver() const {
     return _topologyObserver;
-}
-
-const boost::optional<ServerDescription> TopologyDescription::getServerByAdress(
-    ServerAddress address) {
-    auto it = std::find_if(
-        _servers.begin(), _servers.end(), [address](const ServerDescription& serverDescription) {
-            return serverDescription.getAddress() == address;
-        });
-    return (it != _servers.end()) ? boost::make_optional(*it) : boost::none;
 }
 
 void TopologyDescription::Observer::onTopologyStateMachineEvent(
@@ -304,22 +296,21 @@ SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>>
       _initialType(initialType),
       _heartBeatFrequencyMs(heartBeatFrequencyMs),
       _setName(setName) {
-    if (_initialType == TopologyType::kSingle) {
-        uassert(ErrorCodes::InvalidSeedList,
-                "A single TopologyType must have exactly one entry in the seed list.",
-                (*seedList).size() == 1);
-    }
+    uassert(ErrorCodes::InvalidSeedList,
+            "seed list size must be >= 1",
+            !seedList || (*seedList).size() >= 1);
 
-    if (_setName) {
-        uassert(ErrorCodes::InvalidTopologyType,
-                "Only ReplicaSetNoPrimary allowed when a setName is provided.",
-                _initialType == TopologyType::kReplicaSetNoPrimary);
-    }
+    uassert(ErrorCodes::InvalidSeedList,
+            "TopologyType Single must have exactly one entry in the seed list.",
+            _initialType != TopologyType::kSingle || (*seedList).size() == 1);
 
-    if (seedList) {
-        uassert(
-            ErrorCodes::InvalidSeedList, "seed list size must be >= 1", (*seedList).size() >= 1);
-    }
+    uassert(ErrorCodes::TopologySetNameRequired,
+            "setName is required for kReplicaSetNoPrimary",
+            _initialType != TopologyType::kReplicaSetNoPrimary || _setName);
+
+    uassert(ErrorCodes::InvalidTopologyType,
+            "Only ToplogyType ReplicaSetNoPrimary allowed when a setName is provided.",
+            !_setName || _initialType == TopologyType::kReplicaSetNoPrimary);
 
     uassert(ErrorCodes::InvalidHeartBeatFrequency,
             "topology heartbeat must be >= 500ms",

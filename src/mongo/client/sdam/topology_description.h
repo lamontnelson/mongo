@@ -59,13 +59,12 @@ public:
      * The user MUST be able to set the initial TopologyType to Single.
      *
      * Initial setName
-     * The user MUST be able to set the client's initial replica set name. A driver MAY require the
-     * set name in order to connect to a replica set, or it MAY be able to discover the replica set
-     * name as it connects.
+     * The user MUST be able to set the client's initial replica set name. The
+     * set name is required in order to connect to a replica set.
      *
      * Allowed configuration combinations
      * TopologyType Single cannot be used with multiple seeds.
-     * If setName is not null, only TopologyType ReplicaSetNoPrimary, and possibly Single, are
+     * If setName is not null, only TopologyType ReplicaSetNoPrimary, and Single, are
      * allowed.
      */
     SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
@@ -97,18 +96,6 @@ public:
      */
     TopologyDescription(SdamConfiguration config);
 
-
-    /**
-     * Determines if the topology has a readable server available.
-     */
-    bool hasReadableServer(
-        boost::optional<ReadPreference> readPreference = ReadPreference::PrimaryOnly);
-
-    /**
-     * Determines if the topology has a writable server available.
-     */
-    bool hasWritableServer();
-
     const UUID& getId() const;
     TopologyType getType() const;
     const boost::optional<std::string>& getSetName() const;
@@ -124,13 +111,16 @@ public:
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
     const Milliseconds& getHeartBeatFrequency() const;
 
-    const boost::optional<ServerDescription> getServerByAdress(ServerAddress address);
+    const boost::optional<ServerDescription> findServerByAddress(ServerAddress address) const;
     bool containsServerAddress(ServerAddress address) const;
     std::vector<ServerDescription> findServers(
         std::function<bool(const ServerDescription&)> predicate) const;
 
-    // Replaces or adds the given ServerDescription using the description's ServerAddress as the
-    // lookup key. If present, the previous server description is returned.
+    /**
+     * Adds the given ServerDescription or swaps it with the existing one
+     * using the description's ServerAddress as the lookup key. If present, the previous server
+     * description is returned.
+     */
     boost::optional<ServerDescription> installServerDescription(
         const ServerDescription& newServerDescription);
     void removeServerDescription(const ServerDescription& serverDescription);

@@ -40,15 +40,20 @@ protected:
     static inline const auto LOCAL_SERVER2 = "localhost:456";
 
     static inline const auto TWO_SEED_CONFIG =
-        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2});
+        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
+                          TopologyType::kUnknown,
+                          mongo::Milliseconds(500));
     static inline const auto TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
-                          TopologyType::kReplicaSetNoPrimary);
+                          TopologyType::kReplicaSetNoPrimary,
+                          mongo::Milliseconds(500),
+                          std::string("setName"));
     static inline const auto TWO_SEED_REPLICA_SET_WITH_PRIMARY_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
                           TopologyType::kReplicaSetNoPrimary,
                           mongo::Milliseconds(500),
-                          boost::make_optional(std::string("setName")));
+                          std::string("setName"));
+
     static inline const auto SINGLE_CONFIG =
         SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER}, TopologyType::kSingle);
 
@@ -459,6 +464,7 @@ TEST_F(TopologyStateMachineTestFixture,
     stateMachine.addObserver(observer);
 
     const auto serverDescriptionFollowsPrimary = ServerDescriptionBuilder()
+                                                     .withSetName(*config.getSetName())
                                                      .withAddress(follower)
                                                      .withMe(follower)
                                                      .withType(ServerType::kRSSecondary)
@@ -467,8 +473,9 @@ TEST_F(TopologyStateMachineTestFixture,
 
     // Assert pre-condition required to change the server type in updateRSWithoutPrimary
     TopologyDescription topologyDescription(config);
+
     ASSERT_EQUALS(ServerType::kUnknown,
-                  topologyDescription.getServerByAdress(expectedPossiblePrimary)->getType());
+                  topologyDescription.findServerByAddress(expectedPossiblePrimary)->getType());
 
     stateMachine.nextServerDescription(topologyDescription, serverDescriptionFollowsPrimary);
 
@@ -509,7 +516,7 @@ TEST_F(TopologyStateMachineTestFixture,
 
     // Assert pre-condition required to change the server type in updateRSWithPrimaryFromMember
     ASSERT_EQUALS(ServerType::kUnknown,
-                  topologyDescription.getServerByAdress(expectedPossiblePrimary)->getType());
+                  topologyDescription.findServerByAddress(expectedPossiblePrimary)->getType());
 
     // initial primary steps down
     stateMachine.nextServerDescription(topologyDescription, serverDescriptionPreviousPrimary);

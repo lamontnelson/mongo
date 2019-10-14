@@ -259,56 +259,56 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterE
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownIfOkMissing) {
-    auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, IsMasterLatency::min());
+    auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, IsMasterRTT::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::kUnknown, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsStandalone) {
     // No "msg: isdbgrid", no setName, and no "isreplicaset: true".
-    auto response = IsMasterOutcome("foo:1234", BSON_OK, IsMasterLatency::min());
+    auto response = IsMasterOutcome("foo:1234", BSON_OK, IsMasterRTT::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::kStandalone, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsMongos) {
     // contains "msg: isdbgrid"
-    auto response = IsMasterOutcome("foo:1234", BSON_MONGOS, IsMasterLatency::min());
+    auto response = IsMasterOutcome("foo:1234", BSON_MONGOS, IsMasterRTT::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::kMongos, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSPrimary) {
     // "ismaster: true", "setName" in response
-    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, IsMasterLatency::min());
+    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, IsMasterRTT::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::kRSPrimary, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSSecondary) {
     // "secondary: true", "setName" in response
-    auto response = IsMasterOutcome("foo:1234", BSON_RSSECONDARY, IsMasterLatency::min());
+    auto response = IsMasterOutcome("foo:1234", BSON_RSSECONDARY, IsMasterRTT::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::kRSSecondary, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsArbiter) {
     // "arbiterOnly: true", "setName" in response.
-    auto response = IsMasterOutcome("foo:1234", BSON_RSARBITER, IsMasterLatency::min());
+    auto response = IsMasterOutcome("foo:1234", BSON_RSARBITER, IsMasterRTT::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::kRSArbiter, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsOther) {
     // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
-    auto response = IsMasterOutcome("foo:1234", BSON_RSOTHER, IsMasterLatency::min());
+    auto response = IsMasterOutcome("foo:1234", BSON_RSOTHER, IsMasterRTT::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::kRSOther, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsGhost) {
     // "isreplicaset: true" in response.
-    auto response = IsMasterOutcome("foo:1234", BSON_RSGHOST, IsMasterLatency::min());
+    auto response = IsMasterOutcome("foo:1234", BSON_RSGHOST, IsMasterRTT::min());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
     ASSERT_EQUALS(ServerType::kRSGhost, description.getType());
 }
@@ -321,13 +321,13 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreErrorDescription) {
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTWithNoPreviousLatency) {
-    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, IsMasterLatency::max());
+    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, IsMasterRTT::max());
     auto description = ServerDescriptionBuilder(clockSource, response).instance();
-    ASSERT_EQUALS(IsMasterLatency::max(), *description.getRtt());
+    ASSERT_EQUALS(IsMasterRTT::max(), *description.getRtt());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTNullWhenServerTypeIsUnknown) {
-    auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, IsMasterLatency::max());
+    auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, IsMasterRTT::max());
     auto description = ServerDescriptionBuilder(clockSource, response, boost::none).instance();
     ASSERT_EQUALS(boost::none, description.getRtt());
 }

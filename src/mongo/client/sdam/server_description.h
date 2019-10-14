@@ -65,7 +65,7 @@ public:
 
     // network attributes
     const boost::optional<std::string>& getError() const;
-    const boost::optional<IsMasterLatency>& getRtt() const;
+    const boost::optional<IsMasterRTT>& getRtt() const;
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
 
     // server capabilities
@@ -104,7 +104,7 @@ private:
     boost::optional<std::string> _error;
 
     // roundTripTime: the duration of the ismaster call. Default null.
-    boost::optional<IsMasterLatency> _rtt;
+    boost::optional<IsMasterRTT> _rtt;
 
     // lastWriteDate: a 64-bit BSON datetime or null. The "lastWriteDate" from the server's most
     // recent ismaster response.
@@ -174,7 +174,7 @@ public:
      */
     ServerDescriptionBuilder(ClockSource* clockSource,
                              const IsMasterOutcome& isMasterOutcome,
-                             boost::optional<IsMasterLatency> lastRtt = boost::none);
+                             boost::optional<IsMasterRTT> lastRtt = boost::none);
 
     /**
      * Build a new ServerDescription using the given ServerDescription as a starting point.
@@ -194,8 +194,8 @@ public:
     ServerDescriptionBuilder& withSetName(const std::string setName);
 
     // network attributes
-    ServerDescriptionBuilder& withRtt(const IsMasterLatency& rtt,
-                                      boost::optional<IsMasterLatency> lastRtt = boost::none);
+    ServerDescriptionBuilder& withRtt(const IsMasterRTT& rtt,
+                                      boost::optional<IsMasterRTT> lastRtt = boost::none);
     ServerDescriptionBuilder& withError(const std::string& error);
     ServerDescriptionBuilder& withLogicalSessionTimeoutMinutes(
         const int logicalSessionTimeoutMinutes);
@@ -220,15 +220,13 @@ public:
 private:
     /**
      * Classify the server's type based on the ismaster response.
-     * Note: PossiblePrimary server type is not output from this function since this requires global
-     * cluster state.
      * @param isMaster - reply document for ismaster command
      */
     void parseTypeFromIsMaster(const BSONObj isMaster);
 
 
-    void calculateRtt(const IsMasterLatency currentRtt,
-                      const boost::optional<IsMasterLatency> lastRtt);
+    void calculateRtt(const IsMasterRTT currentRtt,
+                      const boost::optional<IsMasterRTT> lastRtt);
     void saveLastWriteInfo(BSONObj lastWriteBson);
 
     void storeHostListIfPresent(const std::string key,
