@@ -244,17 +244,6 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
             break;
         }
 
-        case TopologyStateMachineEventType::kUpdateServerType: {
-            auto event = checked_pointer_cast<UpdateServerTypeEvent>(e);
-            auto newServerDescription = ServerDescriptionBuilder(event->serverDescription)
-                                            .withType(event->newServerType)
-                                            .instance();
-            LOG(3) << "SDAM: server " << newServerDescription.getAddress()
-                   << " type changed to: " << toString(newServerDescription.getType()) << std::endl;
-            _parent.installServerDescription(newServerDescription);
-            break;
-        }
-
         case TopologyStateMachineEventType::kNewServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<NewServerDescriptionEvent>(e)->newServerDescription;

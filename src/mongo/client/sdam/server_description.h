@@ -177,11 +177,6 @@ public:
                              boost::optional<IsMasterRTT> lastRtt = boost::none);
 
     /**
-     * Build a new ServerDescription using the given ServerDescription as a starting point.
-     */
-    explicit ServerDescriptionBuilder(const ServerDescription& source);
-
-    /**
      * Return the configured ServerDescription instance.
      */
     ServerDescription instance() const;

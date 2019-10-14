@@ -79,13 +79,6 @@ protected:
                     std::cout << "new set name: " << (setName ? *setName : std::string(""))
                               << std::endl;
                     break;
-                case TopologyStateMachineEventType::kUpdateServerType: {
-                    const std::shared_ptr<UpdateServerTypeEvent>& event =
-                        std::dynamic_pointer_cast<UpdateServerTypeEvent>(e);
-                    std::cout << "new server type: " << event->newServerType << std::endl;
-                    serverTypes[event->serverDescription.getAddress()] = event->newServerType;
-                    break;
-                }
                 case TopologyStateMachineEventType::kNewServerDescription: {
                     auto& newServerDescription =
                         std::dynamic_pointer_cast<NewServerDescriptionEvent>(e)
@@ -304,8 +297,14 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
     stateMachine.nextServerDescription(topologyDescription, serverDescription);
     ASSERT_EQUALS(100, observer->maxSetVersion);
 
-    auto serverDescriptionEvenBiggerSetVersion =
-        ServerDescriptionBuilder(serverDescription).withSetVersion(200).instance();
+    auto serverDescriptionEvenBiggerSetVersion = ServerDescriptionBuilder()
+                                                     .withType(ServerType::kRSPrimary)
+                                                     .withPrimary(primary)
+                                                     .withMe(primary)
+                                                     .withAddress(primary)
+                                                     .withSetVersion(200)
+                                                     .instance();
+
     stateMachine.nextServerDescription(topologyDescription, serverDescriptionEvenBiggerSetVersion);
     ASSERT_EQUALS(200, observer->maxSetVersion);
 }
@@ -333,8 +332,15 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
     stateMachine.nextServerDescription(topologyDescription, serverDescription);
     ASSERT_EQUALS(oidOne, observer->maxElectionId);
 
-    auto serverDescriptionEvenBiggerElectionId =
-        ServerDescriptionBuilder(serverDescription).withElectionId(oidTwo).instance();
+    auto serverDescriptionEvenBiggerElectionId = ServerDescriptionBuilder()
+                                                     .withType(ServerType::kRSPrimary)
+                                                     .withPrimary(primary)
+                                                     .withMe(primary)
+                                                     .withAddress(primary)
+                                                     .withSetVersion(1)
+                                                     .withElectionId(oidTwo)
+                                                     .instance();
+
     stateMachine.nextServerDescription(topologyDescription, serverDescriptionEvenBiggerElectionId);
     ASSERT_EQUALS(oidTwo, observer->maxElectionId);
 }

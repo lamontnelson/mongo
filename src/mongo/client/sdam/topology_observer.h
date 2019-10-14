@@ -35,7 +35,6 @@ namespace mongo::sdam {
 enum class TopologyStateMachineEventType {
     kTopologyTypeChange,
     kNewSetName,
-    kUpdateServerType,
     kNewMaxElectionId,
     kNewMaxSetVersion,
     kNewServerDescription,
@@ -64,12 +63,6 @@ struct TopologyTypeChangeEvent : public TopologyStateMachineEvent {
 struct NewSetNameEvent : public TopologyStateMachineEvent {
     explicit NewSetNameEvent(boost::optional<std::string> newSetName);
     const boost::optional<std::string> newSetName;
-};
-
-struct UpdateServerTypeEvent : public TopologyStateMachineEvent {
-    UpdateServerTypeEvent(ServerDescription serverDescription, const ServerType newServerType);
-    const ServerDescription serverDescription;
-    const ServerType newServerType;
 };
 
 struct NewMaxElectionIdEvent : public TopologyStateMachineEvent {

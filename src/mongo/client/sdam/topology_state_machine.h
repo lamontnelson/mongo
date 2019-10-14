@@ -98,7 +98,6 @@ private:
     void emitTypeChange(TopologyType topologyType);
     void emitNewSetName(const boost::optional<std::string>& setName);
     void emitNewServer(ServerDescription newServerDescription);
-    void emitUpdateServerType(const ServerDescription& serverDescription, ServerType newServerType);
     void emitReplaceServer(ServerDescription updatedServerDescription);
     void emitNewMaxElectionId(const OID& newMaxElectionId);
     void emitNewMaxSetVersion(int& newMaxSetVersion);

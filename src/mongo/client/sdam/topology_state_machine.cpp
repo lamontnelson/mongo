@@ -380,13 +380,6 @@ void TopologyStateMachine::emitNewServer(ServerDescription newServerDescription)
     emit(event);
 }
 
-void TopologyStateMachine::emitUpdateServerType(const ServerDescription& serverDescription,
-                                                ServerType newServerType) {
-    std::shared_ptr<TopologyStateMachineEvent> event =
-        std::make_shared<UpdateServerTypeEvent>(serverDescription, newServerType);
-    emit(event);
-}
-
 void TopologyStateMachine::emitReplaceServer(ServerDescription updatedServerDescription) {
     std::shared_ptr<TopologyStateMachineEvent> event =
         std::make_shared<UpdateServerDescriptionEvent>(updatedServerDescription);

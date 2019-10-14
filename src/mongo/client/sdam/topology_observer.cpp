@@ -41,12 +41,6 @@ NewSetNameEvent::NewSetNameEvent(boost::optional<std::string> newSetName)
     : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewSetName),
       newSetName(std::move(newSetName)) {}
 
-UpdateServerTypeEvent::UpdateServerTypeEvent(ServerDescription serverDescription,
-                                             const ServerType newServerType)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kUpdateServerType),
-      serverDescription(std::move(serverDescription)),
-      newServerType(newServerType) {}
-
 NewMaxElectionIdEvent::NewMaxElectionIdEvent(const OID& newMaxElectionId)
     : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewMaxElectionId),
       newMaxElectionId(newMaxElectionId) {}
