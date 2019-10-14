@@ -194,21 +194,6 @@ void TopologyStateMachine::updateRSWithoutPrimary(const TopologyDescription& top
 
     addUnknownServers(topologyDescription, serverDescription);
 
-    if (serverDescription.getPrimary()) {
-        const auto& primaryAddress = *serverDescription.getPrimary();
-        auto primaries = topologyDescription.findServers(
-            [primaryAddress](const ServerDescription& description) -> bool {
-                return description.getAddress() == primaryAddress;
-            });
-        invariant(primaries.size() <= 1);
-        if (primaries.size() == 1) {
-            const auto& server = primaries.back();
-            if (server.getType() == ServerType::kUnknown) {
-                emitUpdateServerType(server, ServerType::kPossiblePrimary);
-            }
-        }
-    }
-
     if (serverDescAddress != serverDescription.getMe()) {
         emitServerRemoved(serverDescription);
     }
@@ -250,16 +235,6 @@ void TopologyStateMachine::updateRSWithPrimaryFromMember(
     });
     if (primaries.size() == 0) {
         emitTypeChange(TopologyType::kReplicaSetNoPrimary);
-        if (serverDescription.getPrimary() != boost::none) {
-            auto possiblePrimary = topologyDescription.findServers(
-                [serverDescription](const ServerDescription& description) {
-                    return description.getAddress() == serverDescription.getPrimary();
-                });
-            invariant(possiblePrimary.size() == 1);
-            if (possiblePrimary[0].getType() == ServerType::kUnknown) {
-                emitUpdateServerType(possiblePrimary.front(), ServerType::kPossiblePrimary);
-            }
-        }
     }
 }
 

@@ -59,7 +59,6 @@ enum class ServerType {
     kStandalone,
     kMongos,
     kRSPrimary,
-    kPossiblePrimary,
     kRSSecondary,
     kRSArbiter,
     kRSOther,

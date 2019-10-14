@@ -46,8 +46,6 @@ std::string toString(const ServerType serverType) {
             return "RSOther";
         case ServerType::kRSGhost:
             return "RSGhost";
-        case ServerType::kPossiblePrimary:
-            return "PossiblePrimary";
         case ServerType::kUnknown:
             return "Unknown";
         default:
@@ -64,7 +62,6 @@ const std::vector<ServerType> allServerTypes() {
     static auto const result = std::vector<ServerType>{ServerType::kStandalone,
                                                        ServerType::kMongos,
                                                        ServerType::kRSPrimary,
-                                                       ServerType::kPossiblePrimary,
                                                        ServerType::kRSSecondary,
                                                        ServerType::kRSArbiter,
                                                        ServerType::kRSOther,
