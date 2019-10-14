@@ -50,9 +50,9 @@ public:
     };
 
     /**
-     * This determines if a service description is equivalent according to the SDAM scecification.
-     * Members marked with (=) are used to determine equality. Note that these members do not
-     * include RTT or the server's address.
+     * This determines if a server description is equivalent according to the Server Discovery and
+     * Monitoring specification. Members marked with (=) are used to determine equality. Note that
+     * these members do not include RTT or the server's address.
      */
     bool isEquivalent(const ServerDescription& other) const;
 
@@ -225,8 +225,7 @@ private:
     void parseTypeFromIsMaster(const BSONObj isMaster);
 
 
-    void calculateRtt(const IsMasterRTT currentRtt,
-                      const boost::optional<IsMasterRTT> lastRtt);
+    void calculateRtt(const IsMasterRTT currentRtt, const boost::optional<IsMasterRTT> lastRtt);
     void saveLastWriteInfo(BSONObj lastWriteBson);
 
     void storeHostListIfPresent(const std::string key,

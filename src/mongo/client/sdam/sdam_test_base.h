@@ -38,6 +38,9 @@
 #include <type_traits>
 #include <vector>
 
+/**
+ * The following facilitates writing tests in the Server Discovery And Monitoring namespace.
+ */
 namespace mongo {
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& s) {

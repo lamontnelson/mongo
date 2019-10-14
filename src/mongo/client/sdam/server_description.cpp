@@ -325,9 +325,7 @@ void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
     } else if (isMaster.getBoolField("isreplicaset")) {
         t = ServerType::kRSGhost;
     } else {
-        // TODO: check for appropriate log level
-        MONGO_LOG(0) << "unknown server type from successful ismaster reply: "
-                     << isMaster.toString();
+        error() << "unknown server type from successful ismaster reply: " << isMaster.toString();
         t = ServerType::kUnknown;
     }
     withType(t);
@@ -347,8 +345,8 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withError(const std::string&
     return *this;
 }
 
-ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(
-    const IsMasterRTT& rtt, boost::optional<IsMasterRTT> lastRtt) {
+ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(const IsMasterRTT& rtt,
+                                                            boost::optional<IsMasterRTT> lastRtt) {
     if (lastRtt) {
         // new_rtt = alpha * x + (1 - alpha) * old_rtt
         _instance._rtt = IsMasterRTT(static_cast<IsMasterRTT::rep>(
