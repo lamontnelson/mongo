@@ -157,9 +157,9 @@ TEST_F(TopologyDescriptionTestFixture, ShouldOnlyAllowSingleAndRsNoPrimaryWithSe
                 std::cout << "Check TopologyType " << toString(topologyType) << " with setName value." << std::endl;
                 auto config = SdamConfiguration(
                     ONE_SERVER, topologyType, mongo::Seconds(10), std::string("setName"));
-                // This is here to ensure the compiler acutally generates code for the above statement.
+                // This is here to ensure that the compiler actually generates code for the above statement.
                 std::cout << "Test failed for topologyType " << config.getInitialType() << std::endl;
-                MONGO_UNREACHABLE
+                MONGO_UNREACHABLE;
             },
             DBException,
             ErrorCodes::InvalidTopologyType);
