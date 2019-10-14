@@ -90,7 +90,6 @@ void TopologyDescription::setType(TopologyType type) {
 }
 
 bool TopologyDescription::containsServerAddress(ServerAddress address) const {
-    // TODO: maybe index by address
     boost::to_lower(address);
     return findServerByAddress(address) != boost::none;
 }
@@ -293,13 +292,13 @@ SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>>
             "TopologyType Single must have exactly one entry in the seed list.",
             _initialType != TopologyType::kSingle || (*seedList).size() == 1);
 
+    uassert(ErrorCodes::InvalidTopologyType,
+            "Only ToplogyTypes ReplicaSetNoPrimary and Single are allowed when a setName is provided.",
+            !_setName || (_initialType == TopologyType::kReplicaSetNoPrimary || _initialType == TopologyType::kSingle));
+
     uassert(ErrorCodes::TopologySetNameRequired,
             "setName is required for kReplicaSetNoPrimary",
             _initialType != TopologyType::kReplicaSetNoPrimary || _setName);
-
-    uassert(ErrorCodes::InvalidTopologyType,
-            "Only ToplogyType ReplicaSetNoPrimary allowed when a setName is provided.",
-            !_setName || _initialType == TopologyType::kReplicaSetNoPrimary);
 
     uassert(ErrorCodes::InvalidHeartBeatFrequency,
             "topology heartbeat must be >= 500ms",

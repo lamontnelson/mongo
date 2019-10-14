@@ -131,6 +131,41 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowSettingTheReplicaSetNameWit
         ErrorCodes::InvalidTopologyType);
 }
 
+TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowTopologyTypeRSNoPrimaryWithoutSetName) {
+    ASSERT_THROWS_CODE(
+        {
+            SdamConfiguration(
+                ONE_SERVER, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10), boost::none);
+        },
+        DBException,
+        ErrorCodes::TopologySetNameRequired);
+}
+
+TEST_F(TopologyDescriptionTestFixture, ShouldOnlyAllowSingleAndRsNoPrimaryWithSetName) {
+    auto topologyTypes = allTopologyTypes();
+    topologyTypes.erase(std::remove_if(topologyTypes.begin(),
+                                       topologyTypes.end(),
+                                       [](const TopologyType& topologyType) {
+                                           return topologyType == TopologyType::kSingle ||
+                                               topologyType == TopologyType::kReplicaSetNoPrimary;
+                                       }),
+                        topologyTypes.end());
+
+    for (const auto topologyType : topologyTypes) {
+        ASSERT_THROWS_CODE(
+            {
+                std::cout << "Check TopologyType " << toString(topologyType) << " with setName value." << std::endl;
+                auto config = SdamConfiguration(
+                    ONE_SERVER, topologyType, mongo::Seconds(10), std::string("setName"));
+                // This is here to ensure the compiler acutally generates code for the above statement.
+                std::cout << "Test failed for topologyType " << config.getInitialType() << std::endl;
+                MONGO_UNREACHABLE
+            },
+            DBException,
+            ErrorCodes::InvalidTopologyType);
+    }
+}
+
 TEST_F(TopologyDescriptionTestFixture, ShouldDefaultHeartbeatToTenSecs) {
     SdamConfiguration config;
     ASSERT_EQUALS(mongo::Seconds(10), config.getHeartBeatFrequency());
@@ -151,8 +186,7 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowChangingTheHeartbeatFrequen
 TEST_F(TopologyDescriptionTestFixture,
        ShouldSetWireCompatibilityErrorForMinWireVersionWhenMinWireVersionIsGreater) {
     const auto outgoingMaxWireVersion = WireSpec::instance().outgoing.maxWireVersion;
-    const auto config =
-        SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
+    const auto config = SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
     const auto serverDescriptionMinVersion = ServerDescriptionBuilder()
                                                  .withAddress(ONE_SERVER[0])
@@ -171,8 +205,7 @@ TEST_F(TopologyDescriptionTestFixture,
 TEST_F(TopologyDescriptionTestFixture,
        ShouldSetWireCompatibilityErrorForMinWireVersionWhenMaxWireVersionIsLess) {
     const auto outgoingMinWireVersion = WireSpec::instance().outgoing.minWireVersion;
-    const auto config =
-        SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
+    const auto config = SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
     const auto serverDescriptionMaxVersion = ServerDescriptionBuilder()
                                                  .withAddress(ONE_SERVER[0])
@@ -190,8 +223,7 @@ TEST_F(TopologyDescriptionTestFixture,
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNotSetWireCompatibilityErrorWhenServerTypeIsUnknown) {
     const auto outgoingMinWireVersion = WireSpec::instance().outgoing.minWireVersion;
-    const auto config =
-        SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
+    const auto config = SdamConfiguration(ONE_SERVER, TopologyType::kUnknown, mongo::Seconds(10));
     TopologyDescription topologyDescription(config);
     const auto serverDescriptionMaxVersion =
         ServerDescriptionBuilder().withMaxWireVersion(outgoingMinWireVersion - 1).instance();

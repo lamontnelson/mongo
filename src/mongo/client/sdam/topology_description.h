@@ -60,11 +60,11 @@ public:
      *
      * Initial setName
      * The user MUST be able to set the client's initial replica set name. The
-     * set name is required in order to connect to a replica set.
+     * set name is required in order to initially configure as ReplicaSetNoPrimary.
      *
      * Allowed configuration combinations
      * TopologyType Single cannot be used with multiple seeds.
-     * If setName is not null, only TopologyType ReplicaSetNoPrimary, and Single, are
+     * If setName is not null, only TopologyType ReplicaSetNoPrimary and Single, are
      * allowed.
      */
     SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
