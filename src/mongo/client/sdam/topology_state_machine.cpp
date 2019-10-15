@@ -289,7 +289,6 @@ void TopologyStateMachine::updateRSFromPrimary(const TopologyDescription& topolo
     }
 
     addUnknownServers(topologyDescription, serverDescription);
-    int i=0;
     for (const auto& currentServerDescription : topologyDescription.getServers()) {
         const auto currentServerAddress = currentServerDescription->getAddress();
         auto hosts = serverDescription->getHosts().find(currentServerAddress);
