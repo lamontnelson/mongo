@@ -61,9 +61,9 @@ void TopologyDescriptionTestFixture::assertDefaultConfig(
     ASSERT_EQUALS(boost::none, topologyDescription.getSetName());
     ASSERT_EQUALS(boost::none, topologyDescription.getMaxElectionId());
 
-    auto expectedDefaultServers =
-        std::vector<ServerDescription>{ServerDescription("localhost:27017")};
-    ASSERT_EQUALS(expectedDefaultServers, topologyDescription.getServers());
+    auto expectedDefaultServer = ServerDescription("localhost:27017");
+    ASSERT_EQUALS(expectedDefaultServer, *topologyDescription.getServers().front());
+    ASSERT_EQUALS(static_cast<std::size_t>(1), topologyDescription.getServers().size());
 
     ASSERT_EQUALS(true, topologyDescription.isWireVersionCompatible());
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
@@ -84,9 +84,9 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNormalizeInitialSeedList) {
             return boost::to_lower_copy(addr);
         });
 
-    std::vector<ServerAddress> serverAddresses = map<ServerDescription, ServerAddress>(
+    std::vector<ServerAddress> serverAddresses = map<ServerDescriptionPtr, ServerAddress>(
         topologyDescription.getServers(),
-        [](const ServerDescription& description) { return description.getAddress(); });
+        [](const ServerDescriptionPtr& description) { return description->getAddress(); });
 
     ASSERT_EQUALS(expectedAddresses, serverAddresses);
 }
@@ -96,9 +96,9 @@ TEST_F(TopologyDescriptionTestFixture, ShouldAllowTypeSingleWithASingleSeed) {
 
     ASSERT(TopologyType::kSingle == topologyDescription.getType());
 
-    auto servers = map<ServerDescription, ServerAddress>(
+    auto servers = map<ServerDescriptionPtr, ServerAddress>(
         topologyDescription.getServers(),
-        [](const ServerDescription& desc) { return desc.getAddress(); });
+        [](const ServerDescriptionPtr& desc) { return desc->getAddress(); });
     ASSERT_EQUALS(ONE_SERVER, servers);
 }
 

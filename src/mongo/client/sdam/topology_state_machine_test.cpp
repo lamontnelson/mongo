@@ -120,9 +120,9 @@ protected:
         boost::optional<std::string> setName;
         OID maxElectionId = OID(std::string("000000000000000000000000"));
         int maxSetVersion = -1;
-        std::vector<ServerDescription> newDescriptions;
-        std::vector<ServerDescription> updatedDescriptions;
-        std::vector<ServerDescription> removedDescriptions;
+        std::vector<ServerDescriptionPtr> newDescriptions;
+        std::vector<ServerDescriptionPtr> updatedDescriptions;
+        std::vector<ServerDescriptionPtr> removedDescriptions;
         std::map<ServerAddress, ServerType> serverTypes;
     };
 
@@ -228,7 +228,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHost
 
     stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
     ASSERT_EQUALS(static_cast<size_t>(1), observer->removedDescriptions.size());
-    ASSERT_EQUALS(expectedRemovedServer, observer->removedDescriptions.front().getAddress());
+    ASSERT_EQUALS(expectedRemovedServer, observer->removedDescriptions.front()->getAddress());
 }
 
 TEST_F(TopologyStateMachineTestFixture,
@@ -248,8 +248,8 @@ TEST_F(TopologyStateMachineTestFixture,
 
     stateMachine.nextServerDescription(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG, serverDescription);
     ASSERT_EQUALS(static_cast<size_t>(1), observer->removedDescriptions.size());
-    ASSERT_EQUALS(serverDescription.getAddress(),
-                  observer->removedDescriptions.front().getAddress());
+    ASSERT_EQUALS(serverDescription->getAddress(),
+                  observer->removedDescriptions.front()->getAddress());
 }
 
 TEST_F(TopologyStateMachineTestFixture,
@@ -273,8 +273,8 @@ TEST_F(TopologyStateMachineTestFixture,
 
     stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
     ASSERT_EQUALS(static_cast<size_t>(1), observer->newDescriptions.size());
-    ASSERT_EQUALS(newHost, observer->newDescriptions.front().getAddress());
-    ASSERT_EQUALS(ServerType::kUnknown, observer->newDescriptions.front().getType());
+    ASSERT_EQUALS(newHost, observer->newDescriptions.front()->getAddress());
+    ASSERT_EQUALS(ServerType::kUnknown, observer->newDescriptions.front()->getType());
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {

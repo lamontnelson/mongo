@@ -44,7 +44,7 @@ TopologyDescription::TopologyDescription(SdamConfiguration config)
     if (auto seeds = config.getSeedList()) {
         _servers.clear();
         for (auto address : *seeds) {
-            _servers.push_back(ServerDescription(address));
+            _servers.push_back(std::make_shared<ServerDescription>(ServerDescription(address)));
         }
     }
 }
@@ -69,7 +69,7 @@ const boost::optional<OID>& TopologyDescription::getMaxElectionId() const {
     return _maxElectionId;
 }
 
-const std::vector<ServerDescription>& TopologyDescription::getServers() const {
+const std::vector<ServerDescriptionPtr> TopologyDescription::getServers() const {
     return _servers;
 }
 
@@ -94,43 +94,43 @@ bool TopologyDescription::containsServerAddress(ServerAddress address) const {
     return findServerByAddress(address) != boost::none;
 }
 
-std::vector<ServerDescription> TopologyDescription::findServers(
-    std::function<bool(const ServerDescription&)> predicate) const {
-    std::vector<ServerDescription> result;
+std::vector<ServerDescriptionPtr> TopologyDescription::findServers(
+    std::function<bool(const ServerDescriptionPtr&)> predicate) const {
+    std::vector<ServerDescriptionPtr> result;
     std::copy_if(_servers.begin(), _servers.end(), std::back_inserter(result), predicate);
     return result;
 }
 
-const boost::optional<ServerDescription> TopologyDescription::findServerByAddress(
+const boost::optional<ServerDescriptionPtr> TopologyDescription::findServerByAddress(
     ServerAddress address) const {
-    auto results = findServers([address](const ServerDescription& serverDescription) {
-        return serverDescription.getAddress() == address;
+    auto results = findServers([address](const ServerDescriptionPtr& serverDescription) {
+        return serverDescription->getAddress() == address;
     });
     return (results.size() > 0) ? boost::make_optional(results.front()) : boost::none;
 }
 
-boost::optional<ServerDescription> TopologyDescription::installServerDescription(
-    const ServerDescription& newServerDescription) {
-    boost::optional<ServerDescription> previousDescription;
+boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescription(
+    const ServerDescriptionPtr& newServerDescription) {
+    boost::optional<ServerDescriptionPtr> previousDescription;
     if (getType() == TopologyType::kSingle) {
         // For Single, there is always one ServerDescription in TopologyDescription.servers;
         // the ServerDescription in TopologyDescription.servers MUST be replaced with the new
         // ServerDescription.
         invariant(_servers.size() == 1);
         previousDescription = _servers[0];
-        _servers[0] = newServerDescription;
+        _servers[0] = std::shared_ptr<ServerDescription>(newServerDescription);
     } else {
         for (auto it = _servers.begin(); it != _servers.end(); ++it) {
             const auto& currentDescription = *it;
-            if (currentDescription.getAddress() == newServerDescription.getAddress()) {
+            if (currentDescription->getAddress() == newServerDescription->getAddress()) {
                 previousDescription = *it;
-                *it = newServerDescription;
+                *it = std::shared_ptr<ServerDescription>(newServerDescription);
                 break;
             }
         }
 
         if (!previousDescription) {
-            _servers.push_back(newServerDescription);
+            _servers.push_back(std::shared_ptr<ServerDescription>(newServerDescription));
         }
     }
     return previousDescription;
@@ -139,8 +139,8 @@ boost::optional<ServerDescription> TopologyDescription::installServerDescription
 void TopologyDescription::removeServerDescription(const ServerAddress& serverAddress) {
     auto it = std::find_if(_servers.begin(),
                            _servers.end(),
-                           [serverAddress](const ServerDescription& description) {
-                               return description.getAddress() == serverAddress;
+                           [serverAddress](const ServerDescriptionPtr& description) {
+                               return description->getAddress() == serverAddress;
                            });
     if (it != _servers.end()) {
         _servers.erase(it);
@@ -153,23 +153,23 @@ void TopologyDescription::checkWireCompatibilityVersions() {
 
     _compatible = true;
     for (const auto& serverDescription : _servers) {
-        if (serverDescription.getType() == ServerType::kUnknown) {
+        if (serverDescription->getType() == ServerType::kUnknown) {
             continue;
         }
 
-        if (serverDescription.getMinWireVersion() > supportedWireVersion.maxWireVersion) {
+        if (serverDescription->getMinWireVersion() > supportedWireVersion.maxWireVersion) {
             _compatible = false;
-            errorOss << "Server at " << serverDescription.getAddress() << " requires wire version "
-                     << serverDescription.getMinWireVersion()
+            errorOss << "Server at " << serverDescription->getAddress() << " requires wire version "
+                     << serverDescription->getMinWireVersion()
                      << " but this version of mongo only supports up to "
                      << supportedWireVersion.maxWireVersion << ".";
             break;
-        } else if (serverDescription.getMaxWireVersion() < supportedWireVersion.minWireVersion) {
+        } else if (serverDescription->getMaxWireVersion() < supportedWireVersion.minWireVersion) {
             _compatible = false;
             const auto& mongoVersion =
                 minimumRequiredMongoVersionString(supportedWireVersion.minWireVersion);
-            errorOss << "Server at " << serverDescription.getAddress() << " requires wire version "
-                     << serverDescription.getMaxWireVersion()
+            errorOss << "Server at " << serverDescription->getAddress() << " requires wire version "
+                     << serverDescription->getMaxWireVersion()
                      << " but this version of mongo requires at least "
                      << supportedWireVersion.minWireVersion << " (MongoDB " << mongoVersion << ").";
             break;
@@ -246,7 +246,7 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
         case TopologyStateMachineEventType::kNewServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<NewServerDescriptionEvent>(e)->newServerDescription;
-            LOG(3) << "SDAM: Install new server description: " << serverDescription << std::endl;
+            LOG(3) << "SDAM: Install new server description: " << *serverDescription << std::endl;
             _parent.installServerDescription(serverDescription);
             _parent.checkWireCompatibilityVersions();
             break;
@@ -255,7 +255,7 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
         case TopologyStateMachineEventType::kUpdateServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<UpdateServerDescriptionEvent>(e)->updatedServerDescription;
-            LOG(3) << "SDAM: Replace existing server description: " << serverDescription
+            LOG(3) << "SDAM: Replace existing server description: " << *serverDescription
                    << std::endl;
             _parent.installServerDescription(serverDescription);
             _parent.checkWireCompatibilityVersions();
@@ -265,8 +265,8 @@ void TopologyDescription::Observer::onTopologyStateMachineEvent(
         case TopologyStateMachineEventType::kRemoveServerDescription: {
             const auto& serverDescription =
                 checked_pointer_cast<RemoveServerDescriptionEvent>(e)->removedServerDescription;
-            LOG(3) << "SDAM: remove server description: " << serverDescription << std::endl;
-            _parent.removeServerDescription(serverDescription.getAddress());
+            LOG(3) << "SDAM: remove server description: " << *serverDescription << std::endl;
+            _parent.removeServerDescription(serverDescription->getAddress());
             break;
         }
     }

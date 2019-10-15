@@ -160,8 +160,11 @@ private:
     friend class ServerDescriptionBuilder;
 };
 
+using ServerDescriptionPtr = std::shared_ptr<ServerDescription>;
+
 bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
 bool operator!=(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
+std::ostream& operator<<(std::ostream& os, const ServerDescriptionPtr& description);
 std::ostream& operator<<(std::ostream& os, const ServerDescription& description);
 
 class ServerDescriptionBuilder {
@@ -179,7 +182,7 @@ public:
     /**
      * Return the configured ServerDescription instance.
      */
-    ServerDescription instance() const;
+    ServerDescriptionPtr instance() const;
 
     // server identity
     ServerDescriptionBuilder& withAddress(const ServerAddress& address);
@@ -230,7 +233,7 @@ private:
     void saveTags(BSONObj tagsObj);
     void saveElectionId(BSONElement electionId);
 
-    ServerDescription _instance;
+    ServerDescriptionPtr _instance = std::shared_ptr<ServerDescription>(new ServerDescription());
 
     inline static const std::string IS_DB_GRID = "isdbgrid";
     inline static double RTT_ALPHA = 0.2;

@@ -45,17 +45,17 @@ NewMaxElectionIdEvent::NewMaxElectionIdEvent(const OID& newMaxElectionId)
     : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewMaxElectionId),
       newMaxElectionId(newMaxElectionId) {}
 
-NewServerDescriptionEvent::NewServerDescriptionEvent(ServerDescription newServerDescription)
+NewServerDescriptionEvent::NewServerDescriptionEvent(ServerDescriptionPtr newServerDescription)
     : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewServerDescription),
       newServerDescription(newServerDescription) {}
 
 UpdateServerDescriptionEvent::UpdateServerDescriptionEvent(
-    ServerDescription updatedServerDescription)
+    ServerDescriptionPtr updatedServerDescription)
     : TopologyStateMachineEvent(TopologyStateMachineEventType::kUpdateServerDescription),
       updatedServerDescription(std::move(updatedServerDescription)) {}
 
 RemoveServerDescriptionEvent::RemoveServerDescriptionEvent(
-    ServerDescription removedServerDescription)
+    ServerDescriptionPtr removedServerDescription)
     : TopologyStateMachineEvent(TopologyStateMachineEventType::kRemoveServerDescription),
       removedServerDescription(std::move(removedServerDescription)) {}
 

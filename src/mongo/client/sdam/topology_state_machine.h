@@ -37,7 +37,8 @@
 
 namespace mongo::sdam {
 // Actions that mutate the state of the topology description via events.
-using TransitionAction = std::function<void(const TopologyDescription&, const ServerDescription&)>;
+using TransitionAction =
+    std::function<void(const TopologyDescription&, const ServerDescriptionPtr&)>;
 
 // indexed by ServerType
 using StateTransitionTableRow = std::vector<TransitionAction>;
@@ -60,7 +61,7 @@ public:
      * executed at a time.
      */
     void nextServerDescription(const TopologyDescription& topologyDescription,
-                               const ServerDescription& serverDescription);
+                               const ServerDescriptionPtr& serverDescription);
 
     /**
      * Observers are notified in a single thread under the protection of the state machine's mutex.
@@ -79,26 +80,26 @@ private:
     // These are implemented, in an almost verbatim fashion, from the description
     // here:
     // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#actions
-    void updateUnknownWithStandalone(const TopologyDescription&, const ServerDescription&);
-    void updateRSWithoutPrimary(const TopologyDescription&, const ServerDescription&);
-    void updateRSWithPrimaryFromMember(const TopologyDescription&, const ServerDescription&);
-    void updateRSFromPrimary(const TopologyDescription&, const ServerDescription&);
-    void removeAndStopMonitoring(const TopologyDescription&, const ServerDescription&);
-    void checkIfHasPrimary(const TopologyDescription&, const ServerDescription&);
-    void removeAndCheckIfHasPrimary(const TopologyDescription&, const ServerDescription&);
+    void updateUnknownWithStandalone(const TopologyDescription&, const ServerDescriptionPtr&);
+    void updateRSWithoutPrimary(const TopologyDescription&, const ServerDescriptionPtr&);
+    void updateRSWithPrimaryFromMember(const TopologyDescription&, const ServerDescriptionPtr&);
+    void updateRSFromPrimary(const TopologyDescription&, const ServerDescriptionPtr&);
+    void removeAndStopMonitoring(const TopologyDescription&, const ServerDescriptionPtr&);
+    void checkIfHasPrimary(const TopologyDescription&, const ServerDescriptionPtr&);
+    void removeAndCheckIfHasPrimary(const TopologyDescription&, const ServerDescriptionPtr&);
     TransitionAction setTopologyType(TopologyType t);
     TransitionAction setTopologyTypeAndUpdateRSFromPrimary(TopologyType type);
     TransitionAction setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType type);
 
     void addUnknownServers(const TopologyDescription& topologyDescription,
-                           const ServerDescription& serverDescription);
+                           const ServerDescriptionPtr& serverDescription);
 
     // Notify observers that an event occurred.
-    void emitServerRemoved(const ServerDescription& serverDescription);
+    void emitServerRemoved(const ServerDescriptionPtr& serverDescription);
     void emitTypeChange(TopologyType topologyType);
     void emitNewSetName(const boost::optional<std::string>& setName);
-    void emitNewServer(ServerDescription newServerDescription);
-    void emitReplaceServer(ServerDescription updatedServerDescription);
+    void emitNewServer(ServerDescriptionPtr newServerDescription);
+    void emitReplaceServer(ServerDescriptionPtr updatedServerDescription);
     void emitNewMaxElectionId(const OID& newMaxElectionId);
     void emitNewMaxSetVersion(int& newMaxSetVersion);
     void emit(std::shared_ptr<TopologyStateMachineEvent> event);

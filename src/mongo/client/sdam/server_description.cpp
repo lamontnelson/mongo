@@ -274,7 +274,7 @@ void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
 
 void ServerDescriptionBuilder::calculateRtt(const IsMasterRTT currentRtt,
                                             const boost::optional<IsMasterRTT> lastRtt) {
-    if (_instance.getType() == ServerType::kUnknown) {
+    if (_instance->getType() == ServerType::kUnknown) {
         // if a server's type is Unknown, it's RTT is null
         // see:
         // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#roundtriptime
@@ -328,17 +328,17 @@ void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
     withType(t);
 }
 
-ServerDescription ServerDescriptionBuilder::instance() const {
-    return std::move(_instance);
+ServerDescriptionPtr ServerDescriptionBuilder::instance() const {
+    return _instance;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withAddress(const ServerAddress& address) {
-    _instance._address = address;
+    _instance->_address = address;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withError(const std::string& error) {
-    _instance._error = error;
+    _instance->_error = error;
     return *this;
 }
 
@@ -346,92 +346,92 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(const IsMasterRTT& r
                                                             boost::optional<IsMasterRTT> lastRtt) {
     if (lastRtt) {
         // new_rtt = alpha * x + (1 - alpha) * old_rtt
-        _instance._rtt = IsMasterRTT(static_cast<IsMasterRTT::rep>(
+        _instance->_rtt = IsMasterRTT(static_cast<IsMasterRTT::rep>(
             RTT_ALPHA * rtt.count() + (1 - RTT_ALPHA) * lastRtt.get().count()));
     } else {
-        _instance._rtt = rtt;
+        _instance->_rtt = rtt;
     }
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withLastWriteDate(const Date_t& lastWriteDate) {
-    _instance._lastWriteDate = lastWriteDate;
+    _instance->_lastWriteDate = lastWriteDate;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withOpTime(const repl::OpTime opTime) {
-    _instance._opTime = opTime;
+    _instance->_opTime = opTime;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withType(const ServerType type) {
-    _instance._type = type;
+    _instance->_type = type;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withMinWireVersion(int minVersion) {
-    _instance._minWireVersion = minVersion;
+    _instance->_minWireVersion = minVersion;
     return *this;
 }
 ServerDescriptionBuilder& ServerDescriptionBuilder::withMaxWireVersion(int maxVersion) {
-    _instance._maxWireVersion = maxVersion;
+    _instance->_maxWireVersion = maxVersion;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withMe(const ServerAddress& me) {
-    _instance._me = boost::to_lower_copy(me);
+    _instance->_me = boost::to_lower_copy(me);
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withHost(const ServerAddress& host) {
-    _instance._hosts.emplace(boost::to_lower_copy(host));
+    _instance->_hosts.emplace(boost::to_lower_copy(host));
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withPassive(const ServerAddress& passive) {
-    _instance._passives.emplace(boost::to_lower_copy(passive));
+    _instance->_passives.emplace(boost::to_lower_copy(passive));
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withArbiter(const ServerAddress& arbiter) {
-    _instance._arbiters.emplace(boost::to_lower_copy(arbiter));
+    _instance->_arbiters.emplace(boost::to_lower_copy(arbiter));
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withTag(const std::string key,
                                                             const std::string value) {
-    _instance._tags[key] = value;
+    _instance->_tags[key] = value;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withSetName(const std::string setName) {
-    _instance._setName = std::move(setName);
+    _instance->_setName = std::move(setName);
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withSetVersion(const int setVersion) {
-    _instance._setVersion = setVersion;
+    _instance->_setVersion = setVersion;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withElectionId(const OID& electionId) {
-    _instance._electionId = electionId;
+    _instance->_electionId = electionId;
     return *this;
 }
 ServerDescriptionBuilder& ServerDescriptionBuilder::withPrimary(const ServerAddress& primary) {
-    _instance._primary = primary;
+    _instance->_primary = primary;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withLastUpdateTime(
     const Date_t& lastUpdateTime) {
-    _instance._lastUpdateTime = lastUpdateTime;
+    _instance->_lastUpdateTime = lastUpdateTime;
     return *this;
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMinutes(
     const int logicalSessionTimeoutMinutes) {
-    _instance._logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
+    _instance->_logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
     return *this;
 }
 
@@ -452,9 +452,9 @@ void ServerDescriptionBuilder::saveHosts(const BSONObj response) {
         withMe(response.getStringField("me"));
     }
 
-    storeHostListIfPresent("hosts", response, _instance._hosts);
-    storeHostListIfPresent("passives", response, _instance._passives);
-    storeHostListIfPresent("arbiters", response, _instance._arbiters);
+    storeHostListIfPresent("hosts", response, _instance->_hosts);
+    storeHostListIfPresent("passives", response, _instance->_passives);
+    storeHostListIfPresent("arbiters", response, _instance->_arbiters);
 }
 
 void ServerDescriptionBuilder::saveTags(BSONObj tagsObj) {
@@ -475,6 +475,11 @@ bool operator!=(const mongo::sdam::ServerDescription& a, const mongo::sdam::Serv
 std::ostream& operator<<(std::ostream& os, const ServerDescription& description) {
     BSONObj obj = description.toBson();
     os << obj.toString();
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const ServerDescriptionPtr& description) {
+    os << *description;
     return os;
 }
 };  // namespace mongo::sdam

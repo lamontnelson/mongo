@@ -76,18 +76,18 @@ struct NewMaxSetVersionEvent : public TopologyStateMachineEvent {
 };
 
 struct NewServerDescriptionEvent : public TopologyStateMachineEvent {
-    explicit NewServerDescriptionEvent(ServerDescription updatedServerDescription);
-    ServerDescription newServerDescription;
+    explicit NewServerDescriptionEvent(ServerDescriptionPtr updatedServerDescription);
+    ServerDescriptionPtr newServerDescription;
 };
 
 struct UpdateServerDescriptionEvent : public TopologyStateMachineEvent {
-    explicit UpdateServerDescriptionEvent(ServerDescription updatedServerDescription);
-    ServerDescription updatedServerDescription;
+    explicit UpdateServerDescriptionEvent(ServerDescriptionPtr updatedServerDescription);
+    ServerDescriptionPtr updatedServerDescription;
 };
 
 struct RemoveServerDescriptionEvent : public TopologyStateMachineEvent {
-    RemoveServerDescriptionEvent(ServerDescription removedServerDescription);
-    ServerDescription removedServerDescription;
+    RemoveServerDescriptionEvent(ServerDescriptionPtr removedServerDescription);
+    ServerDescriptionPtr removedServerDescription;
 };
 
 /**

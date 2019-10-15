@@ -28,6 +28,7 @@
  */
 
 #pragma once
+#include <memory>
 #include <string>
 #include <unordered_set>
 
@@ -103,7 +104,7 @@ public:
     const boost::optional<int>& getMaxSetVersion() const;
     const boost::optional<OID>& getMaxElectionId() const;
 
-    const std::vector<ServerDescription>& getServers() const;
+    const std::vector<ServerDescriptionPtr> getServers() const;
 
     bool isWireVersionCompatible() const;
     const boost::optional<std::string>& getWireVersionCompatibleError() const;
@@ -111,18 +112,19 @@ public:
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
     const Milliseconds& getHeartBeatFrequency() const;
 
-    const boost::optional<ServerDescription> findServerByAddress(ServerAddress address) const;
+    const boost::optional<ServerDescriptionPtr> findServerByAddress(
+        ServerAddress address) const;
     bool containsServerAddress(ServerAddress address) const;
-    std::vector<ServerDescription> findServers(
-        std::function<bool(const ServerDescription&)> predicate) const;
+    std::vector<ServerDescriptionPtr> findServers(
+        std::function<bool(const ServerDescriptionPtr&)> predicate) const;
 
     /**
      * Adds the given ServerDescription or swaps it with an existing one
      * using the description's ServerAddress as the lookup key. If present, the previous server
      * description is returned.
      */
-    boost::optional<ServerDescription> installServerDescription(
-        const ServerDescription& newServerDescription);
+    boost::optional<ServerDescriptionPtr> installServerDescription(
+        const ServerDescriptionPtr& newServerDescription);
     void removeServerDescription(const ServerAddress& serverAddress);
 
     void setType(TopologyType type);
@@ -175,8 +177,8 @@ private:
 
     // servers: a set of ServerDescription instances. Default contains one server:
     // "localhost:27017", ServerType Unknown.
-    std::vector<ServerDescription> _servers{
-        ServerDescription("localhost:27017", ServerType::kUnknown)};
+    std::vector<ServerDescriptionPtr> _servers{std::make_shared<ServerDescription>(
+        ServerDescription("localhost:27017", ServerType::kUnknown))};
 
     // compatible: a boolean. False if any server's wire protocol version range is incompatible with
     // the client's. Default true.
