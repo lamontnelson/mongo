@@ -199,18 +199,6 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
     ASSERT_EQUALS(serverDescription, observer->updatedDescriptions.front());
 }
 
-TEST_F(TopologyStateMachineTestFixture, ShouldInstallNewServerDescription) {
-    auto observer = std::make_shared<StateMachineObserver>();
-    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
-    stateMachine.addObserver(observer);
-
-    auto serverDescription =
-        ServerDescriptionBuilder().withAddress("serverDescription:1234").instance();
-
-    stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
-    ASSERT_EQUALS(serverDescription, observer->newDescriptions.front());
-}
-
 TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHostsList) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
     const auto expectedRemovedServer = (*TWO_SEED_CONFIG.getSeedList()).back();
@@ -291,6 +279,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
                                  .withPrimary(primary)
                                  .withMe(primary)
                                  .withAddress(primary)
+                                 .withHost(primary)
                                  .withSetVersion(100)
                                  .instance();
 
@@ -302,6 +291,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
                                                      .withPrimary(primary)
                                                      .withMe(primary)
                                                      .withAddress(primary)
+                                                     .withHost(primary)
                                                      .withSetVersion(200)
                                                      .instance();
 
@@ -325,6 +315,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
                                  .withPrimary(primary)
                                  .withMe(primary)
                                  .withAddress(primary)
+                                 .withHost(primary)
                                  .withSetVersion(1)
                                  .withElectionId(oidOne)
                                  .instance();
@@ -337,6 +328,7 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
                                                      .withPrimary(primary)
                                                      .withMe(primary)
                                                      .withAddress(primary)
+                                                     .withHost(primary)
                                                      .withSetVersion(1)
                                                      .withElectionId(oidTwo)
                                                      .instance();

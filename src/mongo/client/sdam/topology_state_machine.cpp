@@ -155,7 +155,7 @@ void TopologyStateMachine::nextServerDescription(const TopologyDescription& topo
     if (isExistingServer) {
         emitReplaceServer(serverDescription);
     } else {
-        emitNewServer(serverDescription);
+        return;
     }
 
     if (topologyDescription.getType() != TopologyType::kSingle) {
