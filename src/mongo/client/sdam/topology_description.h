@@ -97,6 +97,7 @@ private:
 class TopologyDescription {
 public:
     TopologyDescription() : TopologyDescription(SdamConfiguration()) {}
+    TopologyDescription(const TopologyDescription& source) = default;
 
     /**
      * Initialize the TopologyDescription with the given configuration.

@@ -48,7 +48,7 @@ void TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome
     auto newServerDescription =
         ServerDescriptionBuilder(_clockSource, isMasterOutcome, lastRTT).instance();
 
-    auto newTopologyDescription = std::make_unique<TopologyDescription>(_topologyDescription);
+    auto newTopologyDescription = std::make_unique<TopologyDescription>(*_topologyDescription);
     _topologyStateMachine->onServerDescription(*newTopologyDescription, newServerDescription);
     _topologyDescription = std::move(newTopologyDescription);
 }
