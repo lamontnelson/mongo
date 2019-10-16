@@ -10,7 +10,6 @@ env.Library(
         'sdam_datatypes.cpp',
         'server_description.cpp',
         'topology_description.cpp',
-        'topology_observer.cpp',
         'topology_state_machine.cpp',
         'topology_manager.cpp'
     ],

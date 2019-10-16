@@ -32,7 +32,6 @@
 
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/client/sdam/topology_description.h"
-#include "mongo/client/sdam/topology_observer.h"
 #include "mongo/platform/mutex.h"
 
 namespace mongo::sdam {
