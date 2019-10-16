@@ -45,8 +45,7 @@ void TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome
     boost::optional<IsMasterRTT> lastRTT =
         (lastServerDescription) ? (*lastServerDescription)->getRtt() : boost::none;
 
-    auto newServerDescription =
-        ServerDescriptionBuilder(_clockSource, isMasterOutcome, lastRTT).instance();
+    auto newServerDescription = std::make_shared<ServerDescription>(_clockSource, isMasterOutcome, lastRTT);
 
     auto newTopologyDescription = std::make_unique<TopologyDescription>(*_topologyDescription);
     _topologyStateMachine->onServerDescription(*newTopologyDescription, newServerDescription);

@@ -97,5 +97,7 @@ private:
 
     StateTransitionTable _stt;
     SdamConfiguration _config;
+
+    static inline auto LogPrefix = "sdam :";
 };
 }  // namespace mongo::sdam

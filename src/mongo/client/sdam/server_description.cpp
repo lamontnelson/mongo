@@ -43,6 +43,145 @@
 
 
 namespace mongo::sdam {
+ServerDescription::ServerDescription(ClockSource* clockSource,
+                                     const IsMasterOutcome& isMasterOutcome,
+                                     boost::optional<IsMasterRTT> lastRtt)
+    : ServerDescription() {
+    _address = boost::to_lower_copy(isMasterOutcome.getServer());
+    if (isMasterOutcome.isSuccess()) {
+        const auto response = *isMasterOutcome.getResponse();
+
+        // type must be parsed before RTT is calculated.
+        parseTypeFromIsMaster(response);
+        calculateRtt(*isMasterOutcome.getRtt(), lastRtt);
+
+        _lastUpdateTime = clockSource->now();
+        _minWireVersion = response["minWireVersion"].numberInt();
+        _maxWireVersion = response["maxWireVersion"].numberInt();
+
+        saveLastWriteInfo(response.getObjectField("lastWrite"));
+        saveHosts(response);
+        saveTags(response.getObjectField("tags"));
+        saveElectionId(response.getField("electionId"));
+
+        auto lsTimeoutField = response.getField("logicalSessionTimeoutMinutes");
+        if (lsTimeoutField.type() == BSONType::NumberInt) {
+            _logicalSessionTimeoutMinutes = lsTimeoutField.numberInt();
+        }
+
+        auto setVersionField = response.getField("setVersion");
+        if (setVersionField.type() == BSONType::NumberInt) {
+            _setVersion = response["setVersion"].numberInt();
+        }
+
+        auto setNameField = response.getField("setName");
+        if (setNameField.type() == BSONType::String) {
+            _setName = response["setName"].str();
+        }
+
+        auto primaryField = response.getField("primary");
+        if (primaryField.type() == BSONType::String) {
+            _primary = response.getStringField("primary");
+        }
+    } else {
+        _error = isMasterOutcome.getErrorMsg();
+    }
+}
+
+void ServerDescription::storeHostListIfPresent(const std::string key,
+                                               const BSONObj response,
+                                               std::set<ServerAddress>& destination) {
+    if (response.hasField(key)) {
+        auto hostsBsonArray = response[key].Array();
+        std::transform(hostsBsonArray.begin(),
+                       hostsBsonArray.end(),
+                       std::inserter(destination, destination.begin()),
+                       [](const BSONElement e) { return boost::to_lower_copy(e.String()); });
+    }
+}
+
+void ServerDescription::saveHosts(const BSONObj response) {
+    if (response.hasField("me")) {
+        auto me = response.getField("me");
+        _me = boost::to_lower_copy(me.str());
+    }
+
+    storeHostListIfPresent("hosts", response, _hosts);
+    storeHostListIfPresent("passives", response, _passives);
+    storeHostListIfPresent("arbiters", response, _arbiters);
+}
+
+void ServerDescription::saveTags(BSONObj tagsObj) {
+    const auto keys = tagsObj.getFieldNames<std::set<std::string>>();
+    for (const auto key : keys) {
+        _tags[key] = tagsObj.getStringField(key);
+    }
+}
+
+void ServerDescription::saveElectionId(BSONElement electionId) {
+    if (electionId.type() == jstOID) {
+        _electionId = electionId.OID();
+    }
+}
+
+void ServerDescription::calculateRtt(const IsMasterRTT currentRtt,
+                                     const boost::optional<IsMasterRTT> lastRtt) {
+    if (getType() == ServerType::kUnknown) {
+        // if a server's type is Unknown, it's RTT is null
+        // see:
+        // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#roundtriptime
+        return;
+    }
+
+    if (lastRtt) {
+        // new_rtt = alpha * x + (1 - alpha) * old_rtt
+        _rtt = IsMasterRTT(static_cast<IsMasterRTT::rep>(RTT_ALPHA * currentRtt.count() +
+                                                         (1 - RTT_ALPHA) * lastRtt.get().count()));
+    } else {
+        _rtt = currentRtt;
+    }
+}
+
+void ServerDescription::saveLastWriteInfo(BSONObj lastWriteBson) {
+    const auto lastWriteDateField = lastWriteBson.getField("lastWriteDate");
+    if (lastWriteDateField.type() == BSONType::Date) {
+        _lastWriteDate = lastWriteDateField.date();
+    }
+
+    const auto opTimeParse =
+        repl::OpTime::parseFromOplogEntry(lastWriteBson.getObjectField("opTime"));
+    if (opTimeParse.isOK()) {
+        _opTime = opTimeParse.getValue();
+    }
+}
+
+void ServerDescription::parseTypeFromIsMaster(const BSONObj isMaster) {
+    ServerType t;
+    bool hasSetName = isMaster.hasField("setName");
+
+    if (isMaster.getField("ok").numberInt() != 1) {
+        t = ServerType::kUnknown;
+    } else if (!hasSetName && !isMaster.hasField("msg") && !isMaster.getBoolField("isreplicaset")) {
+        t = ServerType::kStandalone;
+    } else if (IS_DB_GRID == isMaster.getStringField("msg")) {
+        t = ServerType::kMongos;
+    } else if (hasSetName && isMaster.getBoolField("ismaster")) {
+        t = ServerType::kRSPrimary;
+    } else if (hasSetName && isMaster.getBoolField("secondary")) {
+        t = ServerType::kRSSecondary;
+    } else if (hasSetName && isMaster.getBoolField("arbiterOnly")) {
+        t = ServerType::kRSArbiter;
+    } else if (hasSetName && isMaster.getBoolField("hidden")) {
+        t = ServerType::kRSOther;
+    } else if (isMaster.getBoolField("isreplicaset")) {
+        t = ServerType::kRSGhost;
+    } else {
+        error() << "unknown server type from successful ismaster reply: " << isMaster.toString();
+        t = ServerType::kUnknown;
+    }
+    _type = t;
+}
+
 const ServerAddress& ServerDescription::getAddress() const {
     return _address;
 }
@@ -151,18 +290,14 @@ BSONObj ServerDescription::toBson() const {
     bson.append("address", _address);
     if (_rtt) {
         bson.append("roundTripTime", durationCount<Microseconds>(*_rtt));
-    } else {
-        bson.appendNull("roundTripTime");
     }
+
     if (_lastWriteDate) {
         bson.appendDate("lastWriteDate", *_lastWriteDate);
-    } else {
-        bson.appendNull("lastWriteDate");
     }
+
     if (_opTime) {
         bson.append("opTime", _opTime->toBSON());
-    } else {
-        bson.appendNull("opTime");
     }
 
     {
@@ -174,38 +309,24 @@ BSONObj ServerDescription::toBson() const {
     bson.append("maxWireVersion", _maxWireVersion);
     if (_me) {
         bson.append("me", *_me);
-    } else {
-        bson.appendNull("me");
     }
     if (_setName) {
         bson.append("setName", *_setName);
-    } else {
-        bson.appendNull("setName");
     }
     if (_setVersion) {
         bson.append("setVersion", *_setVersion);
-    } else {
-        bson.appendNull("setVersion");
     }
     if (_electionId) {
         bson.append("electionId", *_electionId);
-    } else {
-        bson.appendNull("electionId");
     }
     if (_primary) {
         bson.append("primary", *_primary);
-    } else {
-        bson.appendNull("primary");
     }
     if (_lastUpdateTime) {
         bson.append("lastUpdateTime", *_lastUpdateTime);
-    } else {
-        bson.append("lastUpdateTime", Date_t::min());
     }
     if (_logicalSessionTimeoutMinutes) {
         bson.append("logicalSessionTimeoutMinutes", *_logicalSessionTimeoutMinutes);
-    } else {
-        bson.appendNull("logicalSessionTimeoutMinutes");
     }
     return bson.obj();
 }
@@ -222,111 +343,6 @@ std::string ServerDescription::toString() const {
     return toBson().toString();
 }
 
-ServerDescriptionBuilder::ServerDescriptionBuilder(ClockSource* clockSource,
-                                                   const IsMasterOutcome& isMasterOutcome,
-                                                   boost::optional<IsMasterRTT> lastRtt) {
-    withAddress(boost::to_lower_copy(isMasterOutcome.getServer()));
-    if (isMasterOutcome.isSuccess()) {
-        const auto response = *isMasterOutcome.getResponse();
-
-        // type must be parsed before RTT is calculated.
-        parseTypeFromIsMaster(response);
-        calculateRtt(*isMasterOutcome.getRtt(), lastRtt);
-
-        withLastUpdateTime(clockSource->now());
-        withMinWireVersion(response["minWireVersion"].numberInt());
-        withMaxWireVersion(response["maxWireVersion"].numberInt());
-
-        saveLastWriteInfo(response.getObjectField("lastWrite"));
-        saveHosts(response);
-        saveTags(response.getObjectField("tags"));
-        saveElectionId(response.getField("electionId"));
-
-        auto lsTimeoutField = response.getField("logicalSessionTimeoutMinutes");
-        if (lsTimeoutField.type() == BSONType::NumberInt) {
-            withLogicalSessionTimeoutMinutes(lsTimeoutField.numberInt());
-        }
-
-        auto setVersionField = response.getField("setVersion");
-        if (setVersionField.type() == BSONType::NumberInt) {
-            withSetVersion(response["setVersion"].numberInt());
-        }
-
-        auto setNameField = response.getField("setName");
-        if (setNameField.type() == BSONType::String) {
-            withSetName(response["setName"].str());
-        }
-
-        auto primaryField = response.getField("primary");
-        if (primaryField.type() == BSONType::String) {
-            withPrimary(response.getStringField("primary"));
-        }
-    } else {
-        withError(isMasterOutcome.getErrorMsg());
-    }
-}
-
-void ServerDescriptionBuilder::saveElectionId(BSONElement electionId) {
-    if (electionId.type() == jstOID) {
-        withElectionId(electionId.OID());
-    }
-}
-
-void ServerDescriptionBuilder::calculateRtt(const IsMasterRTT currentRtt,
-                                            const boost::optional<IsMasterRTT> lastRtt) {
-    if (_instance->getType() == ServerType::kUnknown) {
-        // if a server's type is Unknown, it's RTT is null
-        // see:
-        // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#roundtriptime
-        return;
-    }
-
-    if (lastRtt) {
-        withRtt(currentRtt, *lastRtt);
-    } else {
-        withRtt(currentRtt);
-    }
-}
-
-void ServerDescriptionBuilder::saveLastWriteInfo(BSONObj lastWriteBson) {
-    const auto lastWriteDateField = lastWriteBson.getField("lastWriteDate");
-    if (lastWriteDateField.type() == BSONType::Date) {
-        withLastWriteDate(lastWriteDateField.date());
-    }
-
-    const auto opTimeParse =
-        repl::OpTime::parseFromOplogEntry(lastWriteBson.getObjectField("opTime"));
-    if (opTimeParse.isOK()) {
-        withOpTime(opTimeParse.getValue());
-    }
-}
-
-void ServerDescriptionBuilder::parseTypeFromIsMaster(const BSONObj isMaster) {
-    ServerType t;
-    bool hasSetName = isMaster.hasField("setName");
-
-    if (isMaster.getField("ok").numberInt() != 1) {
-        t = ServerType::kUnknown;
-    } else if (!hasSetName && !isMaster.hasField("msg") && !isMaster.getBoolField("isreplicaset")) {
-        t = ServerType::kStandalone;
-    } else if (IS_DB_GRID == isMaster.getStringField("msg")) {
-        t = ServerType::kMongos;
-    } else if (hasSetName && isMaster.getBoolField("ismaster")) {
-        t = ServerType::kRSPrimary;
-    } else if (hasSetName && isMaster.getBoolField("secondary")) {
-        t = ServerType::kRSSecondary;
-    } else if (hasSetName && isMaster.getBoolField("arbiterOnly")) {
-        t = ServerType::kRSArbiter;
-    } else if (hasSetName && isMaster.getBoolField("hidden")) {
-        t = ServerType::kRSOther;
-    } else if (isMaster.getBoolField("isreplicaset")) {
-        t = ServerType::kRSGhost;
-    } else {
-        error() << "unknown server type from successful ismaster reply: " << isMaster.toString();
-        t = ServerType::kUnknown;
-    }
-    withType(t);
-}
 
 ServerDescriptionPtr ServerDescriptionBuilder::instance() const {
     return _instance;
@@ -342,15 +358,8 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withError(const std::string&
     return *this;
 }
 
-ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(const IsMasterRTT& rtt,
-                                                            boost::optional<IsMasterRTT> lastRtt) {
-    if (lastRtt) {
-        // new_rtt = alpha * x + (1 - alpha) * old_rtt
-        _instance->_rtt = IsMasterRTT(static_cast<IsMasterRTT::rep>(
-            RTT_ALPHA * rtt.count() + (1 - RTT_ALPHA) * lastRtt.get().count()));
-    } else {
-        _instance->_rtt = rtt;
-    }
+ServerDescriptionBuilder& ServerDescriptionBuilder::withRtt(const IsMasterRTT& rtt) {
+    _instance->_rtt = rtt;
     return *this;
 }
 
@@ -418,6 +427,7 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withElectionId(const OID& el
     _instance->_electionId = electionId;
     return *this;
 }
+
 ServerDescriptionBuilder& ServerDescriptionBuilder::withPrimary(const ServerAddress& primary) {
     _instance->_primary = primary;
     return *this;
@@ -435,34 +445,6 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMin
     return *this;
 }
 
-void ServerDescriptionBuilder::storeHostListIfPresent(const std::string key,
-                                                      const BSONObj response,
-                                                      std::set<ServerAddress>& destination) {
-    if (response.hasField(key)) {
-        auto hostsBsonArray = response[key].Array();
-        std::transform(hostsBsonArray.begin(),
-                       hostsBsonArray.end(),
-                       std::inserter(destination, destination.begin()),
-                       [](const BSONElement e) { return boost::to_lower_copy(e.String()); });
-    }
-}
-
-void ServerDescriptionBuilder::saveHosts(const BSONObj response) {
-    if (response.hasField("me")) {
-        withMe(response.getStringField("me"));
-    }
-
-    storeHostListIfPresent("hosts", response, _instance->_hosts);
-    storeHostListIfPresent("passives", response, _instance->_passives);
-    storeHostListIfPresent("arbiters", response, _instance->_arbiters);
-}
-
-void ServerDescriptionBuilder::saveTags(BSONObj tagsObj) {
-    const auto keys = tagsObj.getFieldNames<std::set<std::string>>();
-    for (const auto key : keys) {
-        withTag(key, tagsObj.getStringField(key));
-    }
-}
 
 bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b) {
     return a.isEquivalent(b);

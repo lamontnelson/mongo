@@ -149,7 +149,7 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
 void TopologyStateMachine::onServerDescription(TopologyDescription& topologyDescription,
                                                const ServerDescriptionPtr& serverDescription) {
     if (!topologyDescription.containsServerAddress(serverDescription->getAddress())) {
-        LOG(0) << "sdam: ignoring unknown ServerDescription from "
+        LOG(0) << LogPrefix << "ignoring unknown ServerDescription from "
                << serverDescription->getAddress() << std::endl;
         return;
     }
@@ -362,19 +362,19 @@ TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(
 void TopologyStateMachine::removeServerDescription(TopologyDescription& topologyDescription,
                                                    const ServerAddress& serverAddress) {
     topologyDescription.removeServerDescription(serverAddress);
-    LOG(0) << "sdam: server '" << serverAddress << "' was removed from the topology." << std::endl;
+    LOG(0) << LogPrefix << "server '" << serverAddress << "' was removed from the topology." << std::endl;
 }
 
 void TopologyStateMachine::modifyTopologyType(TopologyDescription& topologyDescription,
                                               TopologyType topologyType) {
     topologyDescription._type = topologyType;
-    LOG(0) << "sdam: the topology type was set to " << toString(topologyType) << std::endl;
+    LOG(0) << LogPrefix << "the topology type was set to " << toString(topologyType) << std::endl;
 }
 
 void TopologyStateMachine::modifySetName(TopologyDescription& topologyDescription,
                                          const boost::optional<std::string>& setName) {
     topologyDescription._setName = setName;
-    LOG(0) << "sdam: the topology setName was set to " << ((setName) ? *setName : "[null]")
+    LOG(0) << LogPrefix << "the topology setName was set to " << ((setName) ? *setName : "[null]")
            << std::endl;
 }
 
@@ -382,19 +382,19 @@ void TopologyStateMachine::installServerDescription(TopologyDescription& topolog
                                                     ServerDescriptionPtr newServerDescription,
                                                     bool newServer) {
     topologyDescription.installServerDescription(newServerDescription);
-    LOG(0) << "sdam: " << ((newServer) ? "installed new" : "updated existing")
+    LOG(0) << LogPrefix << ((newServer) ? "installed new" : "updated existing")
            << " server description: " << newServerDescription->toString() << std::endl;
 }
 
 void TopologyStateMachine::modifyMaxElectionId(TopologyDescription& topologyDescription,
                                                const OID& newMaxElectionId) {
     topologyDescription._maxElectionId = newMaxElectionId;
-    LOG(0) << "sdam: topology max election id set to " << newMaxElectionId << std::endl;
+    LOG(0) << LogPrefix << "topology max election id set to " << newMaxElectionId << std::endl;
 }
 
 void TopologyStateMachine::modifyMaxSetVersion(TopologyDescription& topologyDescription,
                                                int& newMaxSetVersion) {
     topologyDescription._maxSetVersion = newMaxSetVersion;
-    LOG(0) << "sdam: topology max set version set to " << newMaxSetVersion << std::endl;
+    LOG(0) << LogPrefix << "topology max set version set to " << newMaxSetVersion << std::endl;
 }
 }  // namespace mongo::sdam

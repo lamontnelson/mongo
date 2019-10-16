@@ -43,11 +43,26 @@
 namespace mongo::sdam {
 class ServerDescription {
 public:
+    /**
+     * Construct an unknown ServerDescription with default values except the server's address.
+     */
     ServerDescription(ServerAddress address) : ServerDescription(address, ServerType::kUnknown) {}
+
+    /**
+     * Construct a ServerDescription with default values except the given type and address.
+     */
     ServerDescription(ServerAddress address, ServerType type)
         : _address(std::move(address)), _type(type) {
         boost::to_lower(_address);
     };
+
+    /**
+     * Build a new ServerDescription according to the rules of the SDAM spec based on the
+     * last RTT to the server and isMaster response.
+     */
+    ServerDescription(ClockSource* clockSource,
+                      const IsMasterOutcome& isMasterOutcome,
+                      boost::optional<IsMasterRTT> lastRtt = boost::none);
 
     /**
      * This determines if a server description is equivalent according to the Server Discovery and
@@ -90,10 +105,31 @@ public:
     std::string toString() const;
 
 private:
+    ServerDescription() : ServerDescription("", ServerType::kUnknown) {}
+    /**
+     * Classify the server's type based on the ismaster response.
+     * @param isMaster - reply document for ismaster command
+     */
+    void parseTypeFromIsMaster(const BSONObj isMaster);
+
+
+    void calculateRtt(const IsMasterRTT currentRtt, const boost::optional<IsMasterRTT> lastRtt);
+    void saveLastWriteInfo(BSONObj lastWriteBson);
+
+    void storeHostListIfPresent(const std::string key,
+                                const BSONObj response,
+                                std::set<ServerAddress>& destination);
+    void saveHosts(const BSONObj response);
+    void saveTags(BSONObj tagsObj);
+    void saveElectionId(BSONElement electionId);
+
     static inline const std::set<ServerType> DATA_SERVER_TYPES{ServerType::kMongos,
                                                                ServerType::kRSPrimary,
                                                                ServerType::kRSSecondary,
                                                                ServerType::kStandalone};
+
+    static inline const std::string IS_DB_GRID = "isdbgrid";
+    static inline double RTT_ALPHA = 0.2;
 
     // address: the hostname or IP, and the port number, that the client connects to. Note that this
     // is not the server's ismaster.me field, in the case that the server reports an address
@@ -156,7 +192,6 @@ private:
     // (=) logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 
-    ServerDescription() : ServerDescription("", ServerType::kUnknown) {}
     friend class ServerDescriptionBuilder;
 };
 
@@ -168,14 +203,6 @@ std::ostream& operator<<(std::ostream& os, const ServerDescription& description)
 class ServerDescriptionBuilder {
 public:
     ServerDescriptionBuilder() = default;
-
-    /**
-     * Build a new ServerDescription according to the rules of the SDAM spec based on the
-     * last server description and isMaster response.
-     */
-    ServerDescriptionBuilder(ClockSource* clockSource,
-                             const IsMasterOutcome& isMasterOutcome,
-                             boost::optional<IsMasterRTT> lastRtt = boost::none);
 
     /**
      * Return the configured ServerDescription instance.
@@ -190,8 +217,7 @@ public:
     ServerDescriptionBuilder& withSetName(const std::string setName);
 
     // network attributes
-    ServerDescriptionBuilder& withRtt(const IsMasterRTT& rtt,
-                                      boost::optional<IsMasterRTT> lastRtt = boost::none);
+    ServerDescriptionBuilder& withRtt(const IsMasterRTT& rtt);
     ServerDescriptionBuilder& withError(const std::string& error);
     ServerDescriptionBuilder& withLogicalSessionTimeoutMinutes(
         const int logicalSessionTimeoutMinutes);
@@ -214,26 +240,6 @@ public:
     ServerDescriptionBuilder& withElectionId(const OID& electionId);
 
 private:
-    /**
-     * Classify the server's type based on the ismaster response.
-     * @param isMaster - reply document for ismaster command
-     */
-    void parseTypeFromIsMaster(const BSONObj isMaster);
-
-
-    void calculateRtt(const IsMasterRTT currentRtt, const boost::optional<IsMasterRTT> lastRtt);
-    void saveLastWriteInfo(BSONObj lastWriteBson);
-
-    void storeHostListIfPresent(const std::string key,
-                                const BSONObj response,
-                                std::set<ServerAddress>& destination);
-    void saveHosts(const BSONObj response);
-    void saveTags(BSONObj tagsObj);
-    void saveElectionId(BSONElement electionId);
-
     ServerDescriptionPtr _instance = std::shared_ptr<ServerDescription>(new ServerDescription());
-
-    inline static const std::string IS_DB_GRID = "isdbgrid";
-    inline static double RTT_ALPHA = 0.2;
 };
 }  // namespace mongo::sdam
