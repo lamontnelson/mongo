@@ -30,15 +30,12 @@
 
 #include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/client/sdam/topology_description.h"
 
 namespace mongo::sdam {
 enum class TopologyStateMachineEventType {
-    kTopologyTypeChange,
-    kNewSetName,
-    kNewMaxElectionId,
-    kNewMaxSetVersion,
-    kNewServerDescription,
-    kUpdateServerDescription,
+    kServerDescriptionChanged,
+    kTopologyDescriptionChanged,
     kRemoveServerDescription
 };
 
@@ -54,41 +51,43 @@ struct TopologyStateMachineEvent {
 /**
  * Concrete event types for the state machine
  */
+struct TopologyDescriptionChangeEvent : TopologyStateMachineEvent {
+    TopologyDescriptionChangeEvent(const UUID& topologyId,
+                                   const TopologyDescriptionPtr& previousTopologyDescription,
+                                   const TopologyDescriptionPtr& newTopologyDescription);
 
-struct TopologyTypeChangeEvent : public TopologyStateMachineEvent {
-    explicit TopologyTypeChangeEvent(TopologyType newType);
-    const TopologyType newType;
+
+    const UUID topologyId;
+    const TopologyDescriptionPtr previousDescription;
+    const TopologyDescriptionPtr newDescription;
 };
 
-struct NewSetNameEvent : public TopologyStateMachineEvent {
-    explicit NewSetNameEvent(boost::optional<std::string> newSetName);
-    const boost::optional<std::string> newSetName;
+struct ServerDescriptionChangeEvent : TopologyStateMachineEvent {
+    /**
+     * Called when when installing an existing ServerDescription
+     */
+    ServerDescriptionChangeEvent(const UUID& topologyId,
+                                 const ServerDescriptionPtr& previousServerDescription,
+                                 const ServerDescriptionPtr& newServerDescription);
+
+    /*
+     * Called when installing a new server description.
+     *
+     * From Monitoring Specification: "ServerDescriptions MUST be initialized with a default
+     * description in an “unknown” state, guaranteeing that the previous description in the events
+     * will never be null."
+     *
+     * https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring-monitoring.rst#initial-server-description
+     */
+    ServerDescriptionChangeEvent(const UUID& topologyId,
+                                 const ServerDescriptionPtr& newServerDescription);
+
+    const ServerAddress& address;
+    const UUID topologyId;
+    const ServerDescriptionPtr previousDescription;
+    const ServerDescriptionPtr newDescription;
 };
 
-struct NewMaxElectionIdEvent : public TopologyStateMachineEvent {
-    explicit NewMaxElectionIdEvent(const OID& newMaxElectionId);
-    OID newMaxElectionId;
-};
-
-struct NewMaxSetVersionEvent : public TopologyStateMachineEvent {
-    explicit NewMaxSetVersionEvent(int newMaxSetVersion);
-    int newMaxSetVersion;
-};
-
-struct NewServerDescriptionEvent : public TopologyStateMachineEvent {
-    explicit NewServerDescriptionEvent(ServerDescriptionPtr updatedServerDescription);
-    ServerDescriptionPtr newServerDescription;
-};
-
-struct UpdateServerDescriptionEvent : public TopologyStateMachineEvent {
-    explicit UpdateServerDescriptionEvent(ServerDescriptionPtr updatedServerDescription);
-    ServerDescriptionPtr updatedServerDescription;
-};
-
-struct RemoveServerDescriptionEvent : public TopologyStateMachineEvent {
-    RemoveServerDescriptionEvent(ServerDescriptionPtr removedServerDescription);
-    ServerDescriptionPtr removedServerDescription;
-};
 
 /**
  * Classes interested in state machine events should inherit from this and check for the event type

@@ -38,7 +38,6 @@
 #include "mongo/client/read_preference.h"
 #include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/sdam/server_description.h"
-#include "mongo/client/sdam/topology_observer.h"
 #include "mongo/platform/basic.h"
 
 namespace mongo::sdam {
@@ -87,7 +86,14 @@ private:
     const mongo::Milliseconds _minHeartbeatFrequencyMS = mongo::Milliseconds(500);
 };
 
-
+/**
+ * TODO: Logical Session Timeout
+ * Whenever a client updates the TopologyDescription from an ismaster response, it MUST set
+ * TopologyDescription.logicalSessionTimeoutMinutes to the smallest logicalSessionTimeoutMinutes
+ * value among ServerDescriptions of all data-bearing server types. If any have a null
+ * logicalSessionTimeoutMinutes, then TopologyDescription.logicalSessionTimeoutMinutes MUST be set
+ * to null.
+ */
 class TopologyDescription {
 public:
     TopologyDescription() : TopologyDescription(SdamConfiguration()) {}
@@ -112,9 +118,8 @@ public:
     const boost::optional<int>& getLogicalSessionTimeoutMinutes() const;
     const Milliseconds& getHeartBeatFrequency() const;
 
-    const boost::optional<ServerDescriptionPtr> findServerByAddress(
-        ServerAddress address) const;
-    bool containsServerAddress(ServerAddress address) const;
+    const boost::optional<ServerDescriptionPtr> findServerByAddress(ServerAddress address) const;
+    bool containsServerAddress(const ServerAddress& address) const;
     std::vector<ServerDescriptionPtr> findServers(
         std::function<bool(const ServerDescriptionPtr&)> predicate) const;
 
@@ -128,20 +133,6 @@ public:
     void removeServerDescription(const ServerAddress& serverAddress);
 
     void setType(TopologyType type);
-
-    const std::shared_ptr<TopologyObserver> getTopologyObserver() const;
-
-protected:
-    class Observer : public TopologyObserver {
-        Observer() = delete;
-
-    public:
-        Observer(TopologyDescription& parent) : _parent(parent) {}
-        void onTopologyStateMachineEvent(std::shared_ptr<TopologyStateMachineEvent> e) override;
-
-    private:
-        TopologyDescription& _parent;
-    };
 
 private:
     /**
@@ -190,6 +181,6 @@ private:
     // logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 
-    std::shared_ptr<Observer> _topologyObserver;
+    friend class TopologyStateMachine;
 };
 }  // namespace mongo::sdam

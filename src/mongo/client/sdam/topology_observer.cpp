@@ -29,37 +29,44 @@
 #include "topology_observer.h"
 
 #include <utility>
+
+#include "mongo/util/uuid.h"
+
 namespace mongo::sdam {
 TopologyStateMachineEvent::TopologyStateMachineEvent(TopologyStateMachineEventType type)
     : type(type) {}
 
-TopologyTypeChangeEvent::TopologyTypeChangeEvent(TopologyType newType)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kTopologyTypeChange),
-      newType(newType) {}
 
-NewSetNameEvent::NewSetNameEvent(boost::optional<std::string> newSetName)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewSetName),
-      newSetName(std::move(newSetName)) {}
+ServerDescriptionChangeEvent::ServerDescriptionChangeEvent(
+    const UUID& topologyId,
+    const ServerDescriptionPtr& previousServerDescription,
+    const ServerDescriptionPtr& newServerDescription)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kServerDescriptionChanged),
+      address(newServerDescription->getAddress()),
+      topologyId(topologyId),
+      previousDescription(previousServerDescription),
+      newDescription(newServerDescription) {
+    invariant(previousServerDescription && newServerDescription);
+    invariant(newServerDescription->getAddress() == previousServerDescription->getAddress());
+}
 
-NewMaxElectionIdEvent::NewMaxElectionIdEvent(const OID& newMaxElectionId)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewMaxElectionId),
-      newMaxElectionId(newMaxElectionId) {}
+ServerDescriptionChangeEvent::ServerDescriptionChangeEvent(
+    const UUID& topologyId, const ServerDescriptionPtr& newServerDescription)
+    : ServerDescriptionChangeEvent(topologyId,
+                                   std::shared_ptr<ServerDescription>(newServerDescription),
+                                   newServerDescription) {
+    invariant(newServerDescription);
+}
 
-NewServerDescriptionEvent::NewServerDescriptionEvent(ServerDescriptionPtr newServerDescription)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewServerDescription),
-      newServerDescription(newServerDescription) {}
 
-UpdateServerDescriptionEvent::UpdateServerDescriptionEvent(
-    ServerDescriptionPtr updatedServerDescription)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kUpdateServerDescription),
-      updatedServerDescription(std::move(updatedServerDescription)) {}
-
-RemoveServerDescriptionEvent::RemoveServerDescriptionEvent(
-    ServerDescriptionPtr removedServerDescription)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kRemoveServerDescription),
-      removedServerDescription(std::move(removedServerDescription)) {}
-
-NewMaxSetVersionEvent::NewMaxSetVersionEvent(int newMaxSetVersion)
-    : TopologyStateMachineEvent(TopologyStateMachineEventType::kNewMaxSetVersion),
-      newMaxSetVersion(newMaxSetVersion) {}
+TopologyDescriptionChangeEvent::TopologyDescriptionChangeEvent(
+    const UUID& topologyId,
+    const TopologyDescriptionPtr& previousTopologyDescription,
+    const TopologyDescriptionPtr& newTopologyDescription)
+    : TopologyStateMachineEvent(TopologyStateMachineEventType::kTopologyDescriptionChanged),
+      topologyId(topologyId),
+      previousDescription(previousTopologyDescription),
+      newDescription(newTopologyDescription) {
+    invariant(previousDescription && newDescription);
+}
 }  // namespace mongo::sdam

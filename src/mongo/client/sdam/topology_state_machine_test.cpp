@@ -26,11 +26,13 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-#include "mongo/base/checked_cast.h"
+#include "mongo/client/sdam/topology_state_machine.h"
+
+#include <boost/optional/optional_io.hpp>
+
 #include "mongo/client/sdam/sdam_test_base.h"
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/client/sdam/topology_description.h"
-#include "mongo/client/sdam/topology_state_machine.h"
 
 namespace mongo::sdam {
 class TopologyStateMachineTestFixture : public SdamTestFixture {
@@ -67,78 +69,15 @@ protected:
         TopologyType ending;
     };
 
-    struct StateMachineObserver : public TopologyObserver {
-        void onTopologyStateMachineEvent(std::shared_ptr<TopologyStateMachineEvent> e) override {
-            switch (e->type) {
-                case TopologyStateMachineEventType::kTopologyTypeChange:
-                    topologyType = std::dynamic_pointer_cast<TopologyTypeChangeEvent>(e)->newType;
-                    std::cout << "new topology type: " << toString(topologyType) << std::endl;
-                    break;
-                case TopologyStateMachineEventType::kNewSetName:
-                    setName = std::dynamic_pointer_cast<NewSetNameEvent>(e)->newSetName;
-                    std::cout << "new set name: " << (setName ? *setName : std::string(""))
-                              << std::endl;
-                    break;
-                case TopologyStateMachineEventType::kNewServerDescription: {
-                    auto& newServerDescription =
-                        std::dynamic_pointer_cast<NewServerDescriptionEvent>(e)
-                            ->newServerDescription;
-                    std::cout << "new server desc:" << newServerDescription << std::endl;
-                    newDescriptions.push_back(newServerDescription);
-                    break;
-                }
-                case TopologyStateMachineEventType::kUpdateServerDescription: {
-                    const auto& updateServerDescription =
-                        std::dynamic_pointer_cast<UpdateServerDescriptionEvent>(e)
-                            ->updatedServerDescription;
-                    std::cout << "update server desc:" << updateServerDescription << std::endl;
-                    updatedDescriptions.push_back(updateServerDescription);
-                    break;
-                }
-                case TopologyStateMachineEventType::kRemoveServerDescription: {
-                    auto& removeServerDescription =
-                        std::dynamic_pointer_cast<RemoveServerDescriptionEvent>(e)
-                            ->removedServerDescription;
-                    std::cout << "remove server desc:" << removeServerDescription << std::endl;
-                    removedDescriptions.push_back(removeServerDescription);
-                    break;
-                }
-                case TopologyStateMachineEventType::kNewMaxElectionId:
-                    maxElectionId =
-                        std::dynamic_pointer_cast<NewMaxElectionIdEvent>(e)->newMaxElectionId;
-                    std::cout << "new max election id: " << maxElectionId << std::endl;
-                    break;
-                case TopologyStateMachineEventType::kNewMaxSetVersion:
-                    maxSetVersion =
-                        std::dynamic_pointer_cast<NewMaxSetVersionEvent>(e)->newMaxSetVersion;
-                    std::cout << "new max set version: " << maxSetVersion << std::endl;
-                    break;
-            }
-        }
-
-        TopologyType topologyType = TopologyType::kUnknown;
-        boost::optional<std::string> setName;
-        OID maxElectionId = OID(std::string("000000000000000000000000"));
-        int maxSetVersion = -1;
-        std::vector<ServerDescriptionPtr> newDescriptions;
-        std::vector<ServerDescriptionPtr> updatedDescriptions;
-        std::vector<ServerDescriptionPtr> removedDescriptions;
-        std::map<ServerAddress, ServerType> serverTypes;
-    };
-
     // This function sets up the test scenario defined by the given TopologyTypeTestCase. It
     // simulates receiving a ServerDescription, and asserts that the final topology type is in the
     // correct state.
     void assertTopologyTypeTestCase(TopologyTypeTestCase testCase) {
-        auto observer = std::make_shared<StateMachineObserver>();
         TopologyStateMachine stateMachine(testCase.initialConfig);
 
         // setup the initial state
         TopologyDescription topologyDescription(testCase.initialConfig);
         topologyDescription.setType(testCase.starting);
-        stateMachine.addObserver(topologyDescription.getTopologyObserver());
-        stateMachine.addObserver(checked_pointer_cast<TopologyObserver>(observer));
-        observer->topologyType = testCase.starting;
 
         // create new ServerDescription and
         auto serverDescriptionBuilder =
@@ -168,9 +107,9 @@ protected:
         const auto serverDescription = serverDescriptionBuilder.instance();
 
         // simulate the ServerDescription being received
-        stateMachine.nextServerDescription(topologyDescription, serverDescription);
+        stateMachine.onServerDescription(topologyDescription, serverDescription);
 
-        ASSERT_EQUALS(observer->topologyType, testCase.ending);
+        ASSERT_EQUALS(topologyDescription.getType(), testCase.ending);
     }
 
     std::vector<ServerType> allServerTypesExceptPrimary() {
@@ -185,27 +124,30 @@ protected:
 };
 
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTopology) {
-    auto observer = std::make_shared<StateMachineObserver>();
     TopologyStateMachine stateMachine(SINGLE_CONFIG);
-    stateMachine.addObserver(observer);
+    TopologyDescription topologyDescription(SINGLE_CONFIG);
 
+    auto updatedMeAddress = "foo:1234";
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(LOCAL_SERVER)
-                                 .withMe("foo:1234")
+                                 .withMe(updatedMeAddress)
                                  .withType(ServerType::kStandalone)
                                  .instance();
 
-    stateMachine.nextServerDescription(SINGLE_CONFIG, serverDescription);
-    ASSERT_EQUALS(serverDescription, observer->updatedDescriptions.front());
+    stateMachine.onServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(static_cast<size_t>(1), topologyDescription.getServers().size());
+
+    auto result = topologyDescription.findServerByAddress(LOCAL_SERVER);
+    ASSERT(result);
+    ASSERT_EQUALS(serverDescription, *result);
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHostsList) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
     const auto expectedRemovedServer = (*TWO_SEED_CONFIG.getSeedList()).back();
 
-    auto observer = std::make_shared<StateMachineObserver>();
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
-    stateMachine.addObserver(observer);
+    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(primary)
@@ -214,19 +156,21 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHost
                                  .withHost(primary)
                                  .instance();
 
-    stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
-    ASSERT_EQUALS(static_cast<size_t>(1), observer->removedDescriptions.size());
-    ASSERT_EQUALS(expectedRemovedServer, observer->removedDescriptions.front()->getAddress());
+    ASSERT_EQUALS(static_cast<size_t>(2), topologyDescription.getServers().size());
+    stateMachine.onServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(static_cast<size_t>(1), topologyDescription.getServers().size());
+    ASSERT_EQUALS(serverDescription, topologyDescription.getServers().front());
 }
 
 TEST_F(TopologyStateMachineTestFixture,
        ShouldRemoveNonPrimaryServerWhenTopologyIsReplicaSetNoPrimaryAndMeDoesntMatchAddress) {
     const auto serverAddress = (*TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG.getSeedList()).front();
-    const auto me = "someotherhost:123";
+    const auto expectedRemainingServerAddress =
+        (*TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG.getSeedList()).back();
+    const auto me = std::string("foo") + serverAddress;
 
     TopologyStateMachine stateMachine(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG);
-    auto observer = std::make_shared<StateMachineObserver>();
-    stateMachine.addObserver(observer);
+    TopologyDescription topologyDescription(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(serverAddress)
@@ -234,10 +178,11 @@ TEST_F(TopologyStateMachineTestFixture,
                                  .withType(ServerType::kRSSecondary)
                                  .instance();
 
-    stateMachine.nextServerDescription(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG, serverDescription);
-    ASSERT_EQUALS(static_cast<size_t>(1), observer->removedDescriptions.size());
-    ASSERT_EQUALS(serverDescription->getAddress(),
-                  observer->removedDescriptions.front()->getAddress());
+    ASSERT_EQUALS(static_cast<size_t>(2), topologyDescription.getServers().size());
+    stateMachine.onServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(static_cast<size_t>(1), topologyDescription.getServers().size());
+    ASSERT_EQUALS(expectedRemainingServerAddress,
+                  topologyDescription.getServers().front()->getAddress());
 }
 
 TEST_F(TopologyStateMachineTestFixture,
@@ -246,9 +191,8 @@ TEST_F(TopologyStateMachineTestFixture,
     const auto secondary = (*TWO_SEED_CONFIG.getSeedList()).back();
     const auto newHost = ServerAddress("newhost:123");
 
-    auto observer = std::make_shared<StateMachineObserver>();
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
-    stateMachine.addObserver(observer);
+    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(primary)
@@ -259,20 +203,21 @@ TEST_F(TopologyStateMachineTestFixture,
                                  .withHost(newHost)
                                  .instance();
 
-    stateMachine.nextServerDescription(TWO_SEED_CONFIG, serverDescription);
-    ASSERT_EQUALS(static_cast<size_t>(1), observer->newDescriptions.size());
-    ASSERT_EQUALS(newHost, observer->newDescriptions.front()->getAddress());
-    ASSERT_EQUALS(ServerType::kUnknown, observer->newDescriptions.front()->getType());
+    ASSERT_EQUALS(static_cast<size_t>(2), topologyDescription.getServers().size());
+    stateMachine.onServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(static_cast<size_t>(3), topologyDescription.getServers().size());
+
+    auto newHostResult = topologyDescription.findServerByAddress(newHost);
+    ASSERT(newHostResult);
+    ASSERT_EQUALS(newHost, (*newHostResult)->getAddress());
+    ASSERT_EQUALS(ServerType::kUnknown, (*newHostResult)->getType());
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
-    auto observer = std::make_shared<StateMachineObserver>();
 
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
-    stateMachine.addObserver(topologyDescription.getTopologyObserver());
-    stateMachine.addObserver(observer);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withType(ServerType::kRSPrimary)
@@ -283,8 +228,8 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
                                  .withSetVersion(100)
                                  .instance();
 
-    stateMachine.nextServerDescription(topologyDescription, serverDescription);
-    ASSERT_EQUALS(100, observer->maxSetVersion);
+    stateMachine.onServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(100, topologyDescription.getMaxSetVersion());
 
     auto serverDescriptionEvenBiggerSetVersion = ServerDescriptionBuilder()
                                                      .withType(ServerType::kRSPrimary)
@@ -295,17 +240,14 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
                                                      .withSetVersion(200)
                                                      .instance();
 
-    stateMachine.nextServerDescription(topologyDescription, serverDescriptionEvenBiggerSetVersion);
-    ASSERT_EQUALS(200, observer->maxSetVersion);
+    stateMachine.onServerDescription(topologyDescription, serverDescriptionEvenBiggerSetVersion);
+    ASSERT_EQUALS(200, topologyDescription.getMaxSetVersion());
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
     const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
-    auto observer = std::make_shared<StateMachineObserver>();
     TopologyDescription topologyDescription(TWO_SEED_CONFIG);
     TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
-    stateMachine.addObserver(topologyDescription.getTopologyObserver());
-    stateMachine.addObserver(observer);
 
     const OID oidOne(std::string("000000000000000000000001"));
     const OID oidTwo(std::string("000000000000000000000002"));
@@ -320,8 +262,8 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
                                  .withElectionId(oidOne)
                                  .instance();
 
-    stateMachine.nextServerDescription(topologyDescription, serverDescription);
-    ASSERT_EQUALS(oidOne, observer->maxElectionId);
+    stateMachine.onServerDescription(topologyDescription, serverDescription);
+    ASSERT_EQUALS(oidOne, topologyDescription.getMaxElectionId());
 
     auto serverDescriptionEvenBiggerElectionId = ServerDescriptionBuilder()
                                                      .withType(ServerType::kRSPrimary)
@@ -333,8 +275,8 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
                                                      .withElectionId(oidTwo)
                                                      .instance();
 
-    stateMachine.nextServerDescription(topologyDescription, serverDescriptionEvenBiggerElectionId);
-    ASSERT_EQUALS(oidTwo, observer->maxElectionId);
+    stateMachine.onServerDescription(topologyDescription, serverDescriptionEvenBiggerElectionId);
+    ASSERT_EQUALS(oidTwo, topologyDescription.getMaxElectionId());
 }
 
 // The following two tests (ShouldNotUpdateToplogyType, ShouldUpdateToCorrectToplogyType) assert

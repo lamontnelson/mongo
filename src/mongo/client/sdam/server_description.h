@@ -160,8 +160,6 @@ private:
     friend class ServerDescriptionBuilder;
 };
 
-using ServerDescriptionPtr = std::shared_ptr<ServerDescription>;
-
 bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
 bool operator!=(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
 std::ostream& operator<<(std::ostream& os, const ServerDescriptionPtr& description);

@@ -38,9 +38,7 @@ namespace mongo::sdam {
 // TopologyDescription
 ////////////////////////
 TopologyDescription::TopologyDescription(SdamConfiguration config)
-    : _type(config.getInitialType()),
-      _setName(config.getSetName()),
-      _topologyObserver(std::make_shared<Observer>(*this)) {
+    : _type(config.getInitialType()), _setName(config.getSetName()) {
     if (auto seeds = config.getSeedList()) {
         _servers.clear();
         for (auto address : *seeds) {
@@ -89,8 +87,7 @@ void TopologyDescription::setType(TopologyType type) {
     _type = type;
 }
 
-bool TopologyDescription::containsServerAddress(ServerAddress address) const {
-    boost::to_lower(address);
+bool TopologyDescription::containsServerAddress(const ServerAddress& address) const {
     return findServerByAddress(address) != boost::none;
 }
 
@@ -133,15 +130,16 @@ boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescript
             _servers.push_back(std::shared_ptr<ServerDescription>(newServerDescription));
         }
     }
+
+    checkWireCompatibilityVersions();
     return previousDescription;
 }
 
 void TopologyDescription::removeServerDescription(const ServerAddress& serverAddress) {
-    auto it = std::find_if(_servers.begin(),
-                           _servers.end(),
-                           [serverAddress](const ServerDescriptionPtr& description) {
-                               return description->getAddress() == serverAddress;
-                           });
+    auto it = std::find_if(
+        _servers.begin(), _servers.end(), [serverAddress](const ServerDescriptionPtr& description) {
+            return description->getAddress() == serverAddress;
+        });
     if (it != _servers.end()) {
         _servers.erase(it);
     }
@@ -205,73 +203,6 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
     }
 }
 
-const std::shared_ptr<TopologyObserver> TopologyDescription::getTopologyObserver() const {
-    return _topologyObserver;
-}
-
-void TopologyDescription::Observer::onTopologyStateMachineEvent(
-    std::shared_ptr<TopologyStateMachineEvent> e) {
-    switch (e->type) {
-        case TopologyStateMachineEventType::kNewMaxElectionId: {
-            OID& newMaxElectionId =
-                checked_pointer_cast<NewMaxElectionIdEvent>(e)->newMaxElectionId;
-            _parent._maxElectionId = newMaxElectionId;
-            LOG(3) << "SDAM: Topology max election id changed to: " << newMaxElectionId
-                   << std::endl;
-            break;
-        }
-
-        case TopologyStateMachineEventType::kNewMaxSetVersion: {
-            int newMaxSetVersion = checked_pointer_cast<NewMaxSetVersionEvent>(e)->newMaxSetVersion;
-            LOG(3) << "SDAM: Topology set name changed to: " << newMaxSetVersion << std::endl;
-            _parent._maxSetVersion = newMaxSetVersion;
-            break;
-        }
-
-        case TopologyStateMachineEventType::kNewSetName: {
-            const boost::optional<std::string>& newSetName =
-                checked_pointer_cast<NewSetNameEvent>(e)->newSetName;
-            LOG(3) << "SDAM: Topology set name changed to: " << newSetName << std::endl;
-            _parent._setName = newSetName;
-            break;
-        }
-
-        case TopologyStateMachineEventType::kTopologyTypeChange: {
-            const TopologyType newType = checked_pointer_cast<TopologyTypeChangeEvent>(e)->newType;
-            LOG(3) << "SDAM: Topology type changed to: " << toString(newType) << std::endl;
-            _parent.setType(newType);
-            break;
-        }
-
-        case TopologyStateMachineEventType::kNewServerDescription: {
-            const auto& serverDescription =
-                checked_pointer_cast<NewServerDescriptionEvent>(e)->newServerDescription;
-            LOG(3) << "SDAM: Install new server description: " << *serverDescription << std::endl;
-            _parent.installServerDescription(serverDescription);
-            _parent.checkWireCompatibilityVersions();
-            break;
-        }
-
-        case TopologyStateMachineEventType::kUpdateServerDescription: {
-            const auto& serverDescription =
-                checked_pointer_cast<UpdateServerDescriptionEvent>(e)->updatedServerDescription;
-            LOG(3) << "SDAM: Replace existing server description: " << *serverDescription
-                   << std::endl;
-            _parent.installServerDescription(serverDescription);
-            _parent.checkWireCompatibilityVersions();
-            break;
-        }
-
-        case TopologyStateMachineEventType::kRemoveServerDescription: {
-            const auto& serverDescription =
-                checked_pointer_cast<RemoveServerDescriptionEvent>(e)->removedServerDescription;
-            LOG(3) << "SDAM: remove server description: " << *serverDescription << std::endl;
-            _parent.removeServerDescription(serverDescription->getAddress());
-            break;
-        }
-    }
-}
-
 
 ////////////////////////
 // SdamConfiguration
@@ -292,9 +223,12 @@ SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>>
             "TopologyType Single must have exactly one entry in the seed list.",
             _initialType != TopologyType::kSingle || (*seedList).size() == 1);
 
-    uassert(ErrorCodes::InvalidTopologyType,
-            "Only ToplogyTypes ReplicaSetNoPrimary and Single are allowed when a setName is provided.",
-            !_setName || (_initialType == TopologyType::kReplicaSetNoPrimary || _initialType == TopologyType::kSingle));
+    uassert(
+        ErrorCodes::InvalidTopologyType,
+        "Only ToplogyTypes ReplicaSetNoPrimary and Single are allowed when a setName is provided.",
+        !_setName ||
+            (_initialType == TopologyType::kReplicaSetNoPrimary ||
+             _initialType == TopologyType::kSingle));
 
     uassert(ErrorCodes::TopologySetNameRequired,
             "setName is required for kReplicaSetNoPrimary",

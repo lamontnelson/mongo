@@ -28,10 +28,11 @@
  */
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/client/sdam/topology_state_machine.h"
-#include "mongo/client/sdam/sdam_test_base.h"
 
 #include <functional>
+#include <ostream>
 
+#include "mongo/client/sdam/sdam_test_base.h"
 #include "mongo/util/log.h"
 
 namespace mongo::sdam {
@@ -64,7 +65,7 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
     _stt[idx(TopologyType::kUnknown)][idx(ServerType::kStandalone)] =
         std::bind(&TopologyStateMachine::updateUnknownWithStandalone, this, _1, _2);
     _stt[idx(TopologyType::kUnknown)][idx(ServerType::kMongos)] =
-        setTopologyType(TopologyType::kSharded);
+        setTopologyTypeAction(TopologyType::kSharded);
     _stt[idx(TopologyType::kUnknown)][idx(ServerType::kRSPrimary)] =
         setTopologyTypeAndUpdateRSFromPrimary(TopologyType::kReplicaSetWithPrimary);
 
@@ -145,18 +146,15 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
     }
 }
 
-void TopologyStateMachine::nextServerDescription(const TopologyDescription& topologyDescription,
-                                                 const ServerDescriptionPtr& serverDescription) {
-    stdx::lock_guard<mongo::Mutex> lock(_mutex);
-
-    bool isExistingServer =
-        topologyDescription.containsServerAddress(serverDescription->getAddress());
-
-    if (isExistingServer) {
-        emitReplaceServer(serverDescription);
-    } else {
+void TopologyStateMachine::onServerDescription(TopologyDescription& topologyDescription,
+                                               const ServerDescriptionPtr& serverDescription) {
+    if (!topologyDescription.containsServerAddress(serverDescription->getAddress())) {
+        LOG(0) << "sdam: ignoring unknown ServerDescription from "
+               << serverDescription->getAddress() << std::endl;
         return;
     }
+
+    installServerDescription(topologyDescription, serverDescription, false);
 
     if (topologyDescription.getType() != TopologyType::kSingle) {
         auto& action = _stt[idx(topologyDescription.getType())][idx(serverDescription->getType())];
@@ -165,18 +163,18 @@ void TopologyStateMachine::nextServerDescription(const TopologyDescription& topo
 }
 
 void TopologyStateMachine::updateUnknownWithStandalone(
-    const TopologyDescription& topologyDescription, const ServerDescriptionPtr& serverDescription) {
+    TopologyDescription& topologyDescription, const ServerDescriptionPtr& serverDescription) {
     if (!topologyDescription.containsServerAddress(serverDescription->getAddress()))
         return;
 
     if (_config.getSeedList() && (*_config.getSeedList()).size() == 1) {
-        emitTypeChange(TopologyType::kSingle);
+        modifyTopologyType(topologyDescription, TopologyType::kSingle);
     } else {
-        emitServerRemoved(serverDescription);
+        removeServerDescription(topologyDescription, serverDescription->getAddress());
     }
 }
 
-void TopologyStateMachine::updateRSWithoutPrimary(const TopologyDescription& topologyDescription,
+void TopologyStateMachine::updateRSWithoutPrimary(TopologyDescription& topologyDescription,
                                                   const ServerDescriptionPtr& serverDescription) {
     const auto& serverDescAddress = serverDescription->getAddress();
 
@@ -186,34 +184,37 @@ void TopologyStateMachine::updateRSWithoutPrimary(const TopologyDescription& top
     const auto& currentSetName = topologyDescription.getSetName();
     const auto& serverDescSetName = serverDescription->getSetName();
     if (currentSetName == boost::none) {
-        emitNewSetName(serverDescSetName);
+        modifySetName(topologyDescription, serverDescSetName);
     } else if (currentSetName != serverDescSetName) {
-        emitServerRemoved(serverDescription);
+        removeServerDescription(topologyDescription, serverDescription->getAddress());
         return;
     }
 
     addUnknownServers(topologyDescription, serverDescription);
 
     if (serverDescAddress != serverDescription->getMe()) {
-        emitServerRemoved(serverDescription);
+        removeServerDescription(topologyDescription, serverDescription->getAddress());
     }
 }
-void TopologyStateMachine::addUnknownServers(const TopologyDescription& topologyDescription,
+void TopologyStateMachine::addUnknownServers(TopologyDescription& topologyDescription,
                                              const ServerDescriptionPtr& serverDescription) {
     const std::set<ServerAddress>* addressSets[3]{&serverDescription->getHosts(),
                                                   &serverDescription->getPassives(),
                                                   &serverDescription->getArbiters()};
     for (const auto addresses : addressSets) {
-        for (const auto addressFromSet : *addresses) {
+        for (const auto& addressFromSet : *addresses) {
             if (!topologyDescription.containsServerAddress(addressFromSet)) {
-                emitNewServer(std::make_shared<ServerDescription>(ServerDescription(addressFromSet)));
+                installServerDescription(
+                    topologyDescription,
+                    std::make_shared<ServerDescription>(ServerDescription(addressFromSet)),
+                    true);
             }
         }
     }
 }
 
 void TopologyStateMachine::updateRSWithPrimaryFromMember(
-    const TopologyDescription& topologyDescription, const ServerDescriptionPtr& serverDescription) {
+    TopologyDescription& topologyDescription, const ServerDescriptionPtr& serverDescription) {
     const auto& serverDescAddress = serverDescription->getAddress();
     if (!topologyDescription.containsServerAddress(serverDescAddress)) {
         return;
@@ -234,11 +235,11 @@ void TopologyStateMachine::updateRSWithPrimaryFromMember(
         return description->getType() == ServerType::kRSPrimary;
     });
     if (primaries.size() == 0) {
-        emitTypeChange(TopologyType::kReplicaSetNoPrimary);
+        modifyTopologyType(topologyDescription, TopologyType::kReplicaSetNoPrimary);
     }
 }
 
-void TopologyStateMachine::updateRSFromPrimary(const TopologyDescription& topologyDescription,
+void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDescription,
                                                const ServerDescriptionPtr& serverDescription) {
     const auto& serverDescAddress = serverDescription->getAddress();
     if (!topologyDescription.containsServerAddress(serverDescAddress)) {
@@ -248,7 +249,7 @@ void TopologyStateMachine::updateRSFromPrimary(const TopologyDescription& topolo
     auto topologySetName = topologyDescription.getSetName();
     auto serverDescSetName = serverDescription->getSetName();
     if (!topologySetName && serverDescSetName) {
-        emitNewSetName(serverDescSetName);
+        modifySetName(topologyDescription, serverDescSetName);
     } else if (topologySetName != serverDescSetName) {
         // We found a primary but it doesn't have the setName
         // provided by the user or previously discovered.
@@ -266,16 +267,19 @@ void TopologyStateMachine::updateRSFromPrimary(const TopologyDescription& topolo
              (topologyMaxSetVersion == serverDescSetVersion &&
               (*topologyMaxElectionId).compare(*serverDescElectionId) > 0))) {
             // stale primary
-            emitReplaceServer(std::make_shared<ServerDescription>(ServerDescription(serverDescAddress)));
+            installServerDescription(
+                topologyDescription,
+                std::make_shared<ServerDescription>(ServerDescription(serverDescAddress)),
+                false);
             checkIfHasPrimary(topologyDescription, serverDescription);
             return;
         }
-        emitNewMaxElectionId(*serverDescription->getElectionId());
+        modifyMaxElectionId(topologyDescription, *serverDescription->getElectionId());
     }
 
     if (serverDescSetVersion &&
         (!topologyMaxSetVersion || (serverDescSetVersion > topologyMaxSetVersion))) {
-        emitNewMaxSetVersion(*serverDescSetVersion);
+        modifyMaxSetVersion(topologyDescription, *serverDescSetVersion);
     }
 
     auto oldPrimaries = topologyDescription.findServers(
@@ -285,7 +289,10 @@ void TopologyStateMachine::updateRSFromPrimary(const TopologyDescription& topolo
         });
     invariant(oldPrimaries.size() <= 1);
     for (const auto& server : oldPrimaries) {
-        emitReplaceServer(std::make_shared<ServerDescription>(ServerDescription(server->getAddress())));
+        installServerDescription(
+            topologyDescription,
+            std::make_shared<ServerDescription>(ServerDescription(server->getAddress())),
+            false);
     }
 
     addUnknownServers(topologyDescription, serverDescription);
@@ -298,108 +305,96 @@ void TopologyStateMachine::updateRSFromPrimary(const TopologyDescription& topolo
         if (hosts == serverDescription->getHosts().end() &&
             passives == serverDescription->getPassives().end() &&
             arbiters == serverDescription->getArbiters().end()) {
-            emitServerRemoved(currentServerDescription);
+            removeServerDescription(topologyDescription, currentServerDescription->getAddress());
         }
     }
 
     checkIfHasPrimary(topologyDescription, serverDescription);
 }
 
-void TopologyStateMachine::removeAndStopMonitoring(const TopologyDescription&,
+void TopologyStateMachine::removeAndStopMonitoring(TopologyDescription& topologyDescription,
                                                    const ServerDescriptionPtr& serverDescription) {
-    emitServerRemoved(serverDescription);
+    removeServerDescription(topologyDescription, serverDescription->getAddress());
 }
 
-void TopologyStateMachine::checkIfHasPrimary(const TopologyDescription& topologyDescription,
+void TopologyStateMachine::checkIfHasPrimary(TopologyDescription& topologyDescription,
                                              const ServerDescriptionPtr& serverDescription) {
     auto foundPrimaries =
         topologyDescription.findServers([](const ServerDescriptionPtr& description) {
             return description->getType() == ServerType::kRSPrimary;
         });
     if (foundPrimaries.size() > 0) {
-        emitTypeChange(TopologyType::kReplicaSetWithPrimary);
+        modifyTopologyType(topologyDescription, TopologyType::kReplicaSetWithPrimary);
     } else {
-        emitTypeChange(TopologyType::kReplicaSetNoPrimary);
+        modifyTopologyType(topologyDescription, TopologyType::kReplicaSetNoPrimary);
     }
 }
 
 void TopologyStateMachine::removeAndCheckIfHasPrimary(
-    const TopologyDescription& topologyDescription, const ServerDescriptionPtr& serverDescription) {
+    TopologyDescription& topologyDescription, const ServerDescriptionPtr& serverDescription) {
     removeAndStopMonitoring(topologyDescription, serverDescription);
     checkIfHasPrimary(topologyDescription, serverDescription);
 }
 
-TransitionAction TopologyStateMachine::setTopologyType(TopologyType type) {
-    return [this, type](const TopologyDescription& topologyDescription,
-                        const ServerDescriptionPtr& newServerDescription) { emitTypeChange(type); };
+TransitionAction TopologyStateMachine::setTopologyTypeAction(TopologyType type) {
+    return [this, type](TopologyDescription& topologyDescription,
+                        const ServerDescriptionPtr& newServerDescription) {
+        modifyTopologyType(topologyDescription, type);
+    };
 }
 
 TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSFromPrimary(TopologyType type) {
-    return [this, type](const TopologyDescription& topologyDescription,
+    return [this, type](TopologyDescription& topologyDescription,
                         const ServerDescriptionPtr& newServerDescription) {
-        std::cout << "change type to " << toString(type) << std::endl;
-        emitTypeChange(type);
+        modifyTopologyType(topologyDescription, type);
         updateRSFromPrimary(topologyDescription, newServerDescription);
     };
 }
 
 TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType type) {
-    return [this, type](const TopologyDescription& topologyDescription,
+    return [this, type](TopologyDescription& topologyDescription,
                         const ServerDescriptionPtr& newServerDescription) {
-        emitTypeChange(type);
+        modifyTopologyType(topologyDescription, type);
         updateRSWithoutPrimary(topologyDescription, newServerDescription);
     };
 }
 
-void TopologyStateMachine::emit(std::shared_ptr<TopologyStateMachineEvent> event) {
-    for (auto& observer : _observers) {
-        observer->onTopologyStateMachineEvent(event);
-    }
+void TopologyStateMachine::removeServerDescription(TopologyDescription& topologyDescription,
+                                                   const ServerAddress& serverAddress) {
+    topologyDescription.removeServerDescription(serverAddress);
+    LOG(0) << "sdam: server '" << serverAddress << "' was removed from the topology." << std::endl;
 }
 
-void TopologyStateMachine::emitServerRemoved(const ServerDescriptionPtr& serverDescription) {
-    std::shared_ptr<TopologyStateMachineEvent> event =
-        std::make_shared<RemoveServerDescriptionEvent>(serverDescription);
-    emit(event);
+void TopologyStateMachine::modifyTopologyType(TopologyDescription& topologyDescription,
+                                              TopologyType topologyType) {
+    topologyDescription._type = topologyType;
+    LOG(0) << "sdam: the topology type was set to " << toString(topologyType) << std::endl;
 }
 
-void TopologyStateMachine::emitTypeChange(TopologyType topologyType) {
-    std::shared_ptr<TopologyStateMachineEvent> event =
-        std::make_shared<TopologyTypeChangeEvent>(topologyType);
-    emit(event);
+void TopologyStateMachine::modifySetName(TopologyDescription& topologyDescription,
+                                         const boost::optional<std::string>& setName) {
+    topologyDescription._setName = setName;
+    LOG(0) << "sdam: the topology setName was set to " << ((setName) ? *setName : "[null]")
+           << std::endl;
 }
 
-void TopologyStateMachine::emitNewSetName(const boost::optional<std::string>& setName) {
-    std::shared_ptr<TopologyStateMachineEvent> event = std::make_shared<NewSetNameEvent>(setName);
-    emit(event);
+void TopologyStateMachine::installServerDescription(TopologyDescription& topologyDescription,
+                                                    ServerDescriptionPtr newServerDescription,
+                                                    bool newServer) {
+    topologyDescription.installServerDescription(newServerDescription);
+    LOG(0) << "sdam: " << ((newServer) ? "installed new" : "updated existing")
+           << " server description: " << newServerDescription->toString() << std::endl;
 }
 
-void TopologyStateMachine::emitNewServer(ServerDescriptionPtr newServerDescription) {
-    std::shared_ptr<TopologyStateMachineEvent> event =
-        std::make_shared<NewServerDescriptionEvent>(newServerDescription);
-    emit(event);
+void TopologyStateMachine::modifyMaxElectionId(TopologyDescription& topologyDescription,
+                                               const OID& newMaxElectionId) {
+    topologyDescription._maxElectionId = newMaxElectionId;
+    LOG(0) << "sdam: topology max election id set to " << newMaxElectionId << std::endl;
 }
 
-void TopologyStateMachine::emitReplaceServer(ServerDescriptionPtr updatedServerDescription) {
-    std::shared_ptr<TopologyStateMachineEvent> event =
-        std::make_shared<UpdateServerDescriptionEvent>(updatedServerDescription);
-    emit(event);
-}
-
-void TopologyStateMachine::emitNewMaxElectionId(const OID& newMaxElectionId) {
-    std::shared_ptr<TopologyStateMachineEvent> event =
-        std::make_shared<NewMaxElectionIdEvent>(newMaxElectionId);
-    emit(event);
-}
-
-void TopologyStateMachine::emitNewMaxSetVersion(int& newMaxSetVersion) {
-    std::shared_ptr<TopologyStateMachineEvent> event =
-        std::make_shared<NewMaxSetVersionEvent>(newMaxSetVersion);
-    emit(event);
-}
-
-void TopologyStateMachine::addObserver(std::shared_ptr<TopologyObserver> observer) {
-    stdx::lock_guard<mongo::Mutex> lock(_mutex);
-    _observers.push_back(std::move(observer));
+void TopologyStateMachine::modifyMaxSetVersion(TopologyDescription& topologyDescription,
+                                               int& newMaxSetVersion) {
+    topologyDescription._maxSetVersion = newMaxSetVersion;
+    LOG(0) << "sdam: topology max set version set to " << newMaxSetVersion << std::endl;
 }
 }  // namespace mongo::sdam

@@ -102,4 +102,10 @@ private:
     // the round trip time to execute the command (or null if it failed)
     boost::optional<IsMasterRTT> _rtt;
 };
+
+class ServerDescription;
+using ServerDescriptionPtr = std::shared_ptr<ServerDescription>;
+
+class TopologyDescription;
+using TopologyDescriptionPtr = std::shared_ptr<TopologyDescription>;
 };  // namespace mongo::sdam

@@ -196,10 +196,8 @@ TEST_F(TopologyDescriptionTestFixture,
                                                  .instance();
 
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
-    auto event = std::make_shared<UpdateServerDescriptionEvent>(serverDescriptionMinVersion);
-    topologyDescription.getTopologyObserver()->onTopologyStateMachineEvent(event);
+    topologyDescription.installServerDescription(serverDescriptionMinVersion);
     ASSERT_NOT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
-    // TODO: assert exact text
 }
 
 TEST_F(TopologyDescriptionTestFixture,
@@ -215,10 +213,8 @@ TEST_F(TopologyDescriptionTestFixture,
                                                  .instance();
 
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
-    auto event = std::make_shared<UpdateServerDescriptionEvent>(serverDescriptionMaxVersion);
-    topologyDescription.getTopologyObserver()->onTopologyStateMachineEvent(event);
+    topologyDescription.installServerDescription(serverDescriptionMaxVersion);
     ASSERT_NOT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
-    // TODO: assert exact text
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNotSetWireCompatibilityErrorWhenServerTypeIsUnknown) {
@@ -229,8 +225,7 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNotSetWireCompatibilityErrorWhenSer
         ServerDescriptionBuilder().withMaxWireVersion(outgoingMinWireVersion - 1).instance();
 
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
-    auto event = std::make_shared<UpdateServerDescriptionEvent>(serverDescriptionMaxVersion);
-    topologyDescription.getTopologyObserver()->onTopologyStateMachineEvent(event);
+    topologyDescription.installServerDescription(serverDescriptionMaxVersion);
     ASSERT_EQUALS(boost::none, topologyDescription.getWireVersionCompatibleError());
 }
 };  // namespace sdam
