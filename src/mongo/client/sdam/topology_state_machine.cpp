@@ -362,7 +362,8 @@ TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(
 void TopologyStateMachine::removeServerDescription(TopologyDescription& topologyDescription,
                                                    const ServerAddress& serverAddress) {
     topologyDescription.removeServerDescription(serverAddress);
-    LOG(0) << LogPrefix << "server '" << serverAddress << "' was removed from the topology." << std::endl;
+    LOG(0) << LogPrefix << "server '" << serverAddress << "' was removed from the topology."
+           << std::endl;
 }
 
 void TopologyStateMachine::modifyTopologyType(TopologyDescription& topologyDescription,

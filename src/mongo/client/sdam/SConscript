@@ -19,24 +19,32 @@ env.Library(
         '$BUILD_DIR/mongo/util/clock_sources',
         '$BUILD_DIR/mongo/db/wire_version'
     ],
-    LIBDEPS_PRIVATE=[
+)
+
+env.Library(
+    target='sdam_test',
+    source=[
+        'server_description_builder.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/base',
     ],
 )
 
 env.CppUnitTest(
     target='topology_description_test',
     source=['topology_description_test.cpp'],
-    LIBDEPS=['sdam'],
+    LIBDEPS=['sdam', 'sdam_test'],
 )
 
 env.CppUnitTest(
     target='server_description_test',
     source=['server_description_test.cpp'],
-    LIBDEPS=['sdam'],
+    LIBDEPS=['sdam', 'sdam_test'],
 )
 
 env.CppUnitTest(
     target='topology_state_machine_test',
     source=['topology_state_machine_test.cpp'],
-    LIBDEPS=['sdam'],
+    LIBDEPS=['sdam', 'sdam_test'],
 )

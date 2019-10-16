@@ -27,6 +27,7 @@
  *    it in the license file.
  */
 #pragma once
+
 #include <boost/algorithm/string.hpp>
 #include <boost/optional.hpp>
 #include <map>
@@ -199,47 +200,4 @@ bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::Serv
 bool operator!=(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b);
 std::ostream& operator<<(std::ostream& os, const ServerDescriptionPtr& description);
 std::ostream& operator<<(std::ostream& os, const ServerDescription& description);
-
-class ServerDescriptionBuilder {
-public:
-    ServerDescriptionBuilder() = default;
-
-    /**
-     * Return the configured ServerDescription instance.
-     */
-    ServerDescriptionPtr instance() const;
-
-    // server identity
-    ServerDescriptionBuilder& withAddress(const ServerAddress& address);
-    ServerDescriptionBuilder& withType(const ServerType type);
-    ServerDescriptionBuilder& withMe(const ServerAddress& me);
-    ServerDescriptionBuilder& withTag(const std::string key, const std::string value);
-    ServerDescriptionBuilder& withSetName(const std::string setName);
-
-    // network attributes
-    ServerDescriptionBuilder& withRtt(const IsMasterRTT& rtt);
-    ServerDescriptionBuilder& withError(const std::string& error);
-    ServerDescriptionBuilder& withLogicalSessionTimeoutMinutes(
-        const int logicalSessionTimeoutMinutes);
-
-    // server capabilities
-    ServerDescriptionBuilder& withMinWireVersion(int minVersion);
-    ServerDescriptionBuilder& withMaxWireVersion(int maxVersion);
-
-    // server 'time'
-    ServerDescriptionBuilder& withLastWriteDate(const Date_t& lastWriteDate);
-    ServerDescriptionBuilder& withOpTime(const repl::OpTime opTime);
-    ServerDescriptionBuilder& withLastUpdateTime(const Date_t& lastUpdateTime);
-
-    // topology membership
-    ServerDescriptionBuilder& withPrimary(const ServerAddress& primary);
-    ServerDescriptionBuilder& withHost(const ServerAddress& host);
-    ServerDescriptionBuilder& withPassive(const ServerAddress& passive);
-    ServerDescriptionBuilder& withArbiter(const ServerAddress& arbiter);
-    ServerDescriptionBuilder& withSetVersion(const int setVersion);
-    ServerDescriptionBuilder& withElectionId(const OID& electionId);
-
-private:
-    ServerDescriptionPtr _instance = std::shared_ptr<ServerDescription>(new ServerDescription());
-};
-}  // namespace mongo::sdam
+};  // namespace mongo::sdam

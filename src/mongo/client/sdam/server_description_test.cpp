@@ -35,6 +35,7 @@
 
 #include "mongo/client/sdam/sdam_test_base.h"
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/client/sdam/server_description_builder.h"
 #include "mongo/db/repl/optime.h"
 #include "mongo/util/system_clock_source.h"
 
@@ -116,18 +117,14 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareMultipleHostsOrderDoesntMatter)
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMultiplePassivesOrderDoesntMatter) {
-    auto a =
-        ServerDescriptionBuilder().withPassive("foo").withPassive("bar").instance();
-    auto b =
-        ServerDescriptionBuilder().withPassive("bar").withPassive("foo").instance();
+    auto a = ServerDescriptionBuilder().withPassive("foo").withPassive("bar").instance();
+    auto b = ServerDescriptionBuilder().withPassive("bar").withPassive("foo").instance();
     ASSERT_EQUALS(*a, *b);
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareMultipleArbitersOrderDoesntMatter) {
-    auto a =
-        ServerDescriptionBuilder().withArbiter("foo").withArbiter("bar").instance();
-    auto b =
-        ServerDescriptionBuilder().withArbiter("bar").withArbiter("foo").instance();
+    auto a = ServerDescriptionBuilder().withArbiter("foo").withArbiter("bar").instance();
+    auto b = ServerDescriptionBuilder().withArbiter("bar").withArbiter("foo").instance();
     ASSERT_EQUALS(*a, *b);
 }
 
@@ -154,8 +151,7 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareSetVersion) {
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareElectionId) {
     auto a = ServerDescriptionBuilder().withElectionId(OID::max()).instance();
-    auto b =
-        ServerDescriptionBuilder().withElectionId(OID("000000000000000000000000")).instance();
+    auto b = ServerDescriptionBuilder().withElectionId(OID("000000000000000000000000")).instance();
     ASSERT_NOT_EQUALS(*a, *b);
     ASSERT_EQUALS(*a, *a);
 }
@@ -339,13 +335,11 @@ TEST_F(ServerDescriptionBuilderTestFixture,
                                      .withType(ServerType::kRSSecondary)
                                      .withRtt(mongo::Milliseconds(20))
                                      .instance();
-    auto description =
-        ServerDescription(clockSource, response, lastServerDescription->getRtt());
+    auto description = ServerDescription(clockSource, response, lastServerDescription->getRtt());
     ASSERT_EQUALS(24, durationCount<mongo::Milliseconds>(*description.getRtt()));
 
     auto response2 = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(30));
-    auto description2 =
-        ServerDescription(clockSource, response2, description.getRtt());
+    auto description2 = ServerDescription(clockSource, response2, description.getRtt());
     ASSERT_EQUALS(25, durationCount<mongo::Milliseconds>(*description2.getRtt()));
 }
 

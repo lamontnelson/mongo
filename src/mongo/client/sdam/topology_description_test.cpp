@@ -32,6 +32,7 @@
 #include <boost/optional/optional_io.hpp>
 
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/client/sdam/server_description_builder.h"
 #include "mongo/db/wire_version.h"
 #include "mongo/unittest/death_test.h"
 #include "mongo/unittest/unittest.h"
@@ -154,11 +155,14 @@ TEST_F(TopologyDescriptionTestFixture, ShouldOnlyAllowSingleAndRsNoPrimaryWithSe
     for (const auto topologyType : topologyTypes) {
         ASSERT_THROWS_CODE(
             {
-                std::cout << "Check TopologyType " << toString(topologyType) << " with setName value." << std::endl;
+                std::cout << "Check TopologyType " << toString(topologyType)
+                          << " with setName value." << std::endl;
                 auto config = SdamConfiguration(
                     ONE_SERVER, topologyType, mongo::Seconds(10), std::string("setName"));
-                // This is here to ensure that the compiler actually generates code for the above statement.
-                std::cout << "Test failed for topologyType " << config.getInitialType() << std::endl;
+                // This is here to ensure that the compiler actually generates code for the above
+                // statement.
+                std::cout << "Test failed for topologyType " << config.getInitialType()
+                          << std::endl;
                 MONGO_UNREACHABLE;
             },
             DBException,
