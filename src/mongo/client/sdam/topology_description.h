@@ -104,7 +104,7 @@ public:
     const boost::optional<int>& getMaxSetVersion() const;
     const boost::optional<OID>& getMaxElectionId() const;
 
-    const std::vector<ServerDescriptionPtr> getServers() const;
+    const std::vector<ServerDescriptionPtr>& getServers() const;
 
     bool isWireVersionCompatible() const;
     const boost::optional<std::string>& getWireVersionCompatibleError() const;
