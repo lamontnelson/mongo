@@ -125,7 +125,7 @@ ServerDescriptionBuilder& ServerDescriptionBuilder::withLastUpdateTime(
 }
 
 ServerDescriptionBuilder& ServerDescriptionBuilder::withLogicalSessionTimeoutMinutes(
-    const int logicalSessionTimeoutMinutes) {
+    const boost::optional<int> logicalSessionTimeoutMinutes) {
     _instance->_logicalSessionTimeoutMinutes = logicalSessionTimeoutMinutes;
     return *this;
 }

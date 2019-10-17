@@ -79,6 +79,7 @@ public:
 
     static inline const mongo::Milliseconds kDefaultHeartbeatFrequencyMs = mongo::Seconds(10);
     static inline const mongo::Milliseconds kMinHeartbeatFrequencyMS = mongo::Milliseconds(500);
+
 private:
     boost::optional<std::vector<ServerAddress>> _seedList;
     TopologyType _initialType;
@@ -149,6 +150,8 @@ private:
      * Used in error string for wire compatibility check.
      */
     const std::string minimumRequiredMongoVersionString(int version);
+
+    void calculateLogicalSessionTimeout();
 
     // unique id for this topology
     UUID _id = UUID::gen();

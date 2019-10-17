@@ -55,7 +55,7 @@ public:
     ServerDescriptionBuilder& withRtt(const IsMasterRTT& rtt);
     ServerDescriptionBuilder& withError(const std::string& error);
     ServerDescriptionBuilder& withLogicalSessionTimeoutMinutes(
-        const int logicalSessionTimeoutMinutes);
+        const boost::optional<int> logicalSessionTimeoutMinutes);
 
     // server capabilities
     ServerDescriptionBuilder& withMinWireVersion(int minVersion);

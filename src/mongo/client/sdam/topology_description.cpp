@@ -132,6 +132,7 @@ boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescript
     }
 
     checkWireCompatibilityVersions();
+    calculateLogicalSessionTimeout();
     return previousDescription;
 }
 
@@ -201,6 +202,20 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
         default:
             MONGO_UNREACHABLE;
     }
+}
+
+void TopologyDescription::calculateLogicalSessionTimeout() {
+    int min = INT_MAX;
+    bool foundNone = false;
+    for (auto description : getServers()) {
+        auto logicalSessionTimeout = description->getLogicalSessionTimeoutMinutes();
+        if (!logicalSessionTimeout) {
+            foundNone = true;
+            break;
+        }
+        min = std::min(*logicalSessionTimeout, min);
+    }
+    _logicalSessionTimeoutMinutes = (foundNone) ? boost::none : boost::make_optional(min);
 }
 
 
