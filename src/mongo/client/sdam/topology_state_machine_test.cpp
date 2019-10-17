@@ -38,27 +38,21 @@
 namespace mongo::sdam {
 class TopologyStateMachineTestFixture : public SdamTestFixture {
 protected:
-    static inline const auto REPLICA_SET_NAME = "replica_set";
-    static inline const auto LOCAL_SERVER = "localhost:123";
-    static inline const auto LOCAL_SERVER2 = "localhost:456";
+    static inline const auto kReplicaSetName = "replica_set";
+    static inline const auto kLocalServer = "localhost:123";
+    static inline const auto kLocalServer2 = "localhost:456";
 
-    static inline const auto TWO_SEED_CONFIG =
-        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
+    static inline const auto kTwoSeedConfig =
+        SdamConfiguration(std::vector<ServerAddress>{kLocalServer, kLocalServer2},
                           TopologyType::kUnknown,
                           mongo::Milliseconds(500));
-    static inline const auto TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG =
-        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
+    static inline const auto kTwoSeedReplicaSetNoPrimaryConfig =
+        SdamConfiguration(std::vector<ServerAddress>{kLocalServer, kLocalServer2},
                           TopologyType::kReplicaSetNoPrimary,
                           mongo::Milliseconds(500),
                           std::string("setName"));
-    static inline const auto TWO_SEED_REPLICA_SET_WITH_PRIMARY_CONFIG =
-        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER, LOCAL_SERVER2},
-                          TopologyType::kReplicaSetNoPrimary,
-                          mongo::Milliseconds(500),
-                          std::string("setName"));
-
-    static inline const auto SINGLE_CONFIG =
-        SdamConfiguration(std::vector<ServerAddress>{LOCAL_SERVER}, TopologyType::kSingle);
+    static inline const auto kSingleConfig =
+        SdamConfiguration(std::vector<ServerAddress>{kLocalServer}, TopologyType::kSingle);
 
     // Given we in 'starting' state with initial config 'initialConfig'. We receive a
     // ServerDescription with type 'incoming', and expected the ending topology state to be
@@ -82,7 +76,7 @@ protected:
 
         // create new ServerDescription and
         auto serverDescriptionBuilder =
-            ServerDescriptionBuilder().withType(testCase.incoming).withAddress(LOCAL_SERVER);
+            ServerDescriptionBuilder().withType(testCase.incoming).withAddress(kLocalServer);
 
         // update the known hosts in the ServerDescription
         if (testCase.initialConfig.getSeedList()) {
@@ -93,7 +87,7 @@ protected:
 
         // set the primary if we are creating one
         if (testCase.incoming == ServerType::kRSPrimary) {
-            serverDescriptionBuilder.withPrimary(LOCAL_SERVER);
+            serverDescriptionBuilder.withPrimary(kLocalServer);
         }
 
         // set the replica set name if appropriate
@@ -102,7 +96,7 @@ protected:
         if (std::find(replicaSetServerTypes.begin(),
                       replicaSetServerTypes.end(),
                       testCase.incoming) != replicaSetServerTypes.end()) {
-            serverDescriptionBuilder.withSetName(REPLICA_SET_NAME);
+            serverDescriptionBuilder.withSetName(kReplicaSetName);
         }
 
         const auto serverDescription = serverDescriptionBuilder.instance();
@@ -125,12 +119,12 @@ protected:
 };
 
 TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTopology) {
-    TopologyStateMachine stateMachine(SINGLE_CONFIG);
-    TopologyDescription topologyDescription(SINGLE_CONFIG);
+    TopologyStateMachine stateMachine(kSingleConfig);
+    TopologyDescription topologyDescription(kSingleConfig);
 
     auto updatedMeAddress = "foo:1234";
     auto serverDescription = ServerDescriptionBuilder()
-                                 .withAddress(LOCAL_SERVER)
+                                 .withAddress(kLocalServer)
                                  .withMe(updatedMeAddress)
                                  .withType(ServerType::kStandalone)
                                  .instance();
@@ -138,17 +132,17 @@ TEST_F(TopologyStateMachineTestFixture, ShouldInstallServerDescriptionInSingleTo
     stateMachine.onServerDescription(topologyDescription, serverDescription);
     ASSERT_EQUALS(static_cast<size_t>(1), topologyDescription.getServers().size());
 
-    auto result = topologyDescription.findServerByAddress(LOCAL_SERVER);
+    auto result = topologyDescription.findServerByAddress(kLocalServer);
     ASSERT(result);
     ASSERT_EQUALS(serverDescription, *result);
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHostsList) {
-    const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
-    const auto expectedRemovedServer = (*TWO_SEED_CONFIG.getSeedList()).back();
+    const auto primary = (*kTwoSeedConfig.getSeedList()).front();
+    const auto expectedRemovedServer = (*kTwoSeedConfig.getSeedList()).back();
 
-    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
-    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
+    TopologyStateMachine stateMachine(kTwoSeedConfig);
+    TopologyDescription topologyDescription(kTwoSeedConfig);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(primary)
@@ -165,13 +159,13 @@ TEST_F(TopologyStateMachineTestFixture, ShouldRemoveServerDescriptionIfNotInHost
 
 TEST_F(TopologyStateMachineTestFixture,
        ShouldRemoveNonPrimaryServerWhenTopologyIsReplicaSetNoPrimaryAndMeDoesntMatchAddress) {
-    const auto serverAddress = (*TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG.getSeedList()).front();
+    const auto serverAddress = (*kTwoSeedReplicaSetNoPrimaryConfig.getSeedList()).front();
     const auto expectedRemainingServerAddress =
-        (*TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG.getSeedList()).back();
+        (*kTwoSeedReplicaSetNoPrimaryConfig.getSeedList()).back();
     const auto me = std::string("foo") + serverAddress;
 
-    TopologyStateMachine stateMachine(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG);
-    TopologyDescription topologyDescription(TWO_SEED_REPLICA_SET_NO_PRIMARY_CONFIG);
+    TopologyStateMachine stateMachine(kTwoSeedReplicaSetNoPrimaryConfig);
+    TopologyDescription topologyDescription(kTwoSeedReplicaSetNoPrimaryConfig);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(serverAddress)
@@ -188,12 +182,12 @@ TEST_F(TopologyStateMachineTestFixture,
 
 TEST_F(TopologyStateMachineTestFixture,
        ShouldAddServerDescriptionIfInHostsListButNotInTopologyDescription) {
-    const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
-    const auto secondary = (*TWO_SEED_CONFIG.getSeedList()).back();
+    const auto primary = (*kTwoSeedConfig.getSeedList()).front();
+    const auto secondary = (*kTwoSeedConfig.getSeedList()).back();
     const auto newHost = ServerAddress("newhost:123");
 
-    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
-    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
+    TopologyStateMachine stateMachine(kTwoSeedConfig);
+    TopologyDescription topologyDescription(kTwoSeedConfig);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(primary)
@@ -215,10 +209,10 @@ TEST_F(TopologyStateMachineTestFixture,
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
-    const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
+    const auto primary = (*kTwoSeedConfig.getSeedList()).front();
 
-    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
-    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
+    TopologyDescription topologyDescription(kTwoSeedConfig);
+    TopologyStateMachine stateMachine(kTwoSeedConfig);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withType(ServerType::kRSPrimary)
@@ -246,9 +240,9 @@ TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxSetVersion) {
 }
 
 TEST_F(TopologyStateMachineTestFixture, ShouldSaveNewMaxElectionId) {
-    const auto primary = (*TWO_SEED_CONFIG.getSeedList()).front();
-    TopologyDescription topologyDescription(TWO_SEED_CONFIG);
-    TopologyStateMachine stateMachine(TWO_SEED_CONFIG);
+    const auto primary = (*kTwoSeedConfig.getSeedList()).front();
+    TopologyDescription topologyDescription(kTwoSeedConfig);
+    TopologyStateMachine stateMachine(kTwoSeedConfig);
 
     const OID oidOne(std::string("000000000000000000000001"));
     const OID oidTwo(std::string("000000000000000000000002"));
@@ -290,26 +284,26 @@ TEST_F(TopologyStateMachineTestFixture, ShouldNotUpdateToplogyType) {
 
     // test cases that should not change TopologyType
     std::vector<TopologyTypeTestCase> testCases{
-        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kUnknown, TopologyType::kUnknown},
-        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kStandalone, TopologyType::kUnknown},
-        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kRSGhost, TopologyType::kUnknown},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig, TopologyType::kUnknown, ServerType::kUnknown, TopologyType::kUnknown},
+        T{kTwoSeedConfig, TopologyType::kUnknown, ServerType::kStandalone, TopologyType::kUnknown},
+        T{kTwoSeedConfig, TopologyType::kUnknown, ServerType::kRSGhost, TopologyType::kUnknown},
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetNoPrimary,
           ServerType::kUnknown,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetNoPrimary,
           ServerType::kUnknown,
           TopologyType::kReplicaSetNoPrimary},
     };
     for (auto serverType : allServerTypes()) {
         testCases.push_back(
-            T{TWO_SEED_CONFIG, TopologyType::kSharded, serverType, TopologyType::kSharded});
+            T{kTwoSeedConfig, TopologyType::kSharded, serverType, TopologyType::kSharded});
     }
 
     const auto& allExceptPrimary = allServerTypesExceptPrimary();
     for (auto serverType : allExceptPrimary) {
-        testCases.push_back(T{TWO_SEED_CONFIG,
+        testCases.push_back(T{kTwoSeedConfig,
                               TopologyType::kReplicaSetNoPrimary,
                               serverType,
                               TopologyType::kReplicaSetNoPrimary});
@@ -330,56 +324,56 @@ TEST_F(TopologyStateMachineTestFixture, ShouldUpdateToCorrectToplogyType) {
 
     // test cases that should change TopologyType
     const std::vector<TopologyTypeTestCase> testCases{
-        T{TWO_SEED_CONFIG, TopologyType::kUnknown, ServerType::kMongos, TopologyType::kSharded},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig, TopologyType::kUnknown, ServerType::kMongos, TopologyType::kSharded},
+        T{kTwoSeedConfig,
           TopologyType::kUnknown,
           ServerType::kRSPrimary,
           TopologyType::kReplicaSetWithPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kUnknown,
           ServerType::kRSSecondary,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kUnknown,
           ServerType::kRSArbiter,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kUnknown,
           ServerType::kRSOther,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetNoPrimary,
           ServerType::kRSPrimary,
           TopologyType::kReplicaSetWithPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetWithPrimary,
           ServerType::kUnknown,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetWithPrimary,
           ServerType::kStandalone,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetWithPrimary,
           ServerType::kMongos,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetWithPrimary,
           ServerType::kRSPrimary,
           TopologyType::kReplicaSetWithPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetWithPrimary,
           ServerType::kRSSecondary,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetWithPrimary,
           ServerType::kRSOther,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetWithPrimary,
           ServerType::kRSArbiter,
           TopologyType::kReplicaSetNoPrimary},
-        T{TWO_SEED_CONFIG,
+        T{kTwoSeedConfig,
           TopologyType::kReplicaSetWithPrimary,
           ServerType::kRSGhost,
           TopologyType::kReplicaSetNoPrimary}};

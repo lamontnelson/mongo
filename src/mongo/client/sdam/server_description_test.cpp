@@ -196,39 +196,39 @@ protected:
         return std::move(BSONObjBuilder().append("ok", 1));
     }
 
-    inline static const auto clockSource = SystemClockSource::get();
+    static inline const auto clockSource = SystemClockSource::get();
 
-    inline static const auto BSON_OK = okBuilder().obj();
-    inline static const auto BSON_MISSING_OK = BSONObjBuilder().obj();
-    inline static const auto BSON_MONGOS = okBuilder().append("msg", "isdbgrid").obj();
-    inline static const auto BSON_RSPRIMARY =
+    static inline const auto kBsonOk = okBuilder().obj();
+    static inline const auto kBsonMissingOk = BSONObjBuilder().obj();
+    static inline const auto kBsonMongos = okBuilder().append("msg", "isdbgrid").obj();
+    static inline const auto kBsonRsPrimary =
         okBuilder().append("ismaster", true).append("setName", "foo").obj();
-    inline static const auto BSON_RSSECONDARY =
+    static inline const auto kBsonRsSecondary =
         okBuilder().append("secondary", true).append("setName", "foo").obj();
-    inline static const auto BSON_RSARBITER =
+    static inline const auto kBsonRsArbiter =
         okBuilder().append("arbiterOnly", true).append("setName", "foo").obj();
-    inline static const auto BSON_RSOTHER =
+    static inline const auto kBsonRsOther =
         okBuilder().append("hidden", true).append("setName", "foo").obj();
-    inline static const auto BSON_RSGHOST = okBuilder().append("isreplicaset", true).obj();
-    inline static const auto BSON_WIRE_VERSION =
+    static inline const auto kBsonRsGhost = okBuilder().append("isreplicaset", true).obj();
+    static inline const auto kBsonWireVersion =
         okBuilder().append("minWireVersion", 1).append("maxWireVersion", 2).obj();
-    inline static const auto BSON_TAGS =
+    static inline const auto kBsonTags =
         okBuilder()
             .append("tags", BSONObjBuilder().append("foo", "bar").append("baz", "buz").obj())
             .obj();
-    inline static const mongo::repl::OpTime OP_TIME =
+    static inline const mongo::repl::OpTime kOpTime =
         mongo::repl::OpTime(Timestamp(1568848910), 24);
-    inline static const Date_t LAST_WRITE_DATE =
+    static inline const Date_t kLastWriteDate =
         dateFromISOString("2019-09-18T23:21:50Z").getValue();
-    inline static const auto BSON_LAST_WRITE =
+    static inline const auto kBsonLastWrite =
         okBuilder()
             .append("lastWrite",
                     BSONObjBuilder()
-                        .appendTimeT("lastWriteDate", LAST_WRITE_DATE.toTimeT())
-                        .append("opTime", OP_TIME.toBSON())
+                        .appendTimeT("lastWriteDate", kLastWriteDate.toTimeT())
+                        .append("opTime", kOpTime.toBSON())
                         .obj())
             .obj();
-    inline static const auto BSON_HOSTNAMES = okBuilder()
+    static inline const auto kBsonHostNames = okBuilder()
                                                   .append("me", "Me:1234")
                                                   .appendArray("hosts",
                                                                BSON_ARRAY("Foo:1234"
@@ -240,11 +240,11 @@ protected:
                                                                BSON_ARRAY("Biz:1234"
                                                                           << "Boz:1234"))
                                                   .obj();
-    inline static const auto BSON_SET_VERSION_NAME =
+    static inline const auto kBsonSetVersionName =
         okBuilder().append("setVersion", 1).append("setName", "bar").obj();
-    inline static const auto BSON_ELECTION_ID = okBuilder().append("electionId", OID::max()).obj();
-    inline static const auto BSON_PRIMARY = okBuilder().append("primary", "foo:1234").obj();
-    inline static const auto BSON_LOGICAL_SESSION_TIMEOUT =
+    static inline const auto kBsonElectionId = okBuilder().append("electionId", OID::max()).obj();
+    static inline const auto kBsonPrimary = okBuilder().append("primary", "foo:1234").obj();
+    static inline const auto kBsonLogicalSessionTimeout =
         okBuilder().append("logicalSessionTimeoutMinutes", 1).obj();
 };
 
@@ -255,56 +255,56 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterE
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownIfOkMissing) {
-    auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, IsMasterRTT::min());
+    auto response = IsMasterOutcome("foo:1234", kBsonMissingOk, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kUnknown, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsStandalone) {
     // No "msg: isdbgrid", no setName, and no "isreplicaset: true".
-    auto response = IsMasterOutcome("foo:1234", BSON_OK, IsMasterRTT::min());
+    auto response = IsMasterOutcome("foo:1234", kBsonOk, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kStandalone, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsMongos) {
     // contains "msg: isdbgrid"
-    auto response = IsMasterOutcome("foo:1234", BSON_MONGOS, IsMasterRTT::min());
+    auto response = IsMasterOutcome("foo:1234", kBsonMongos, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kMongos, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSPrimary) {
     // "ismaster: true", "setName" in response
-    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, IsMasterRTT::min());
+    auto response = IsMasterOutcome("foo:1234", kBsonRsPrimary, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSPrimary, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSSecondary) {
     // "secondary: true", "setName" in response
-    auto response = IsMasterOutcome("foo:1234", BSON_RSSECONDARY, IsMasterRTT::min());
+    auto response = IsMasterOutcome("foo:1234", kBsonRsSecondary, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSSecondary, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsArbiter) {
     // "arbiterOnly: true", "setName" in response.
-    auto response = IsMasterOutcome("foo:1234", BSON_RSARBITER, IsMasterRTT::min());
+    auto response = IsMasterOutcome("foo:1234", kBsonRsArbiter, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSArbiter, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsOther) {
     // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
-    auto response = IsMasterOutcome("foo:1234", BSON_RSOTHER, IsMasterRTT::min());
+    auto response = IsMasterOutcome("foo:1234", kBsonRsOther, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSOther, description.getType());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsGhost) {
     // "isreplicaset: true" in response.
-    auto response = IsMasterOutcome("foo:1234", BSON_RSGHOST, IsMasterRTT::min());
+    auto response = IsMasterOutcome("foo:1234", kBsonRsGhost, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSGhost, description.getType());
 }
@@ -317,20 +317,20 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreErrorDescription) {
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTWithNoPreviousLatency) {
-    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, IsMasterRTT::max());
+    auto response = IsMasterOutcome("foo:1234", kBsonRsPrimary, IsMasterRTT::max());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(IsMasterRTT::max(), *description.getRtt());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTNullWhenServerTypeIsUnknown) {
-    auto response = IsMasterOutcome("foo:1234", BSON_MISSING_OK, IsMasterRTT::max());
+    auto response = IsMasterOutcome("foo:1234", kBsonMissingOk, IsMasterRTT::max());
     auto description = ServerDescription(clockSource, response, boost::none);
     ASSERT_EQUALS(boost::none, description.getRtt());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture,
        ShouldStoreMovingAverageRTTWhenChangingFromOneKnownServerTypeToAnother) {
-    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonRsPrimary, mongo::Milliseconds(40));
     auto lastServerDescription = ServerDescriptionBuilder()
                                      .withType(ServerType::kRSSecondary)
                                      .withRtt(mongo::Milliseconds(20))
@@ -338,87 +338,87 @@ TEST_F(ServerDescriptionBuilderTestFixture,
     auto description = ServerDescription(clockSource, response, lastServerDescription->getRtt());
     ASSERT_EQUALS(24, durationCount<mongo::Milliseconds>(*description.getRtt()));
 
-    auto response2 = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(30));
+    auto response2 = IsMasterOutcome("foo:1234", kBsonRsPrimary, mongo::Milliseconds(30));
     auto description2 = ServerDescription(clockSource, response2, description.getRtt());
     ASSERT_EQUALS(25, durationCount<mongo::Milliseconds>(*description2.getRtt()));
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastWriteDate) {
-    auto response = IsMasterOutcome("foo:1234", BSON_LAST_WRITE, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonLastWrite, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
-    ASSERT_EQUALS(LAST_WRITE_DATE, description.getLastWriteDate());
+    ASSERT_EQUALS(kLastWriteDate, description.getLastWriteDate());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreOpTime) {
-    auto response = IsMasterOutcome("foo:1234", BSON_LAST_WRITE, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonLastWrite, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
-    ASSERT_EQUALS(OP_TIME, description.getOpTime());
+    ASSERT_EQUALS(kOpTime, description.getOpTime());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastUpdateTime) {
     auto testStart = clockSource->now();
-    auto response = IsMasterOutcome("foo:1234", BSON_RSPRIMARY, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonRsPrimary, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_GREATER_THAN_OR_EQUALS(description.getLastUpdateTime(), testStart);
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreHostNamesAsLowercase) {
-    auto response = IsMasterOutcome("FOO:1234", BSON_HOSTNAMES, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("FOO:1234", kBsonHostNames, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
 
     ASSERT_EQUALS("foo:1234", description.getAddress());
 
-    ASSERT_EQUALS(boost::to_lower_copy(std::string(BSON_HOSTNAMES.getStringField("me"))),
+    ASSERT_EQUALS(boost::to_lower_copy(std::string(kBsonHostNames.getStringField("me"))),
                   *description.getMe());
 
-    auto expectedHosts = toHostSet(BSON_HOSTNAMES.getField("hosts").Array());
+    auto expectedHosts = toHostSet(kBsonHostNames.getField("hosts").Array());
     ASSERT_EQUALS(expectedHosts, description.getHosts());
 
-    auto expectedPassives = toHostSet(BSON_HOSTNAMES.getField("passives").Array());
+    auto expectedPassives = toHostSet(kBsonHostNames.getField("passives").Array());
     ASSERT_EQUALS(expectedPassives, description.getPassives());
 
-    auto expectedArbiters = toHostSet(BSON_HOSTNAMES.getField("arbiters").Array());
+    auto expectedArbiters = toHostSet(kBsonHostNames.getField("arbiters").Array());
     ASSERT_EQUALS(expectedArbiters, description.getArbiters());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreMinMaxWireVersion) {
-    auto response = IsMasterOutcome("foo:1234", BSON_WIRE_VERSION, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonWireVersion, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
-    ASSERT_EQUALS(BSON_WIRE_VERSION["minWireVersion"].Int(), description.getMinWireVersion());
-    ASSERT_EQUALS(BSON_WIRE_VERSION["maxWireVersion"].Int(), description.getMaxWireVersion());
+    ASSERT_EQUALS(kBsonWireVersion["minWireVersion"].Int(), description.getMinWireVersion());
+    ASSERT_EQUALS(kBsonWireVersion["maxWireVersion"].Int(), description.getMaxWireVersion());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreTags) {
-    auto response = IsMasterOutcome("foo:1234", BSON_TAGS, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonTags, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
-    ASSERT_EQUALS(toStringMap(BSON_TAGS["tags"].Obj()), description.getTags());
+    ASSERT_EQUALS(toStringMap(kBsonTags["tags"].Obj()), description.getTags());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreSetVersionAndName) {
-    auto response = IsMasterOutcome("foo:1234", BSON_SET_VERSION_NAME, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonSetVersionName, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
-    ASSERT_EQUALS(BSON_SET_VERSION_NAME.getIntField("setVersion"), description.getSetVersion());
-    ASSERT_EQUALS(std::string(BSON_SET_VERSION_NAME.getStringField("setName")),
+    ASSERT_EQUALS(kBsonSetVersionName.getIntField("setVersion"), description.getSetVersion());
+    ASSERT_EQUALS(std::string(kBsonSetVersionName.getStringField("setName")),
                   description.getSetName());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreElectionId) {
-    auto response = IsMasterOutcome("foo:1234", BSON_ELECTION_ID, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonElectionId, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
-    ASSERT_EQUALS(BSON_ELECTION_ID.getField("electionId").OID(), description.getElectionId());
+    ASSERT_EQUALS(kBsonElectionId.getField("electionId").OID(), description.getElectionId());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStorePrimary) {
-    auto response = IsMasterOutcome("foo:1234", BSON_PRIMARY, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonPrimary, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
-    ASSERT_EQUALS(std::string(BSON_PRIMARY.getStringField("primary")), description.getPrimary());
+    ASSERT_EQUALS(std::string(kBsonPrimary.getStringField("primary")), description.getPrimary());
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLogicalSessionTimeout) {
     auto response =
-        IsMasterOutcome("foo:1234", BSON_LOGICAL_SESSION_TIMEOUT, mongo::Milliseconds(40));
+        IsMasterOutcome("foo:1234", kBsonLogicalSessionTimeout, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
-    ASSERT_EQUALS(BSON_LOGICAL_SESSION_TIMEOUT.getIntField("logicalSessionTimeoutMinutes"),
+    ASSERT_EQUALS(kBsonLogicalSessionTimeout.getIntField("logicalSessionTimeoutMinutes"),
                   description.getLogicalSessionTimeoutMinutes());
 }
 
@@ -430,7 +430,7 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreServerAddressOnError) {
 }
 
 TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnSuccess) {
-    auto response = IsMasterOutcome("foo:1234", BSON_OK, mongo::Milliseconds(40));
+    auto response = IsMasterOutcome("foo:1234", kBsonOk, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(boost::none, description.getError());
     ASSERT_EQUALS(boost::none, description.getLastWriteDate());
