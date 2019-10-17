@@ -46,8 +46,8 @@ public:
     SdamConfiguration() : SdamConfiguration(boost::none){};
 
     /**
-     * Initialize the TopologyDescription. This constructor may uassert if the provided configuration
-     * options are not valid according to the Server Discovery & Monitoring Spec.
+     * Initialize the TopologyDescription. This constructor may uassert if the provided
+     * configuration options are not valid according to the Server Discovery & Monitoring Spec.
      *
      * Initial Servers
      * initial servers may be set to a seed list of one or more server addresses.
