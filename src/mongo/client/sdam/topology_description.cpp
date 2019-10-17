@@ -179,7 +179,6 @@ void TopologyDescription::checkWireCompatibilityVersions() {
 }
 
 const std::string TopologyDescription::minimumRequiredMongoVersionString(int version) {
-    // TODO: need version BATCH_COMMANDS
     switch (version) {
         case PLACEHOLDER_FOR_44:
             return "4.4";
@@ -189,10 +188,12 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
             return "4.0";
         case SUPPORTS_OP_MSG:
             return "3.6";
-        case RELEASE_2_7_7:
-            return "3.0";
+        case BATCH_COMMANDS:
+            return "3.2";
         case FIND_COMMAND:
             return "3.2";
+        case RELEASE_2_7_7:
+            return "3.0";
         case AGG_RETURNS_CURSORS:
             return "2.6";
         case COMMANDS_ACCEPT_WRITE_CONCERN:
