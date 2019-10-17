@@ -75,7 +75,6 @@ public:
     const boost::optional<std::vector<ServerAddress>>& getSeedList() const;
     TopologyType getInitialType() const;
     Milliseconds getHeartBeatFrequency() const;
-    Milliseconds getMinHeartbeatFrequencyMs() const;
     const boost::optional<std::string>& getSetName() const;
 
     static inline const mongo::Milliseconds kDefaultHeartbeatFrequencyMs = mongo::Seconds(10);

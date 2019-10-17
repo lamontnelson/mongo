@@ -236,7 +236,7 @@ SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>>
 
     uassert(ErrorCodes::InvalidHeartBeatFrequency,
             "topology heartbeat must be >= 500ms",
-            _heartBeatFrequencyMs >= mongo::Milliseconds(500));
+            _heartBeatFrequencyMs >= kMinHeartbeatFrequencyMS);
 }
 
 const boost::optional<std::vector<ServerAddress>>& SdamConfiguration::getSeedList() const {
@@ -251,9 +251,6 @@ Milliseconds SdamConfiguration::getHeartBeatFrequency() const {
     return _heartBeatFrequencyMs;
 }
 
-Milliseconds SdamConfiguration::getMinHeartbeatFrequencyMs() const {
-    return kMinHeartbeatFrequencyMS;
-}
 const boost::optional<std::string>& SdamConfiguration::getSetName() const {
     return _setName;
 }
