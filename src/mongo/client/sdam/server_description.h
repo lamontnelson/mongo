@@ -109,7 +109,7 @@ private:
     ServerDescription() : ServerDescription("", ServerType::kUnknown) {}
     /**
      * Classify the server's type based on the ismaster response.
-     * @param isMaster - reply document for ismaster command
+     * @param isMaster - reply information for the ismaster command
      */
     void parseTypeFromIsMaster(const BSONObj isMaster);
 

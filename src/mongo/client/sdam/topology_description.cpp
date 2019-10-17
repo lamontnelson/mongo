@@ -231,7 +231,7 @@ SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>>
              _initialType == TopologyType::kSingle));
 
     uassert(ErrorCodes::TopologySetNameRequired,
-            "setName is required for kReplicaSetNoPrimary",
+            "setName is required for ReplicaSetNoPrimary",
             _initialType != TopologyType::kReplicaSetNoPrimary || _setName);
 
     uassert(ErrorCodes::InvalidHeartBeatFrequency,
