@@ -87,14 +87,6 @@ private:
     boost::optional<std::string> _setName;
 };
 
-/**
- * TODO: Logical Session Timeout
- * Whenever a client updates the TopologyDescription from an ismaster response, it MUST set
- * TopologyDescription.logicalSessionTimeoutMinutes to the smallest logicalSessionTimeoutMinutes
- * value among ServerDescriptions of all data-bearing server types. If any have a null
- * logicalSessionTimeoutMinutes, then TopologyDescription.logicalSessionTimeoutMinutes MUST be set
- * to null.
- */
 class TopologyDescription {
 public:
     TopologyDescription() : TopologyDescription(SdamConfiguration()) {}
@@ -151,6 +143,15 @@ private:
      */
     const std::string minimumRequiredMongoVersionString(int version);
 
+    /**
+     * From Server Discovery and Monitoring:
+     * Updates the TopologyDescription.logicalSessionTimeoutMinutes to the smallest
+     * logicalSessionTimeoutMinutes value among ServerDescriptions of all data-bearing server types.
+     * If any have a null logicalSessionTimeoutMinutes, then
+     * TopologyDescription.logicalSessionTimeoutMinutes is set to null.
+     *
+     * https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#logical-session-timeout
+     */
     void calculateLogicalSessionTimeout();
 
     // unique id for this topology

@@ -246,6 +246,7 @@ TEST_F(TopologyDescriptionTestFixture, ShouldSetLogicalSessionTimeoutToMinOfAllS
     const auto serverDescriptionsWithTimeouts = map<ServerDescriptionPtr, ServerDescriptionPtr>(
         topologyDescription.getServers(), [&timeoutIt](const ServerDescriptionPtr& description) {
             auto newInstanceBuilder = ServerDescriptionBuilder()
+                                          .withType(ServerType::kRSSecondary)
                                           .withAddress(description->getAddress())
                                           .withMe(description->getAddress())
                                           .withLogicalSessionTimeoutMinutes(*timeoutIt);
@@ -273,13 +274,13 @@ TEST_F(TopologyDescriptionTestFixture,
     auto timeoutIt = logicalSessionTimeouts.begin();
 
     const auto serverDescriptionsWithTimeouts = map<ServerDescriptionPtr, ServerDescriptionPtr>(
-        topologyDescription.getServers(),
-        [&](const ServerDescriptionPtr& description) {
+        topologyDescription.getServers(), [&](const ServerDescriptionPtr& description) {
             auto timeoutValue = (timeoutIt == logicalSessionTimeouts.begin())
                 ? boost::none
                 : boost::make_optional(*timeoutIt);
 
             auto newInstance = ServerDescriptionBuilder()
+                                   .withType(ServerType::kRSSecondary)
                                    .withAddress(description->getAddress())
                                    .withMe(description->getAddress())
                                    .withLogicalSessionTimeoutMinutes(timeoutValue)
