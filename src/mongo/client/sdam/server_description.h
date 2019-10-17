@@ -124,13 +124,13 @@ private:
     void saveTags(BSONObj tagsObj);
     void saveElectionId(BSONElement electionId);
 
-    static inline const std::set<ServerType> DATA_SERVER_TYPES{ServerType::kMongos,
-                                                               ServerType::kRSPrimary,
-                                                               ServerType::kRSSecondary,
-                                                               ServerType::kStandalone};
+    static inline const std::set<ServerType> kDataServerTypes{ServerType::kMongos,
+                                                              ServerType::kRSPrimary,
+                                                              ServerType::kRSSecondary,
+                                                              ServerType::kStandalone};
 
-    static inline const std::string IS_DB_GRID = "isdbgrid";
-    static inline double RTT_ALPHA = 0.2;
+    static inline const std::string kIsDbGrid = "isdbgrid";
+    static inline const double kRttAlpha = 0.2;
 
     // address: the hostname or IP, and the port number, that the client connects to. Note that this
     // is not the server's ismaster.me field, in the case that the server reports an address

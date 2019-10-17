@@ -135,8 +135,8 @@ void ServerDescription::calculateRtt(const IsMasterRTT currentRtt,
 
     if (lastRtt) {
         // new_rtt = alpha * x + (1 - alpha) * old_rtt
-        _rtt = IsMasterRTT(static_cast<IsMasterRTT::rep>(RTT_ALPHA * currentRtt.count() +
-                                                         (1 - RTT_ALPHA) * lastRtt.get().count()));
+        _rtt = IsMasterRTT(static_cast<IsMasterRTT::rep>(kRttAlpha * currentRtt.count() +
+                                                         (1 - kRttAlpha) * lastRtt.get().count()));
     } else {
         _rtt = currentRtt;
     }
@@ -163,7 +163,7 @@ void ServerDescription::parseTypeFromIsMaster(const BSONObj isMaster) {
         t = ServerType::kUnknown;
     } else if (!hasSetName && !isMaster.hasField("msg") && !isMaster.getBoolField("isreplicaset")) {
         t = ServerType::kStandalone;
-    } else if (IS_DB_GRID == isMaster.getStringField("msg")) {
+    } else if (kIsDbGrid == isMaster.getStringField("msg")) {
         t = ServerType::kMongos;
     } else if (hasSetName && isMaster.getBoolField("ismaster")) {
         t = ServerType::kRSPrimary;
@@ -281,7 +281,7 @@ bool ServerDescription::isEquivalent(const ServerDescription& other) const {
 }
 
 bool ServerDescription::isDataBearingServer() const {
-    return DATA_SERVER_TYPES.find(_type) != DATA_SERVER_TYPES.end();
+    return kDataServerTypes.find(_type) != kDataServerTypes.end();
 }
 
 // output server description to bson. This is primarily used for debugging.
