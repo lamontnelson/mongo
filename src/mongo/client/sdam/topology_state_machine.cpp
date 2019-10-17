@@ -73,8 +73,8 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
         const auto serverTypes = std::vector<ServerType>{
             ServerType::kRSSecondary, ServerType::kRSArbiter, ServerType::kRSOther};
         for (auto newServerType : serverTypes) {
-            _stt[idx(TopologyType::kUnknown)][idx(newServerType)] =
-                setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType::kReplicaSetNoPrimary);
+            _stt[idx(TopologyType::kUnknown)][idx(newServerType)] = std::bind(
+                &TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary, this, _1, _2);
         }
     }
 
@@ -196,6 +196,7 @@ void TopologyStateMachine::updateRSWithoutPrimary(TopologyDescription& topologyD
         removeServerDescription(topologyDescription, serverDescription->getAddress());
     }
 }
+
 void TopologyStateMachine::addUnknownServers(TopologyDescription& topologyDescription,
                                              const ServerDescriptionPtr& serverDescription) {
     const std::set<ServerAddress>* addressSets[3]{&serverDescription->getHosts(),
@@ -351,12 +352,10 @@ TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSFromPrimary(Top
     };
 }
 
-TransitionAction TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType type) {
-    return [this, type](TopologyDescription& topologyDescription,
-                        const ServerDescriptionPtr& newServerDescription) {
-        modifyTopologyType(topologyDescription, type);
-        updateRSWithoutPrimary(topologyDescription, newServerDescription);
-    };
+void TopologyStateMachine::setTopologyTypeAndUpdateRSWithoutPrimary(
+    TopologyDescription& topologyDescription, const ServerDescriptionPtr& serverDescription) {
+    modifyTopologyType(topologyDescription, TopologyType::kReplicaSetNoPrimary);
+    updateRSWithoutPrimary(topologyDescription, serverDescription);
 }
 
 void TopologyStateMachine::removeServerDescription(TopologyDescription& topologyDescription,

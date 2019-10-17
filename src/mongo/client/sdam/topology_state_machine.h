@@ -74,9 +74,10 @@ private:
     void removeAndStopMonitoring(TopologyDescription&, const ServerDescriptionPtr&);
     void checkIfHasPrimary(TopologyDescription&, const ServerDescriptionPtr&);
     void removeAndCheckIfHasPrimary(TopologyDescription&, const ServerDescriptionPtr&);
+    void setTopologyTypeAndUpdateRSWithoutPrimary(TopologyDescription&,
+                                                  const ServerDescriptionPtr&);
     TransitionAction setTopologyTypeAction(TopologyType type);
     TransitionAction setTopologyTypeAndUpdateRSFromPrimary(TopologyType type);
-    TransitionAction setTopologyTypeAndUpdateRSWithoutPrimary(TopologyType type);
 
     void addUnknownServers(TopologyDescription& topologyDescription,
                            const ServerDescriptionPtr& serverDescription);

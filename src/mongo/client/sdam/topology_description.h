@@ -46,21 +46,18 @@ public:
     SdamConfiguration() : SdamConfiguration(boost::none){};
 
     /**
-     * Initialize the TopologyDescription. This may throw an uassert if the provided configuration
+     * Initialize the TopologyDescription. This constructor may uassert if the provided configuration
      * options are not valid according to the Server Discovery & Monitoring Spec.
      *
      * Initial Servers
-     * The user MUST be able to set the initial servers list to a seed list of one or more
-     * addresses.
-     *
-     * The hostname portion of each address MUST be normalized to lower-case.
+     * initial servers may be set to a seed list of one or more server addresses.
      *
      * Initial TopologyType
-     * The user MUST be able to set the initial TopologyType to Single.
+     * The initial TopologyType may be set to Single, Unknown, or ReplicaSetNoPrimary.
      *
      * Initial setName
-     * The user MUST be able to set the client's initial replica set name. The
-     * set name is required in order to initially configure as ReplicaSetNoPrimary.
+     * The client's initial replica set name is required in order to initially configure the
+     * topology type as ReplicaSetNoPrimary.
      *
      * Allowed configuration combinations
      * TopologyType Single cannot be used with multiple seeds.
@@ -141,7 +138,8 @@ private:
     /**
      * Used in error string for wire compatibility check.
      *
-     * Source: https://github.com/mongodb/specifications/blob/master/source/wireversion-featurelist.rst
+     * Source:
+     * https://github.com/mongodb/specifications/blob/master/source/wireversion-featurelist.rst
      */
     const std::string minimumRequiredMongoVersionString(int version);
 
