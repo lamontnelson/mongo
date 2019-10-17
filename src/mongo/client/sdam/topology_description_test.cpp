@@ -48,6 +48,8 @@ class TopologyDescriptionTestFixture : public SdamTestFixture {
 protected:
     void assertDefaultConfig(const TopologyDescription& topologyDescription);
 
+    static inline const auto kSetName = std::string("mySetName");
+
     static inline const std::vector<ServerAddress> kOneServer{"foo:1234"};
     static inline const std::vector<ServerAddress> kTwoServersVaryCase{"FoO:1234", "BaR:1234"};
     static inline const std::vector<ServerAddress> kTwoServersNormalCase{"foo:1234", "bar:1234"};
@@ -80,10 +82,9 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNormalizeInitialSeedList) {
     auto config = SdamConfiguration(kTwoServersVaryCase);
     TopologyDescription topologyDescription(config);
 
-    std::vector<ServerAddress> expectedAddresses = map<ServerAddress, ServerAddress>(
-        kTwoServersVaryCase, [](const ServerAddress& addr) { return boost::to_lower_copy(addr); });
+    auto expectedAddresses = kTwoServersNormalCase;
 
-    std::vector<ServerAddress> serverAddresses = map<ServerDescriptionPtr, ServerAddress>(
+    auto serverAddresses = map<ServerDescriptionPtr, ServerAddress>(
         topologyDescription.getServers(),
         [](const ServerDescriptionPtr& description) { return description->getAddress(); });
 
@@ -112,7 +113,7 @@ TEST_F(TopologyDescriptionTestFixture, DoesNotAllowMultipleSeedsWithSingle) {
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldSetTheReplicaSetName) {
-    auto expectedSetName = std::string("baz");
+    auto expectedSetName = kSetName;
     auto config = SdamConfiguration(
         kOneServer, TopologyType::kReplicaSetNoPrimary, mongo::Seconds(10), expectedSetName);
     TopologyDescription topologyDescription(config);
@@ -123,7 +124,7 @@ TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowSettingTheReplicaSetNameWit
     ASSERT_THROWS_CODE(
         {
             auto config = SdamConfiguration(
-                kOneServer, TopologyType::kUnknown, mongo::Seconds(10), std::string("baz"));
+                kOneServer, TopologyType::kUnknown, mongo::Seconds(10), kSetName);
             TopologyDescription topologyDescription(config);
         },
         DBException,
@@ -156,7 +157,7 @@ TEST_F(TopologyDescriptionTestFixture, ShouldOnlyAllowSingleAndRsNoPrimaryWithSe
                 std::cout << "Check TopologyType " << toString(topologyType)
                           << " with setName value." << std::endl;
                 auto config = SdamConfiguration(
-                    kOneServer, topologyType, mongo::Seconds(10), std::string("setName"));
+                    kOneServer, topologyType, mongo::Seconds(10), kSetName);
                 // This is here to ensure that the compiler actually generates code for the above
                 // statement.
                 std::cout << "Test failed for topologyType " << config.getInitialType()
