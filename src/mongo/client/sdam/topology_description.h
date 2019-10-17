@@ -69,7 +69,7 @@ public:
      */
     SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
                       TopologyType initialType = TopologyType::kUnknown,
-                      mongo::Milliseconds heartBeatFrequencyMs = mongo::Seconds(10),
+                      mongo::Milliseconds heartBeatFrequencyMs = kDefaultHeartbeatFrequencyMs,
                       boost::optional<std::string> setName = boost::none);
 
     const boost::optional<std::vector<ServerAddress>>& getSeedList() const;
@@ -78,12 +78,13 @@ public:
     Milliseconds getMinHeartbeatFrequencyMs() const;
     const boost::optional<std::string>& getSetName() const;
 
+    static inline const mongo::Milliseconds kDefaultHeartbeatFrequencyMs = mongo::Seconds(10);
+    static inline const mongo::Milliseconds kMinHeartbeatFrequencyMS = mongo::Milliseconds(500);
 private:
     boost::optional<std::vector<ServerAddress>> _seedList;
     TopologyType _initialType;
     mongo::Milliseconds _heartBeatFrequencyMs;
     boost::optional<std::string> _setName;
-    const mongo::Milliseconds _minHeartbeatFrequencyMS = mongo::Milliseconds(500);
 };
 
 /**

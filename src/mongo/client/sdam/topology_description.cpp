@@ -252,7 +252,7 @@ Milliseconds SdamConfiguration::getHeartBeatFrequency() const {
 }
 
 Milliseconds SdamConfiguration::getMinHeartbeatFrequencyMs() const {
-    return _minHeartbeatFrequencyMS;
+    return kMinHeartbeatFrequencyMS;
 }
 const boost::optional<std::string>& SdamConfiguration::getSetName() const {
     return _setName;

@@ -171,17 +171,19 @@ TEST_F(TopologyDescriptionTestFixture, ShouldOnlyAllowSingleAndRsNoPrimaryWithSe
 
 TEST_F(TopologyDescriptionTestFixture, ShouldDefaultHeartbeatToTenSecs) {
     SdamConfiguration config;
-    ASSERT_EQUALS(mongo::Seconds(10), config.getHeartBeatFrequency());
+    ASSERT_EQUALS(SdamConfiguration::kDefaultHeartbeatFrequencyMs, config.getHeartBeatFrequency());
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldAllowSettingTheHeartbeatFrequency) {
-    SdamConfiguration config(boost::none, TopologyType::kUnknown, mongo::Milliseconds(20 * 1000));
-    ASSERT_EQUALS(mongo::Seconds(20), config.getHeartBeatFrequency());
+    const auto expectedHeartbeatFrequency = mongo::Milliseconds(20000);
+    SdamConfiguration config(boost::none, TopologyType::kUnknown, expectedHeartbeatFrequency);
+    ASSERT_EQUALS(expectedHeartbeatFrequency, config.getHeartBeatFrequency());
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowChangingTheHeartbeatFrequencyBelow500Ms) {
+    auto belowThresholdFrequency = mongo::Milliseconds(SdamConfiguration::kMinHeartbeatFrequencyMS.count()-1);
     ASSERT_THROWS_CODE(
-        { SdamConfiguration config(boost::none, TopologyType::kUnknown, mongo::Milliseconds(1)); },
+        { SdamConfiguration config(boost::none, TopologyType::kUnknown, belowThresholdFrequency); },
         DBException,
         ErrorCodes::InvalidHeartBeatFrequency);
 }
