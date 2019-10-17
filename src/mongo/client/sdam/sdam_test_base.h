@@ -39,7 +39,7 @@
 #include <vector>
 
 /**
- * The following facilitates writing tests in the Server Discovery And Monitoring namespace.
+ * The following facilitates writing tests in the Server Discovery And Monitoring (sdam) namespace.
  */
 namespace mongo {
 template <typename T>
