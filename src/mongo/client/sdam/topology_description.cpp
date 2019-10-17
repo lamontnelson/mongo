@@ -208,12 +208,8 @@ void TopologyDescription::calculateLogicalSessionTimeout() {
     int min = INT_MAX;
     bool foundNone = false;
 
-    if (getServers().size() == 0) {
-        _logicalSessionTimeoutMinutes = boost::none;
-        return;
-    }
-
-    for (auto description : getServers()) {
+    invariant(_servers.size() > 0);
+    for (auto description : _servers) {
         auto logicalSessionTimeout = description->getLogicalSessionTimeoutMinutes();
         if (!logicalSessionTimeout) {
             foundNone = true;
