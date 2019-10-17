@@ -32,7 +32,7 @@
 namespace mongo::sdam {
 
 /**
- * This class is used in tests to contstruct ServerDescription instances. For production code
+ * This class is used in the unit tests to contstruct ServerDescription instances. For production code
  * ServerDescription instances should be constructed using it's constructors.
  */
 class ServerDescriptionBuilder {
