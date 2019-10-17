@@ -140,6 +140,8 @@ private:
 
     /**
      * Used in error string for wire compatibility check.
+     *
+     * Source: https://github.com/mongodb/specifications/blob/master/source/wireversion-featurelist.rst
      */
     const std::string minimumRequiredMongoVersionString(int version);
 

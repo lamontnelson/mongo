@@ -188,6 +188,8 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
             return "4.0";
         case SUPPORTS_OP_MSG:
             return "3.6";
+        case COMMANDS_ACCEPT_WRITE_CONCERN:
+            return "3.4";
         case BATCH_COMMANDS:
             return "3.2";
         case FIND_COMMAND:
@@ -196,10 +198,8 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
             return "3.0";
         case AGG_RETURNS_CURSORS:
             return "2.6";
-        case COMMANDS_ACCEPT_WRITE_CONCERN:
-            return "2.4";
         case RELEASE_2_4_AND_BEFORE:
-            return "1.0";
+            return "2.4";
         default:
             MONGO_UNREACHABLE;
     }
