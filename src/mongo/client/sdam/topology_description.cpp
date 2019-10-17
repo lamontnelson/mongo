@@ -207,6 +207,12 @@ const std::string TopologyDescription::minimumRequiredMongoVersionString(int ver
 void TopologyDescription::calculateLogicalSessionTimeout() {
     int min = INT_MAX;
     bool foundNone = false;
+
+    if (getServers().size() == 0) {
+        _logicalSessionTimeoutMinutes = boost::none;
+        return;
+    }
+
     for (auto description : getServers()) {
         auto logicalSessionTimeout = description->getLogicalSessionTimeoutMinutes();
         if (!logicalSessionTimeout) {
