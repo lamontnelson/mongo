@@ -43,19 +43,16 @@
 
 namespace mongo::sdam {
 class ServerDescription {
+    ServerDescription() = delete;
+
 public:
     /**
      * Construct an unknown ServerDescription with default values except the server's address.
      */
-    ServerDescription(ServerAddress address) : ServerDescription(address, ServerType::kUnknown) {}
-
-    /**
-     * Construct a ServerDescription with default values except the given type and address.
-     */
-    ServerDescription(ServerAddress address, ServerType type)
-        : _address(std::move(address)), _type(type) {
+    ServerDescription(ServerAddress address)
+        : _address(std::move(address)), _type(ServerType::kUnknown) {
         boost::to_lower(_address);
-    };
+    }
 
     /**
      * Build a new ServerDescription according to the rules of the SDAM spec based on the
@@ -106,7 +103,6 @@ public:
     std::string toString() const;
 
 private:
-    ServerDescription() : ServerDescription("", ServerType::kUnknown) {}
     /**
      * Classify the server's type based on the ismaster response.
      * @param isMaster - reply information for the ismaster command

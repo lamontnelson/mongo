@@ -173,8 +173,8 @@ private:
 
     // servers: a set of ServerDescription instances. Default contains one server:
     // "localhost:27017", ServerType Unknown.
-    std::vector<ServerDescriptionPtr> _servers{std::make_shared<ServerDescription>(
-        ServerDescription("localhost:27017", ServerType::kUnknown))};
+    std::vector<ServerDescriptionPtr> _servers{
+        std::make_shared<ServerDescription>(ServerDescription("localhost:27017"))};
 
     // compatible: a boolean. False if any server's wire protocol version range is incompatible with
     // the client's. Default true.

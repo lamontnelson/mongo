@@ -75,6 +75,6 @@ public:
     ServerDescriptionBuilder& withElectionId(const OID& electionId);
 
 private:
-    ServerDescriptionPtr _instance = std::shared_ptr<ServerDescription>(new ServerDescription());
+    ServerDescriptionPtr _instance = std::shared_ptr<ServerDescription>(new ServerDescription("foo:1234"));
 };
 }  // namespace mongo::sdam

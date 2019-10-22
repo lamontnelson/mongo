@@ -46,8 +46,7 @@ namespace mongo::sdam {
 ServerDescription::ServerDescription(ClockSource* clockSource,
                                      const IsMasterOutcome& isMasterOutcome,
                                      boost::optional<IsMasterRTT> lastRtt)
-    : ServerDescription() {
-    _address = boost::to_lower_copy(isMasterOutcome.getServer());
+    : ServerDescription(isMasterOutcome.getServer()) {
     if (isMasterOutcome.isSuccess()) {
         const auto response = *isMasterOutcome.getResponse();
 

@@ -47,8 +47,8 @@ TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
 }
 
 TEST(ServerDescriptionEqualityTest, ShouldCompareDefaultValuesAsEqual) {
-    ServerDescription a("foo:1234", ServerType::kStandalone);
-    ServerDescription b("foo:1234", ServerType::kStandalone);
+    auto a = ServerDescription("foo:1234");
+    auto b = ServerDescription("foo:1234");
     ASSERT_EQUALS(a, b);
 }
 
@@ -56,8 +56,8 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareDifferentAddressButSameServerTy
     // Note: The SDAM specification does not prescribe how to compare server descriptions with
     // different addresses for equality. We choose that two descriptions are considered equal if
     // their addresses are different.
-    ServerDescription a("foo:1234", ServerType::kStandalone);
-    ServerDescription b("bar:1234", ServerType::kStandalone);
+    auto a = *ServerDescriptionBuilder().withAddress("foo:1234").withType(ServerType::kStandalone).instance();
+    auto b = *ServerDescriptionBuilder().withAddress("bar:1234").withType(ServerType::kStandalone).instance();
     ASSERT_EQUALS(a, b);
 }
 
@@ -171,7 +171,7 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareLogicalSessionTimeout) {
 }
 
 
-class ServerDescriptionBuilderTestFixture : public SdamTestFixture {
+class ServerDescriptionTestFixture : public SdamTestFixture {
 protected:
     // returns a set containing the elements in the given bson array with lowercase values.
     std::set<std::string> toHostSet(std::vector<BSONElement> bsonArray) {
@@ -248,87 +248,87 @@ protected:
         okBuilder().append("logicalSessionTimeoutMinutes", 1).obj();
 };
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsUnknownForIsMasterError) {
     auto response = IsMasterOutcome("foo:1234", "an error occurred");
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kUnknown, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsUnknownIfOkMissing) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsUnknownIfOkMissing) {
     auto response = IsMasterOutcome("foo:1234", kBsonMissingOk, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kUnknown, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsStandalone) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsStandalone) {
     // No "msg: isdbgrid", no setName, and no "isreplicaset: true".
     auto response = IsMasterOutcome("foo:1234", kBsonOk, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kStandalone, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsMongos) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsMongos) {
     // contains "msg: isdbgrid"
     auto response = IsMasterOutcome("foo:1234", kBsonMongos, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kMongos, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSPrimary) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsRSPrimary) {
     // "ismaster: true", "setName" in response
     auto response = IsMasterOutcome("foo:1234", kBsonRsPrimary, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSPrimary, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsRSSecondary) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsRSSecondary) {
     // "secondary: true", "setName" in response
     auto response = IsMasterOutcome("foo:1234", kBsonRsSecondary, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSSecondary, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsArbiter) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsArbiter) {
     // "arbiterOnly: true", "setName" in response.
     auto response = IsMasterOutcome("foo:1234", kBsonRsArbiter, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSArbiter, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsOther) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsOther) {
     // "hidden: true", "setName" in response, or not primary, secondary, nor arbiter
     auto response = IsMasterOutcome("foo:1234", kBsonRsOther, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSOther, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldParseTypeAsGhost) {
+TEST_F(ServerDescriptionTestFixture, ShouldParseTypeAsGhost) {
     // "isreplicaset: true" in response.
     auto response = IsMasterOutcome("foo:1234", kBsonRsGhost, IsMasterRTT::min());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(ServerType::kRSGhost, description.getType());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreErrorDescription) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreErrorDescription) {
     auto errorMsg = "an error occurred";
     auto response = IsMasterOutcome("foo:1234", errorMsg);
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(errorMsg, *description.getError());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTWithNoPreviousLatency) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreRTTWithNoPreviousLatency) {
     auto response = IsMasterOutcome("foo:1234", kBsonRsPrimary, IsMasterRTT::max());
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(IsMasterRTT::max(), *description.getRtt());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreRTTNullWhenServerTypeIsUnknown) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreRTTNullWhenServerTypeIsUnknown) {
     auto response = IsMasterOutcome("foo:1234", kBsonMissingOk, IsMasterRTT::max());
     auto description = ServerDescription(clockSource, response, boost::none);
     ASSERT_EQUALS(boost::none, description.getRtt());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture,
+TEST_F(ServerDescriptionTestFixture,
        ShouldStoreMovingAverageRTTWhenChangingFromOneKnownServerTypeToAnother) {
     auto response = IsMasterOutcome("foo:1234", kBsonRsPrimary, mongo::Milliseconds(40));
     auto lastServerDescription = ServerDescriptionBuilder()
@@ -343,26 +343,26 @@ TEST_F(ServerDescriptionBuilderTestFixture,
     ASSERT_EQUALS(25, durationCount<mongo::Milliseconds>(*description2.getRtt()));
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastWriteDate) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreLastWriteDate) {
     auto response = IsMasterOutcome("foo:1234", kBsonLastWrite, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(kLastWriteDate, description.getLastWriteDate());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreOpTime) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreOpTime) {
     auto response = IsMasterOutcome("foo:1234", kBsonLastWrite, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(kOpTime, description.getOpTime());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLastUpdateTime) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreLastUpdateTime) {
     auto testStart = clockSource->now();
     auto response = IsMasterOutcome("foo:1234", kBsonRsPrimary, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_GREATER_THAN_OR_EQUALS(description.getLastUpdateTime(), testStart);
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreHostNamesAsLowercase) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreHostNamesAsLowercase) {
     auto response = IsMasterOutcome("FOO:1234", kBsonHostNames, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
 
@@ -381,20 +381,20 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreHostNamesAsLowercase) {
     ASSERT_EQUALS(expectedArbiters, description.getArbiters());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreMinMaxWireVersion) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreMinMaxWireVersion) {
     auto response = IsMasterOutcome("foo:1234", kBsonWireVersion, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(kBsonWireVersion["minWireVersion"].Int(), description.getMinWireVersion());
     ASSERT_EQUALS(kBsonWireVersion["maxWireVersion"].Int(), description.getMaxWireVersion());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreTags) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreTags) {
     auto response = IsMasterOutcome("foo:1234", kBsonTags, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(toStringMap(kBsonTags["tags"].Obj()), description.getTags());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreSetVersionAndName) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreSetVersionAndName) {
     auto response = IsMasterOutcome("foo:1234", kBsonSetVersionName, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(kBsonSetVersionName.getIntField("setVersion"), description.getSetVersion());
@@ -402,19 +402,19 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreSetVersionAndName) {
                   description.getSetName());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreElectionId) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreElectionId) {
     auto response = IsMasterOutcome("foo:1234", kBsonElectionId, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(kBsonElectionId.getField("electionId").OID(), description.getElectionId());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStorePrimary) {
+TEST_F(ServerDescriptionTestFixture, ShouldStorePrimary) {
     auto response = IsMasterOutcome("foo:1234", kBsonPrimary, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(std::string(kBsonPrimary.getStringField("primary")), description.getPrimary());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLogicalSessionTimeout) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreLogicalSessionTimeout) {
     auto response =
         IsMasterOutcome("foo:1234", kBsonLogicalSessionTimeout, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
@@ -423,13 +423,13 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreLogicalSessionTimeout) {
 }
 
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreServerAddressOnError) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreServerAddressOnError) {
     auto response = IsMasterOutcome("foo:1234", "an error occurred");
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(std::string("foo:1234"), description.getAddress());
 }
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnSuccess) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreCorrectDefaultValuesOnSuccess) {
     auto response = IsMasterOutcome("foo:1234", kBsonOk, mongo::Milliseconds(40));
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(boost::none, description.getError());
@@ -448,7 +448,7 @@ TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnSuc
 }
 
 
-TEST_F(ServerDescriptionBuilderTestFixture, ShouldStoreCorrectDefaultValuesOnFailure) {
+TEST_F(ServerDescriptionTestFixture, ShouldStoreCorrectDefaultValuesOnFailure) {
     auto response = IsMasterOutcome("foo:1234", "an error occurred");
     auto description = ServerDescription(clockSource, response);
     ASSERT_EQUALS(boost::none, description.getLastWriteDate());
