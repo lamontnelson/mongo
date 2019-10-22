@@ -56,8 +56,14 @@ TEST(ServerDescriptionEqualityTest, ShouldCompareDifferentAddressButSameServerTy
     // Note: The SDAM specification does not prescribe how to compare server descriptions with
     // different addresses for equality. We choose that two descriptions are considered equal if
     // their addresses are different.
-    auto a = *ServerDescriptionBuilder().withAddress("foo:1234").withType(ServerType::kStandalone).instance();
-    auto b = *ServerDescriptionBuilder().withAddress("bar:1234").withType(ServerType::kStandalone).instance();
+    auto a = *ServerDescriptionBuilder()
+                  .withAddress("foo:1234")
+                  .withType(ServerType::kStandalone)
+                  .instance();
+    auto b = *ServerDescriptionBuilder()
+                  .withAddress("bar:1234")
+                  .withType(ServerType::kStandalone)
+                  .instance();
     ASSERT_EQUALS(a, b);
 }
 
