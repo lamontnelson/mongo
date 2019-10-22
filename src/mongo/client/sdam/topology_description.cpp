@@ -42,7 +42,7 @@ TopologyDescription::TopologyDescription(SdamConfiguration config)
     if (auto seeds = config.getSeedList()) {
         _servers.clear();
         for (auto address : *seeds) {
-            _servers.push_back(std::make_shared<ServerDescription>(ServerDescription(address)));
+            _servers.push_back(std::make_shared<ServerDescription>(address));
         }
     }
 }

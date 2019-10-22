@@ -206,9 +206,7 @@ void TopologyStateMachine::addUnknownServers(TopologyDescription& topologyDescri
         for (const auto& addressFromSet : *addresses) {
             if (!topologyDescription.containsServerAddress(addressFromSet)) {
                 installServerDescription(
-                    topologyDescription,
-                    std::make_shared<ServerDescription>(ServerDescription(addressFromSet)),
-                    true);
+                    topologyDescription, std::make_shared<ServerDescription>(addressFromSet), true);
             }
         }
     }
@@ -269,9 +267,7 @@ void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDesc
               (*topologyMaxElectionId).compare(*serverDescElectionId) > 0))) {
             // stale primary
             installServerDescription(
-                topologyDescription,
-                std::make_shared<ServerDescription>(ServerDescription(serverDescAddress)),
-                false);
+                topologyDescription, std::make_shared<ServerDescription>(serverDescAddress), false);
             checkIfHasPrimary(topologyDescription, serverDescription);
             return;
         }
@@ -291,9 +287,7 @@ void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDesc
     invariant(oldPrimaries.size() <= 1);
     for (const auto& server : oldPrimaries) {
         installServerDescription(
-            topologyDescription,
-            std::make_shared<ServerDescription>(ServerDescription(server->getAddress())),
-            false);
+            topologyDescription, std::make_shared<ServerDescription>(server->getAddress()), false);
     }
 
     addUnknownServers(topologyDescription, serverDescription);
