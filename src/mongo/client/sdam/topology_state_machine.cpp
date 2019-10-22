@@ -149,7 +149,7 @@ void mongo::sdam::TopologyStateMachine::initTransitionTable() {
 void TopologyStateMachine::onServerDescription(TopologyDescription& topologyDescription,
                                                const ServerDescriptionPtr& serverDescription) {
     if (!topologyDescription.containsServerAddress(serverDescription->getAddress())) {
-        LOG(0) << kLogPrefix << "ignoring unknown ServerDescription from "
+        LOG(0) << kLogPrefix << "ignoring ismaster reply from server that is not in the topology: "
                << serverDescription->getAddress() << std::endl;
         return;
     }
@@ -382,7 +382,7 @@ void TopologyStateMachine::installServerDescription(TopologyDescription& topolog
                                                     ServerDescriptionPtr newServerDescription,
                                                     bool newServer) {
     topologyDescription.installServerDescription(newServerDescription);
-    LOG(0) << kLogPrefix << ((newServer) ? "installed new" : "updated existing")
+    LOG(1) << kLogPrefix << ((newServer) ? "installed new" : "updated existing")
            << " server description: " << newServerDescription->toString() << std::endl;
 }
 
