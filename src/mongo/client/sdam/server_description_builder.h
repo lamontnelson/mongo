@@ -75,7 +75,8 @@ public:
     ServerDescriptionBuilder& withElectionId(const OID& electionId);
 
 private:
+    constexpr static auto kServerAddressNotSet = "address.not.set:1234";
     ServerDescriptionPtr _instance =
-        std::shared_ptr<ServerDescription>(new ServerDescription("foo:1234"));
+        std::shared_ptr<ServerDescription>(new ServerDescription(kServerAddressNotSet));
 };
 }  // namespace mongo::sdam
