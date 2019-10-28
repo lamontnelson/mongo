@@ -3,7 +3,8 @@ test_kind: cpp_unit_test
 selector:
   root: build/unittests.txt
   include_files:
-  - build/**/mongo/client/**/*
+  - build/**/mongo/client/*
+  - build/**/mongo/client/sdam/*
 
 executor:
   config: {}
