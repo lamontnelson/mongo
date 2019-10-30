@@ -192,7 +192,7 @@ void TopologyStateMachine::updateRSWithoutPrimary(TopologyDescription& topologyD
 
     addUnknownServers(topologyDescription, serverDescription);
 
-    if (serverDescAddress != serverDescription->getMe()) {
+    if (serverDescription->getMe() && serverDescAddress != serverDescription->getMe()) {
         removeServerDescription(topologyDescription, serverDescription->getAddress());
     }
 }
@@ -225,7 +225,7 @@ void TopologyStateMachine::updateRSWithPrimaryFromMember(
         return;
     }
 
-    if (serverDescription->getAddress() != serverDescription->getMe()) {
+    if (serverDescription->getMe() && serverDescription->getAddress() != serverDescription->getMe()) {
         removeAndCheckIfHasPrimary(topologyDescription, serverDescription);
         return;
     }
