@@ -37,6 +37,7 @@
 
 #include "mongo/bson/json.h"
 #include "mongo/client/sdam/topology_manager.h"
+#include "mongo/util/clock_source_mock.h"
 
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
@@ -100,6 +101,90 @@ private:
 
 struct JsonTestResult {};
 
+class TestCasePhase {
+public:
+	TestCasePhase(BSONObj phase) {
+		auto bsonResponses = phase.getField("responses").Array();
+
+		for (auto& response : bsonResponses) {
+			auto pair = response.Array();
+			auto address = pair[0].String();
+			auto bsonIsMaster = pair[1].Obj();
+			BSONObjBuilder isMasterWithAddress(bsonIsMaster);
+			isMasterWithAddress.append("address", address);
+			auto isMasterOutcome = IsMasterOutcome(address, isMasterWithAddress.obj(), kLatency);
+			responses.push_back(isMasterOutcome);
+		}
+		topologyOutcome = phase["outcome"].Obj();
+
+		testResult = validate();
+	}
+
+	struct ValidateResult {
+		bool success;
+		// vector of errorItem, errorString pairs
+		// the vector only has items if success is false
+		std::vector<std::pair<std::string, std::string>> errorDescriptions;
+	};
+
+    void validateServers(const TopologyDescriptionPtr topologyDescription, const BSONObj bsonServers, ValidateResult &result) {
+        auto actualNumServers = topologyDescription->getServers().size();
+        auto expectedNumServers = bsonServers.getFieldNames<std::unordered_set<std::string>>().size();
+
+        if (actualNumServers != expectedNumServers) {
+            result.success = false;
+            std::stringstream errorMessage;
+            errorMessage << "expected " << expectedNumServers << " server in topology description. actual was " << actualNumServers << ".";
+            result.errorDescriptions.push_back(std::make_pair("servers", errorMessage.str()));
+            errorMessage.clear();
+        }
+    }
+
+    void validateTopologyDescription(const TopologyDescriptionPtr topologyDescription, const BSONObj bsonTopologyDescription, ValidateResult &result) {
+    }
+
+    std::vector<ServerAddress> getSeedList() {
+        std::vector<ServerAddress> result;
+        for (const auto& isMasterOutcome : responses) {
+            result.push_back(isMasterOutcome.getServer());
+        }
+        return result;
+    }
+
+    ValidateResult validate() {
+        const auto& seedList = getSeedList();
+
+        std::unique_ptr<SdamConfiguration> config;
+        if (seedList.size() > 0) {
+            config = std::make_unique<SdamConfiguration>(seedList);
+        } else {
+            config = std::make_unique<SdamConfiguration>();
+        }
+	    auto clockSource = std::make_unique<ClockSourceMock>();
+		TopologyManager topology(*config, clockSource.get());
+		ValidateResult result;
+
+		for (auto response : responses) {
+		    topology.onServerDescription(response);
+		}
+
+		validateServers(topology.getTopologyDescription(), topologyOutcome["servers"].Obj(), result);
+		validateTopologyDescription(topology.getTopologyDescription(), topologyOutcome, result);
+
+        return result;
+	}
+
+    const ValidateResult &getTestResult() const {
+        return testResult;
+    }
+private:
+	constexpr static auto kLatency = mongo::Milliseconds(1);
+
+	std::vector<IsMasterOutcome> responses;
+	BSONObj topologyOutcome;
+	ValidateResult testResult;
+};
+
 class JsonTestCase {
 public:
     JsonTestCase(fs::path testFilePath) {
@@ -108,17 +193,36 @@ public:
 
     void parseTest(fs::path testFilePath) {
         using namespace std;
+
         ifstream testFile(testFilePath.string());
         ostringstream json;
         json << testFile.rdbuf();
+
         _jsonTest = fromjson(json.str());
         _name = _jsonTest.getStringField("description");
-        std::cout << "loaded test: " << testFilePath.string() << ": " << _name << std::endl;
+
+        int phase = 0;
+        for (auto bsonPhase : _jsonTest["phases"].Array()) {
+            testPhases.push_back(TestCasePhase(bsonPhase.Obj()));
+            if (!testPhases.back().getTestResult().success) {
+                std::cout << "phase "<< phase << " failed:" << std::endl;
+                const auto& testResult = testPhases.back().getTestResult();
+                if (!testResult.success) {
+                    for (const auto& fieldMsgpair : testResult.errorDescriptions) {
+                        std::cout << "ERROR " << fieldMsgpair.first << ": " << fieldMsgpair.second << std::endl;
+                    }
+                }
+            }
+            phase++;
+        }
+
+        std::cout << "done test: " << testFilePath.string() << ": " << _name << std::endl;
     }
 
 private:
     BSONObj _jsonTest;
     std::string _name;
+    std::vector<TestCasePhase> testPhases;
 
 public:
     const std::string& Name() const {
