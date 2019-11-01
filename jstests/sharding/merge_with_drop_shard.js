@@ -80,15 +80,21 @@ function runMergeWithMode(
     let mergeShell = startParallelShell(outFn, st.s.port);
 
     // Wait for the parallel shell to hit the failpoint.
-    assert.soon(() => {
-        const response = mongosDB.currentOp({
-            $or: [
-                {op: "command", "command.comment": comment},
-                {op: "getmore", "cursor.originatingCommand.comment": comment}
-            ]
+    assert.soon(
+        () => {
+            const response = mongosDB.currentOp({
+                $or: [
+                    {op: "command", "command.comment": comment},
+                    {op: "getmore", "cursor.originatingCommand.comment": comment}
+                ]
+            });
+            return (response.inprog) ? response.inprog.length >= 1 : false;
+        },
+        () => {
+            const response = mongosDB.currentOp();
+            return response.inprog ? tojson(mongosDB.currentOp().inprog)
+                                   : "error while executing curop";
         });
-        return (response.inprog) ? response.inprog.length >= 1 : false;
-    }, () => tojson(mongosDB.currentOp().inprog));
 
     if (dropShard) {
         removeShard(st.shard0);
