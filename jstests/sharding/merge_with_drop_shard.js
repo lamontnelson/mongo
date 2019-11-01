@@ -48,6 +48,7 @@ function addShard(shard) {
     assert.commandWorked(
         st.s.adminCommand({moveChunk: sourceColl.getFullName(), find: {shardKey: 0}, to: shard}));
 }
+
 function runMergeWithMode(
     whenMatchedMode, whenNotMatchedMode, shardedColl, dropShard, expectFailCode) {
     // Set the failpoint to hang in the first call to DocumentSourceCursor's getNext().
@@ -79,15 +80,15 @@ function runMergeWithMode(
     let mergeShell = startParallelShell(outFn, st.s.port);
 
     // Wait for the parallel shell to hit the failpoint.
-    assert.soon(() => mongosDB
-                          .currentOp({
-                              $or: [
-                                  {op: "command", "command.comment": comment},
-                                  {op: "getmore", "cursor.originatingCommand.comment": comment}
-                              ]
-                          })
-                          .inprog.length >= 1,
-                () => tojson(mongosDB.currentOp().inprog));
+    assert.soon(() => {
+        const response = mongosDB.currentOp({
+            $or: [
+                {op: "command", "command.comment": comment},
+                {op: "getmore", "cursor.originatingCommand.comment": comment}
+            ]
+        });
+        return (response.inprog) ? response.inprog.length >= 1 : false;
+    }, () => tojson(mongosDB.currentOp().inprog));
 
     if (dropShard) {
         removeShard(st.shard0);
