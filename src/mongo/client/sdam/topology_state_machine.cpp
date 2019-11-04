@@ -291,12 +291,9 @@ void TopologyStateMachine::updateRSFromPrimary(TopologyDescription& topologyDesc
     }
 
     addUnknownServers(topologyDescription, serverDescription);
-    std::cout << "numServers: " << topologyDescription.getServers().size() << std::endl;
 
     std::vector<ServerAddress> toRemove;
     for (const auto& currentServerDescription : topologyDescription.getServers()) {
-        std::cout << "sd0: " << currentServerDescription.get() << std::endl;
-        std::cout << "sd1: " << currentServerDescription->toString() << std::endl;
         const auto currentServerAddress = currentServerDescription->getAddress();
         auto hosts = serverDescription->getHosts().find(currentServerAddress);
         auto passives = serverDescription->getPassives().find(currentServerAddress);

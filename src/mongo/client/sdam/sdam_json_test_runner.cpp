@@ -29,6 +29,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/format.hpp>
+#include <boost/optional/optional_io.hpp>
 #include <boost/program_options.hpp>
 #include <fstream>
 #include <iostream>
@@ -36,6 +37,7 @@
 #include <sstream>
 
 #include "mongo/bson/json.h"
+#include "mongo/client/mongo_uri.h"
 #include "mongo/client/sdam/topology_manager.h"
 #include "mongo/util/clock_source_mock.h"
 
@@ -44,6 +46,13 @@ namespace fs = boost::filesystem;
 using namespace mongo::sdam;
 
 namespace mongo::sdam {
+
+std::string banner(const std::string text) {
+    std::stringstream output;
+    const auto border = std::string(text.size(), '-');
+    output << border << std::endl << text << std::endl << border << std::endl;
+    return output.str();
+}
 
 class ArgParser {
 public:
@@ -64,7 +73,7 @@ public:
             optionsDescription.add_options()("help", "help")(
                 optionName(kSourceDirOptionShort, kSourceDirOptionLong).c_str(),
                 po::value<std::string>(&SourceDirectory)->default_value(kSourceDirDefault),
-                "set source directory")(optionName(kFilterOptionLong, kFilterOptionShort).c_str(),
+                "set source directory")(optionName(kFilterOptionShort, kFilterOptionLong).c_str(),
                                         po::value<std::vector<std::string>>(&TestFilters),
                                         "filter tests to run");
             po::store(po::parse_command_line(argc, argv, optionsDescription), values);
@@ -99,91 +108,331 @@ private:
     }
 };
 
-struct JsonTestResult {};
-
 class TestCasePhase {
 public:
-	TestCasePhase(BSONObj phase) {
-		auto bsonResponses = phase.getField("responses").Array();
+    TestCasePhase(int phaseNum, MongoURI uri, BSONObj phase) : _testUri(uri), _phaseNum(phaseNum) {
+        auto bsonResponses = phase.getField("responses").Array();
+        for (auto& response : bsonResponses) {
+            const auto pair = response.Array();
+            const auto address = pair[0].String();
+            const auto bsonIsMaster = pair[1].Obj();
 
-		for (auto& response : bsonResponses) {
-			auto pair = response.Array();
-			auto address = pair[0].String();
-			auto bsonIsMaster = pair[1].Obj();
-			BSONObjBuilder isMasterWithAddress(bsonIsMaster);
-			isMasterWithAddress.append("address", address);
-			auto isMasterOutcome = IsMasterOutcome(address, isMasterWithAddress.obj(), kLatency);
-			responses.push_back(isMasterOutcome);
-		}
-		topologyOutcome = phase["outcome"].Obj();
+            IsMasterOutcome* isMasterOutcome;
+            if (bsonIsMaster.binaryEqual(BSONObjBuilder().obj())) {
+                isMasterOutcome = new IsMasterOutcome(address, "network error");
+            } else {
+                isMasterOutcome = new IsMasterOutcome(address, bsonIsMaster, kLatency);
+            }
 
-		testResult = validate();
-	}
+            _isMasterResponses.push_back(*isMasterOutcome);
+        }
+        _topologyOutcome = phase["outcome"].Obj();
+    }
 
-	struct ValidateResult {
-		bool success;
-		// vector of errorItem, errorString pairs
-		// the vector only has items if success is false
-		std::vector<std::pair<std::string, std::string>> errorDescriptions;
-	};
+    // pair of error subject & error description
+    using TestPhaseError = std::pair<std::string, std::string>;
+    struct PhaseResult {
+        bool success;
+        // the vector only has items if success is false
+        std::vector<TestPhaseError> errorDescriptions;
+        int phaseNumber;
+    };
 
-    void validateServers(const TopologyDescriptionPtr topologyDescription, const BSONObj bsonServers, ValidateResult &result) {
+    template <typename T, typename U>
+    std::string errorMessageNotEqual(T expected, U actual) const {
+        std::stringstream errorMessage;
+        errorMessage << "expected '" << actual << "' to equal '" << expected << "'";
+        return errorMessage.str();
+    }
+
+    std::string serverDescriptionFieldName(const ServerDescriptionPtr serverDescription,
+                                           std::string field) const {
+        std::stringstream name;
+        name << "(" << serverDescription->getAddress() << ") " << field;
+        return name.str();
+    }
+
+    std::string topologyDescriptionFieldName(std::string field) const {
+        std::stringstream name;
+        name << "(topologyDescription) " << field;
+        return name.str();
+    }
+
+    void validateServerField(const ServerDescriptionPtr& serverDescription,
+                             const BSONElement& expectedField,
+                             PhaseResult& result) const {
+        const auto serverAddress = serverDescription->getAddress();
+
+        std::string fieldName = expectedField.fieldName();
+        if (fieldName == "type") {
+            auto serverTypeParseStatus = parseServerType(expectedField.String());
+            if (serverTypeParseStatus.isOK()) {
+                if (serverTypeParseStatus.getValue() != serverDescription->getType()) {
+                    result.success = false;
+                    auto errorDescription =
+                        std::make_pair(serverDescriptionFieldName(serverDescription, "type"),
+                                       errorMessageNotEqual(serverTypeParseStatus.getValue(),
+                                                            serverDescription->getType()));
+                    result.errorDescriptions.push_back(errorDescription);
+                }
+            } else {
+                result.success = false;
+                auto errorDescription =
+                    std::make_pair(serverDescriptionFieldName(serverDescription, "type"),
+                                   serverTypeParseStatus.getStatus().toString());
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        } else if (fieldName == "setName") {
+            boost::optional<std::string> expectedSetName;
+            if (expectedField.type() != BSONType::jstNULL) {
+                expectedSetName = expectedField.String();
+            }
+            if (expectedSetName != serverDescription->getSetName()) {
+                result.success = false;
+                auto errorDescription = std::make_pair(
+                    serverDescriptionFieldName(serverDescription, "setName"),
+                    errorMessageNotEqual(expectedSetName, serverDescription->getSetName()));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        } else if (fieldName == "setVersion") {
+            std::cout << "server: " << serverDescription->getAddress()
+                      << " field: " << expectedField.fieldName()
+                      << " etype: " << expectedField.type() << std::endl;
+            boost::optional<int> expectedSetVersion;
+            if (expectedField.type() != BSONType::jstNULL) {
+                expectedSetVersion = expectedField.numberInt();
+            }
+            if (expectedSetVersion != serverDescription->getSetVersion()) {
+                result.success = false;
+                auto errorDescription = std::make_pair(
+                    serverDescriptionFieldName(serverDescription, "setVersion"),
+                    errorMessageNotEqual(expectedSetVersion, serverDescription->getSetVersion()));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        } else if (fieldName == "electionId") {
+            boost::optional<OID> expectedElectionId;
+            if (expectedField.type() != BSONType::jstNULL) {
+                expectedElectionId = expectedField.OID();
+            }
+            if (expectedElectionId != serverDescription->getElectionId()) {
+                result.success = false;
+                auto errorDescription = std::make_pair(
+                    serverDescriptionFieldName(serverDescription, "electionId"),
+                    errorMessageNotEqual(expectedElectionId, serverDescription->getElectionId()));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        } else if (fieldName == "logicalSessionTimeoutMinutes") {
+            boost::optional<int> expectedLSTM;
+            if (expectedField.type() != BSONType::jstNULL) {
+                expectedLSTM = expectedField.numberInt();
+            }
+            if (expectedLSTM != serverDescription->getLogicalSessionTimeoutMinutes()) {
+                result.success = false;
+                auto errorDescription = std::make_pair(
+                    serverDescriptionFieldName(serverDescription, "logicalSessionTimeoutMinutes"),
+                    errorMessageNotEqual(expectedLSTM,
+                                         serverDescription->getLogicalSessionTimeoutMinutes()));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        } else if (fieldName == "minWireVersion") {
+            int expectedMinWireVersion = expectedField.numberInt();
+            if (expectedMinWireVersion != serverDescription->getMinWireVersion()) {
+                result.success = false;
+                auto errorDescription =
+                    std::make_pair(serverDescriptionFieldName(serverDescription, "minWireVersion"),
+                                   errorMessageNotEqual(expectedMinWireVersion,
+                                                        serverDescription->getMinWireVersion()));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        } else if (fieldName == "maxWireVersion") {
+            int expectedMaxWireVersion = expectedField.numberInt();
+            if (expectedMaxWireVersion != serverDescription->getMaxWireVersion()) {
+                result.success = false;
+                auto errorDescription =
+                    std::make_pair(serverDescriptionFieldName(serverDescription, "maxWireVersion"),
+                                   errorMessageNotEqual(expectedMaxWireVersion,
+                                                        serverDescription->getMinWireVersion()));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        } else {
+            MONGO_UNREACHABLE;
+        }
+    }
+
+    void validateServers(const TopologyDescriptionPtr topologyDescription,
+                         const BSONObj bsonServers,
+                         PhaseResult& result) const {
         auto actualNumServers = topologyDescription->getServers().size();
-        auto expectedNumServers = bsonServers.getFieldNames<std::unordered_set<std::string>>().size();
+        auto expectedNumServers =
+            bsonServers.getFieldNames<std::unordered_set<std::string>>().size();
 
         if (actualNumServers != expectedNumServers) {
             result.success = false;
             std::stringstream errorMessage;
-            errorMessage << "expected " << expectedNumServers << " server in topology description. actual was " << actualNumServers << ".";
+            errorMessage << "expected " << expectedNumServers
+                         << " server(s) in topology description. actual was " << actualNumServers
+                         << ": ";
+            for (const auto& server : topologyDescription->getServers()) {
+                errorMessage << server->getAddress() << ", ";
+            }
             result.errorDescriptions.push_back(std::make_pair("servers", errorMessage.str()));
-            errorMessage.clear();
+        }
+
+        for (const BSONElement& bsonExpectedServer : bsonServers) {
+            const auto& serverAddress = bsonExpectedServer.fieldName();
+            const auto& expectedServerDescriptionFields = bsonExpectedServer.Obj();
+
+            const auto& serverDescription = topologyDescription->findServerByAddress(serverAddress);
+            if (serverDescription) {
+                for (const BSONElement& field : expectedServerDescriptionFields) {
+                    validateServerField(*serverDescription, field, result);
+                }
+            } else {
+                std::stringstream errorMessage;
+                errorMessage << "could not find server '" << serverAddress
+                             << "' in topology description.";
+                auto errorDescription = std::make_pair("servers", errorMessage.str());
+                result.errorDescriptions.push_back(errorDescription);
+                result.success = false;
+            }
         }
     }
 
-    void validateTopologyDescription(const TopologyDescriptionPtr topologyDescription, const BSONObj bsonTopologyDescription, ValidateResult &result) {
+
+    void validateTopologyDescription(const TopologyDescriptionPtr topologyDescription,
+                                     const BSONObj bsonTopologyDescription,
+                                     PhaseResult& result) const {
+        {
+            constexpr auto fieldName = "topologyType";
+            auto expectedTopologyType = bsonTopologyDescription[fieldName].String();
+            auto actualTopologyType = toString(topologyDescription->getType());
+            if (expectedTopologyType != actualTopologyType) {
+                result.success = false;
+                auto errorDescription =
+                    std::make_pair(topologyDescriptionFieldName(fieldName),
+                                   errorMessageNotEqual(expectedTopologyType, actualTopologyType));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        }
+
+        {
+            constexpr auto fieldName = "setName";
+            boost::optional<std::string> expectedSetName;
+            auto actualSetName = topologyDescription->getSetName();
+            auto bsonField = bsonTopologyDescription[fieldName];
+            if (!bsonField.isNull()) {
+                expectedSetName = bsonField.String();
+            }
+            if (expectedSetName != actualSetName) {
+                result.success = false;
+                auto errorDescription =
+                    std::make_pair(topologyDescriptionFieldName(fieldName),
+                                   errorMessageNotEqual(expectedSetName, actualSetName));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        }
+
+        {
+            constexpr auto fieldName = "logicalSessionTimeoutMinutes";
+            boost::optional<int> expectedLSTM;
+            auto actualLSTM = topologyDescription->getLogicalSessionTimeoutMinutes();
+            auto bsonField = bsonTopologyDescription[fieldName];
+            if (!bsonField.isNull()) {
+                expectedLSTM = bsonField.numberInt();
+            }
+            if (expectedLSTM != actualLSTM) {
+                result.success = false;
+                auto errorDescription =
+                    std::make_pair(topologyDescriptionFieldName(fieldName),
+                                   errorMessageNotEqual(expectedLSTM, actualLSTM));
+                result.errorDescriptions.push_back(errorDescription);
+            }
+        }
+
+        {
+            constexpr auto fieldName = "maxSetVersion";
+            if (bsonTopologyDescription.hasField(fieldName)) {
+                boost::optional<int> expectedMaxSetVersion;
+                auto actualMaxSetVersion = topologyDescription->getMaxSetVersion();
+                auto bsonField = bsonTopologyDescription[fieldName];
+                if (!bsonField.isNull()) {
+                    expectedMaxSetVersion = bsonField.numberInt();
+                }
+                if (expectedMaxSetVersion != actualMaxSetVersion) {
+                    result.success = false;
+                    auto errorDescription = std::make_pair(
+                        topologyDescriptionFieldName(fieldName),
+                        errorMessageNotEqual(expectedMaxSetVersion, actualMaxSetVersion));
+                    result.errorDescriptions.push_back(errorDescription);
+                }
+            }
+        }
+
+        {
+            constexpr auto fieldName = "maxElectionId";
+            if (bsonTopologyDescription.hasField(fieldName)) {
+                boost::optional<OID> expectedMaxElectionId;
+                auto actualMaxElectionId = topologyDescription->getMaxElectionId();
+                auto bsonField = bsonTopologyDescription[fieldName];
+                if (!bsonField.isNull()) {
+                    expectedMaxElectionId = bsonField.OID();
+                }
+                if (expectedMaxElectionId != actualMaxElectionId) {
+                    result.success = false;
+                    auto errorDescription = std::make_pair(
+                        topologyDescriptionFieldName(fieldName),
+                        errorMessageNotEqual(expectedMaxElectionId, actualMaxElectionId));
+                    result.errorDescriptions.push_back(errorDescription);
+                }
+            }
+        }
+
+        {
+            constexpr auto fieldName = "compatible";
+            if (bsonTopologyDescription.hasField(fieldName)) {
+                auto bsonField = bsonTopologyDescription[fieldName];
+                bool expectedCompatible = bsonField.Bool();
+                auto actualCompatible = topologyDescription->isWireVersionCompatible();
+                if (expectedCompatible != actualCompatible) {
+                    result.success = false;
+                    auto errorDescription =
+                        std::make_pair(topologyDescriptionFieldName(fieldName),
+                                       errorMessageNotEqual(expectedCompatible, actualCompatible));
+                    result.errorDescriptions.push_back(errorDescription);
+                }
+            }
+        }
     }
 
-    std::vector<ServerAddress> getSeedList() {
-        std::vector<ServerAddress> result;
-        for (const auto& isMasterOutcome : responses) {
-            result.push_back(isMasterOutcome.getServer());
+
+    PhaseResult execute(TopologyManager& topology) const {
+        PhaseResult testResult{true, {}, _phaseNum};
+
+        for (auto response : _isMasterResponses) {
+            std::cout << "Sending server description: " << response.getResponse() << std::endl;
+            topology.onServerDescription(response);
         }
-        return result;
-    }
 
-    ValidateResult validate() {
-        const auto& seedList = getSeedList();
+        validateServers(
+            topology.getTopologyDescription(), _topologyOutcome["servers"].Obj(), testResult);
+        validateTopologyDescription(
+            topology.getTopologyDescription(), _topologyOutcome, testResult);
 
-        std::unique_ptr<SdamConfiguration> config;
-        if (seedList.size() > 0) {
-            config = std::make_unique<SdamConfiguration>(seedList);
-        } else {
-            config = std::make_unique<SdamConfiguration>();
-        }
-	    auto clockSource = std::make_unique<ClockSourceMock>();
-		TopologyManager topology(*config, clockSource.get());
-		ValidateResult result;
-
-		for (auto response : responses) {
-		    topology.onServerDescription(response);
-		}
-
-		validateServers(topology.getTopologyDescription(), topologyOutcome["servers"].Obj(), result);
-		validateTopologyDescription(topology.getTopologyDescription(), topologyOutcome, result);
-
-        return result;
-	}
-
-    const ValidateResult &getTestResult() const {
         return testResult;
     }
-private:
-	constexpr static auto kLatency = mongo::Milliseconds(1);
 
-	std::vector<IsMasterOutcome> responses;
-	BSONObj topologyOutcome;
-	ValidateResult testResult;
-};
+    int getPhaseNum() const {
+        return _phaseNum;
+    }
+
+private:
+    constexpr static auto kLatency = mongo::Milliseconds(100);
+
+    MongoURI _testUri;
+    int _phaseNum;
+    std::vector<IsMasterOutcome> _isMasterResponses;
+    BSONObj _topologyOutcome;
+};  // namespace mongo::sdam
 
 class JsonTestCase {
 public:
@@ -191,42 +440,102 @@ public:
         parseTest(testFilePath);
     }
 
+    struct TestCaseResult {
+        bool success;
+        std::vector<TestCasePhase::PhaseResult> phaseResults;
+        std::string file;
+        std::string name;
+    };
+
+    TestCaseResult execute() {
+        std::unique_ptr<SdamConfiguration> config;
+        config =
+            std::make_unique<SdamConfiguration>(getSeedList(),
+                                                _initialType,
+                                                SdamConfiguration::kDefaultHeartbeatFrequencyMs,
+                                                _replicaSetName);
+
+        auto clockSource = std::make_unique<ClockSourceMock>();
+        TopologyManager topology(*config, clockSource.get());
+
+        TestCaseResult result{true, {}, _testFilePath, _testName};
+
+        for (const auto& testPhase : testPhases) {
+            std::cout << banner(std::string("Phase ") + std::to_string(testPhase.getPhaseNum()));
+
+            auto phaseResult = testPhase.execute(topology);
+            result.phaseResults.push_back(phaseResult);
+            result.success = result.success && phaseResult.success;
+            if (!result.success) {
+                break;
+            }
+
+            std::cout << std::endl;
+        }
+
+        return result;
+    }
+
     void parseTest(fs::path testFilePath) {
         using namespace std;
 
-        ifstream testFile(testFilePath.string());
-        ostringstream json;
-        json << testFile.rdbuf();
+        _testFilePath = testFilePath.string();
 
-        _jsonTest = fromjson(json.str());
-        _name = _jsonTest.getStringField("description");
-
-        int phase = 0;
-        for (auto bsonPhase : _jsonTest["phases"].Array()) {
-            testPhases.push_back(TestCasePhase(bsonPhase.Obj()));
-            if (!testPhases.back().getTestResult().success) {
-                std::cout << "phase "<< phase << " failed:" << std::endl;
-                const auto& testResult = testPhases.back().getTestResult();
-                if (!testResult.success) {
-                    for (const auto& fieldMsgpair : testResult.errorDescriptions) {
-                        std::cout << "ERROR " << fieldMsgpair.first << ": " << fieldMsgpair.second << std::endl;
-                    }
-                }
-            }
-            phase++;
+        {
+            ifstream testFile(_testFilePath);
+            ostringstream json;
+            json << testFile.rdbuf();
+            _jsonTest = fromjson(json.str());
         }
 
-        std::cout << "done test: " << testFilePath.string() << ": " << _name << std::endl;
+        _testName = _jsonTest.getStringField("description");
+        _testUri = uassertStatusOK(mongo::MongoURI::parse(_jsonTest["uri"].String()));
+
+        _replicaSetName = _testUri.getOption("replicaSet");
+        if (!_replicaSetName) {
+            if (_testUri.getServers().size() == 1) {
+                // single
+                _initialType = TopologyType::kSingle;
+            } else {
+                // sharded
+                _initialType = TopologyType::kSharded;
+            }
+        } else {
+            // replica set
+            _initialType = TopologyType::kReplicaSetNoPrimary;
+        }
+
+        int phase = 0;
+        const std::vector<BSONElement>& bsonPhases = _jsonTest["phases"].Array();
+        for (auto bsonPhase : bsonPhases) {
+            testPhases.push_back(TestCasePhase(phase++, _testUri, bsonPhase.Obj()));
+        }
+
+        std::cout << testFilePath.string() << ": " << _testName << ": " << testPhases.size()
+                  << " phase(s) parsed successfully" << std::endl;
     }
+
+    std::vector<ServerAddress> getSeedList() {
+        std::vector<ServerAddress> result;
+        for (const auto& hostAndPort : _testUri.getServers()) {
+            result.push_back(hostAndPort.toString());
+        }
+        return result;
+    }
+
 
 private:
     BSONObj _jsonTest;
-    std::string _name;
+    std::string _testName;
+    MongoURI _testUri;
+    std::string _testFilePath;
+    TopologyType _initialType;
+    boost::optional<std::string> _replicaSetName;
     std::vector<TestCasePhase> testPhases;
 
 public:
     const std::string& Name() const {
-        return _name;
+        return _testName;
     }
 };
 
@@ -235,18 +544,63 @@ public:
     SdamJsonTestRunner(std::string testDirectory, std::vector<std::string> testFilters)
         : _testFiles(scanTestFiles(testDirectory, testFilters)) {}
 
-    JsonTestResult doTest(JsonTestCase testCase) {
-        return JsonTestResult();
-    }
-
-    std::map<std::string, JsonTestResult> runTests() {
+    std::vector<JsonTestCase::TestCaseResult> runTests() {
+        std::vector<JsonTestCase::TestCaseResult> results;
         const auto testFiles = getTestFiles();
-        auto results = std::map<std::string, JsonTestResult>();
         for (auto jsonTest : testFiles) {
             auto testCase = JsonTestCase(jsonTest);
-            results[testCase.Name()] = doTest(testCase);
+            try {
+                std::cout << "-----------------" << std::endl;
+                std::cout << "Executing " << testCase.Name() << std::endl;
+                std::cout << "-----------------" << std::endl << std::endl;
+
+                results.push_back(testCase.execute());
+
+                std::cout << "Done executing " << testCase.Name() << std::endl;
+            } catch (const DBException& ex) {
+                std::stringstream error;
+                error << "Exception while executing " << jsonTest.string() << ": " << ex.toString();
+                std::string errorStr = error.str();
+                results.push_back(JsonTestCase::TestCaseResult{
+                    false,
+                    {TestCasePhase::PhaseResult{false, {std::make_pair("exception", errorStr)}, 0}},
+                    jsonTest.string(),
+                    testCase.Name()});
+                std::cerr << errorStr;
+            }
         }
         return results;
+    }
+
+    void report(std::vector<JsonTestCase::TestCaseResult> results) {
+        int numTestCases = results.size();
+        int numSuccess = 0;
+        int numFailed = 0;
+        std::cout << banner("All Test Results");
+        for (const auto result : results) {
+            auto file = result.file;
+            auto testName = result.name;
+            auto phaseResults = result.phaseResults;
+            std::cout << file << ": " << testName << ": ";
+            if (result.success) {
+                std::cout << phaseResults.size() << " phases completed successfully." << std::endl;
+                ++numSuccess;
+            } else {
+                ++numFailed;
+                std::cout << std::endl;
+                const auto printError = [](const TestCasePhase::TestPhaseError& error) {
+                    std::cout << "\t" << error.first << ": " << error.second << std::endl;
+                };
+                for (auto phaseResult : phaseResults) {
+                    std::cout << "Phase " << phaseResult.phaseNumber << ": " << std::endl;
+                    if (!phaseResult.success)
+                        for (auto error : phaseResult.errorDescriptions)
+                            printError(error);
+                }
+            }
+        }
+        std::cout << numTestCases << " test cases; " << numSuccess << " success; " << numFailed
+                  << " failed." << std::endl;
     }
 
     const std::vector<fs::path>& getTestFiles() const {
@@ -285,6 +639,6 @@ private:
 int main(int argc, char* argv[]) {
     ArgParser args(argc, argv);
     SdamJsonTestRunner testRunner(args.SourceDirectory, args.TestFilters);
-    testRunner.runTests();
+    testRunner.report(testRunner.runTests());
     return 0;
 }

@@ -24,7 +24,11 @@ env.Library(
 env.Program(
     target='sdam_json_test',
     source=['sdam_json_test_runner.cpp'],
-    LIBDEPS=['sdam', 'sdam_test', '$BUILD_DIR/mongo/util/clock_source_mock'],
+    LIBDEPS=[
+        'sdam',
+        'sdam_test',
+        '$BUILD_DIR/mongo/util/clock_source_mock',
+        '$BUILD_DIR/mongo/client/connection_string'],
 )
 
 env.Library(

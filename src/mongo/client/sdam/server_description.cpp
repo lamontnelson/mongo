@@ -172,6 +172,8 @@ void ServerDescription::parseTypeFromIsMaster(const BSONObj isMaster) {
         t = ServerType::kRSArbiter;
     } else if (hasSetName && isMaster.getBoolField("hidden")) {
         t = ServerType::kRSOther;
+    } else if (hasSetName) { // TODO: validate this change
+        t = ServerType::kRSOther;
     } else if (isMaster.getBoolField("isreplicaset")) {
         t = ServerType::kRSGhost;
     } else {
@@ -327,6 +329,11 @@ BSONObj ServerDescription::toBson() const {
     if (_logicalSessionTimeoutMinutes) {
         bson.append("logicalSessionTimeoutMinutes", *_logicalSessionTimeoutMinutes);
     }
+
+    bson.append("hosts", _hosts);
+    bson.append("arbiters", _arbiters);
+    bson.append("passives", _passives);
+
     return bson.obj();
 }
 

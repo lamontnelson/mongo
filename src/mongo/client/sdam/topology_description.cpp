@@ -143,7 +143,6 @@ void TopologyDescription::removeServerDescription(const ServerAddress& serverAdd
         });
     if (it != _servers.end()) {
         _servers.erase(it);
-        std::cout << "after remove numServers: " << _servers.size() << std::endl;
     }
 }
 
