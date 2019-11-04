@@ -498,7 +498,7 @@ public:
                 _initialType = TopologyType::kSingle;
             } else {
                 // sharded
-                _initialType = TopologyType::kSharded;
+                _initialType = TopologyType::kUnknown;
             }
         } else {
             // replica set
@@ -572,7 +572,7 @@ public:
         return results;
     }
 
-    void report(std::vector<JsonTestCase::TestCaseResult> results) {
+    int report(std::vector<JsonTestCase::TestCaseResult> results) {
         int numTestCases = results.size();
         int numSuccess = 0;
         int numFailed = 0;
@@ -601,6 +601,8 @@ public:
         }
         std::cout << numTestCases << " test cases; " << numSuccess << " success; " << numFailed
                   << " failed." << std::endl;
+
+        return numFailed;
     }
 
     const std::vector<fs::path>& getTestFiles() const {
@@ -639,6 +641,5 @@ private:
 int main(int argc, char* argv[]) {
     ArgParser args(argc, argv);
     SdamJsonTestRunner testRunner(args.SourceDirectory, args.TestFilters);
-    testRunner.report(testRunner.runTests());
-    return 0;
+    return testRunner.report(testRunner.runTests());
 }
