@@ -164,15 +164,15 @@ void ServerDescription::parseTypeFromIsMaster(const BSONObj isMaster) {
         t = ServerType::kStandalone;
     } else if (kIsDbGrid == isMaster.getStringField("msg")) {
         t = ServerType::kMongos;
+    } else if (hasSetName && isMaster.getBoolField("hidden")) {
+        t = ServerType::kRSOther;
     } else if (hasSetName && isMaster.getBoolField("ismaster")) {
         t = ServerType::kRSPrimary;
     } else if (hasSetName && isMaster.getBoolField("secondary")) {
         t = ServerType::kRSSecondary;
     } else if (hasSetName && isMaster.getBoolField("arbiterOnly")) {
         t = ServerType::kRSArbiter;
-    } else if (hasSetName && isMaster.getBoolField("hidden")) {
-        t = ServerType::kRSOther;
-    } else if (hasSetName) { // TODO: validate this change
+    } else if (hasSetName) {  // TODO: validate this change
         t = ServerType::kRSOther;
     } else if (isMaster.getBoolField("isreplicaset")) {
         t = ServerType::kRSGhost;

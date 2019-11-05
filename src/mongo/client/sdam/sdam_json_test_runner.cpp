@@ -165,21 +165,29 @@ public:
 
         std::string fieldName = expectedField.fieldName();
         if (fieldName == "type") {
-            auto serverTypeParseStatus = parseServerType(expectedField.String());
-            if (serverTypeParseStatus.isOK()) {
-                if (serverTypeParseStatus.getValue() != serverDescription->getType()) {
+            ServerType expectedServerType;
+            // PossiblePrimary only used for single threaded implementations
+            if (expectedField.String() == "PossiblePrimary") {
+                expectedServerType = ServerType::kUnknown;
+            } else {
+                auto serverTypeParseStatus = parseServerType(expectedField.String());
+                if (serverTypeParseStatus.isOK()) {
+                    expectedServerType = serverTypeParseStatus.getValue();
+                } else {
                     result.success = false;
                     auto errorDescription =
                         std::make_pair(serverDescriptionFieldName(serverDescription, "type"),
-                                       errorMessageNotEqual(serverTypeParseStatus.getValue(),
-                                                            serverDescription->getType()));
+                                       serverTypeParseStatus.getStatus().toString());
                     result.errorDescriptions.push_back(errorDescription);
+                    return;
                 }
-            } else {
+            }
+
+            if (expectedServerType != serverDescription->getType()) {
                 result.success = false;
-                auto errorDescription =
-                    std::make_pair(serverDescriptionFieldName(serverDescription, "type"),
-                                   serverTypeParseStatus.getStatus().toString());
+                auto errorDescription = std::make_pair(
+                    serverDescriptionFieldName(serverDescription, "type"),
+                    errorMessageNotEqual(expectedServerType, serverDescription->getType()));
                 result.errorDescriptions.push_back(errorDescription);
             }
         } else if (fieldName == "setName") {
@@ -195,9 +203,6 @@ public:
                 result.errorDescriptions.push_back(errorDescription);
             }
         } else if (fieldName == "setVersion") {
-            std::cout << "server: " << serverDescription->getAddress()
-                      << " field: " << expectedField.fieldName()
-                      << " etype: " << expectedField.type() << std::endl;
             boost::optional<int> expectedSetVersion;
             if (expectedField.type() != BSONType::jstNULL) {
                 expectedSetVersion = expectedField.numberInt();
@@ -409,7 +414,8 @@ public:
         PhaseResult testResult{true, {}, _phaseNum};
 
         for (auto response : _isMasterResponses) {
-            std::cout << "Sending server description: " << response.getResponse() << std::endl;
+            auto descriptionStr = (response.getResponse()) ? response.getResponse()->toString() : "[ Network Error ]";
+            std::cout << "Sending server description: " << response.getServer() << " : " << descriptionStr << std::endl;
             topology.onServerDescription(response);
         }
 
@@ -461,16 +467,14 @@ public:
         TestCaseResult result{true, {}, _testFilePath, _testName};
 
         for (const auto& testPhase : testPhases) {
-            std::cout << banner(std::string("Phase ") + std::to_string(testPhase.getPhaseNum()));
-
+            std::cout << banner("Phase " + std::to_string(testPhase.getPhaseNum()));
             auto phaseResult = testPhase.execute(topology);
             result.phaseResults.push_back(phaseResult);
             result.success = result.success && phaseResult.success;
             if (!result.success) {
+                std::cout << "Phase " << phaseResult.phaseNumber << " failed." << std::endl;
                 break;
             }
-
-            std::cout << std::endl;
         }
 
         return result;
@@ -550,13 +554,8 @@ public:
         for (auto jsonTest : testFiles) {
             auto testCase = JsonTestCase(jsonTest);
             try {
-                std::cout << "-----------------" << std::endl;
-                std::cout << "Executing " << testCase.Name() << std::endl;
-                std::cout << "-----------------" << std::endl << std::endl;
-
+                std::cout << banner("Executing " + testCase.Name());
                 results.push_back(testCase.execute());
-
-                std::cout << "Done executing " << testCase.Name() << std::endl;
             } catch (const DBException& ex) {
                 std::stringstream error;
                 error << "Exception while executing " << jsonTest.string() << ": " << ex.toString();
@@ -576,18 +575,16 @@ public:
         int numTestCases = results.size();
         int numSuccess = 0;
         int numFailed = 0;
-        std::cout << banner("All Test Results");
+        std::cout << std::endl << banner("Failed Test Results");
         for (const auto result : results) {
             auto file = result.file;
             auto testName = result.name;
             auto phaseResults = result.phaseResults;
-            std::cout << file << ": " << testName << ": ";
             if (result.success) {
-                std::cout << phaseResults.size() << " phases completed successfully." << std::endl;
                 ++numSuccess;
             } else {
+                std::cout << banner(testName) << "error in file: " << file << std::endl;
                 ++numFailed;
-                std::cout << std::endl;
                 const auto printError = [](const TestCasePhase::TestPhaseError& error) {
                     std::cout << "\t" << error.first << ": " << error.second << std::endl;
                 };
@@ -597,6 +594,7 @@ public:
                         for (auto error : phaseResult.errorDescriptions)
                             printError(error);
                 }
+                std::cout << std::endl;
             }
         }
         std::cout << numTestCases << " test cases; " << numSuccess << " success; " << numFailed

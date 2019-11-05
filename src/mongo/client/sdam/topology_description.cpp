@@ -147,7 +147,8 @@ void TopologyDescription::removeServerDescription(const ServerAddress& serverAdd
 }
 
 void TopologyDescription::checkWireCompatibilityVersions() {
-    const WireVersionInfo supportedWireVersion = WireSpec::instance().outgoing;
+    //const WireVersionInfo supportedWireVersion = WireSpec::instance().outgoing;
+    const WireVersionInfo supportedWireVersion = {BATCH_COMMANDS, LATEST_WIRE_VERSION};
     std::ostringstream errorOss;
 
     _compatible = true;
