@@ -497,14 +497,14 @@ private:
         _replicaSetName = _testUri.getOption("replicaSet");
         if (!_replicaSetName) {
             if (_testUri.getServers().size() == 1) {
-                // single
                 _initialType = TopologyType::kSingle;
             } else {
-                // sharded
+                // We can technically choose either kUnknown or kSharded and be compliant,
+                // but it seems that some of the json tests assume kUnknown as the initial state.
+                // see: json_tests/sharded/normalize_uri_case.json
                 _initialType = TopologyType::kUnknown;
             }
         } else {
-            // replica set
             _initialType = TopologyType::kReplicaSetNoPrimary;
         }
 
