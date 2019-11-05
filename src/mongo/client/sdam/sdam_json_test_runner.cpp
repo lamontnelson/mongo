@@ -582,14 +582,13 @@ public:
             } else {
                 std::cout << banner(testName) << "error in file: " << file << std::endl;
                 ++numFailed;
-                const auto printError = [](const TestCasePhase::TestPhaseError& error) {
-                    std::cout << "\t" << error.first << ": " << error.second << std::endl;
-                };
                 for (auto phaseResult : phaseResults) {
                     std::cout << "Phase " << phaseResult.phaseNumber << ": " << std::endl;
-                    if (!phaseResult.success)
-                        for (auto error : phaseResult.errorDescriptions)
-                            printError(error);
+                    if (!phaseResult.success) {
+                        for (auto error : phaseResult.errorDescriptions) {
+                            std::cout << "\t" << error.first << ": " << error.second << std::endl;
+                        }
+                    }
                 }
                 std::cout << std::endl;
             }
