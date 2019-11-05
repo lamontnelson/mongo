@@ -34,7 +34,6 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
-#include <sstream>
 
 #include "mongo/bson/json.h"
 #include "mongo/client/mongo_uri.h"
@@ -46,7 +45,6 @@ namespace fs = boost::filesystem;
 using namespace mongo::sdam;
 
 namespace mongo::sdam {
-
 std::string banner(const std::string text) {
     std::stringstream output;
     const auto border = std::string(text.size(), '-');
@@ -56,17 +54,6 @@ std::string banner(const std::string text) {
 
 class ArgParser {
 public:
-    constexpr static auto kSourceDirOptionLong = "source-dir";
-    constexpr static auto kSourceDirOptionShort = "s";
-    constexpr static auto kSourceDirDefault = ".";
-
-    constexpr static auto kFilterOptionLong = "filter";
-    constexpr static auto kFilterOptionShort = "f";
-
-    po::variables_map values;
-    std::string SourceDirectory;
-    std::vector<std::string> TestFilters;
-
     ArgParser(int argc, char* argv[]) {
         po::options_description optionsDescription("Arguments");
         try {
@@ -76,8 +63,8 @@ public:
                 "set source directory")(optionName(kFilterOptionShort, kFilterOptionLong).c_str(),
                                         po::value<std::vector<std::string>>(&TestFilters),
                                         "filter tests to run");
-            po::store(po::parse_command_line(argc, argv, optionsDescription), values);
-            po::notify(values);
+            po::store(po::parse_command_line(argc, argv, optionsDescription), Values);
+            po::notify(Values);
 
             if (helpRequested()) {
                 printHelpAndExit(argv[0], optionsDescription);
@@ -90,7 +77,18 @@ public:
         }
     }
 
+    po::variables_map Values;
+    std::string SourceDirectory;
+    std::vector<std::string> TestFilters;
+
 private:
+    constexpr static auto kSourceDirOptionLong = "source-dir";
+    constexpr static auto kSourceDirOptionShort = "s";
+    constexpr static auto kSourceDirDefault = ".";
+
+    constexpr static auto kFilterOptionLong = "filter";
+    constexpr static auto kFilterOptionShort = "f";
+
     std::string optionName(const char* shortName, const char* longName) {
         static auto format = boost::format("%1%,%2%");
         format % longName;
@@ -99,7 +97,7 @@ private:
     }
 
     bool helpRequested() {
-        return values.count("help") > 0;
+        return Values.count("help") > 0;
     }
 
     void printHelpAndExit(char* programName, const po::options_description& desc) {
@@ -108,6 +106,7 @@ private:
     }
 };
 
+// This class is responsible for parsing and executing a single 'phase' of the json test
 class TestCasePhase {
 public:
     TestCasePhase(int phaseNum, MongoURI uri, BSONObj phase) : _testUri(uri), _phaseNum(phaseNum) {
@@ -138,6 +137,30 @@ public:
         int phaseNumber;
     };
 
+    PhaseResult execute(TopologyManager& topology) const {
+        PhaseResult testResult{true, {}, _phaseNum};
+
+        for (auto response : _isMasterResponses) {
+            auto descriptionStr =
+                (response.getResponse()) ? response.getResponse()->toString() : "[ Network Error ]";
+            std::cout << "Sending server description: " << response.getServer() << " : "
+                      << descriptionStr << std::endl;
+            topology.onServerDescription(response);
+        }
+
+        validateServers(
+            topology.getTopologyDescription(), _topologyOutcome["servers"].Obj(), testResult);
+        validateTopologyDescription(
+            topology.getTopologyDescription(), _topologyOutcome, testResult);
+
+        return testResult;
+    }
+
+    int getPhaseNum() const {
+        return _phaseNum;
+    }
+
+private:
     template <typename T, typename U>
     std::string errorMessageNotEqual(T expected, U actual) const {
         std::stringstream errorMessage;
@@ -297,7 +320,6 @@ public:
         }
     }
 
-
     void validateTopologyDescription(const TopologyDescriptionPtr topologyDescription,
                                      const BSONObj bsonTopologyDescription,
                                      PhaseResult& result) const {
@@ -403,39 +425,16 @@ public:
         }
     }
 
-
-    PhaseResult execute(TopologyManager& topology) const {
-        PhaseResult testResult{true, {}, _phaseNum};
-
-        for (auto response : _isMasterResponses) {
-            auto descriptionStr =
-                (response.getResponse()) ? response.getResponse()->toString() : "[ Network Error ]";
-            std::cout << "Sending server description: " << response.getServer() << " : "
-                      << descriptionStr << std::endl;
-            topology.onServerDescription(response);
-        }
-
-        validateServers(
-            topology.getTopologyDescription(), _topologyOutcome["servers"].Obj(), testResult);
-        validateTopologyDescription(
-            topology.getTopologyDescription(), _topologyOutcome, testResult);
-
-        return testResult;
-    }
-
-    int getPhaseNum() const {
-        return _phaseNum;
-    }
-
-private:
+    // the json tests don't actually use this value.
     constexpr static auto kLatency = mongo::Milliseconds(100);
 
     MongoURI _testUri;
     int _phaseNum;
     std::vector<IsMasterOutcome> _isMasterResponses;
     BSONObj _topologyOutcome;
-};  // namespace mongo::sdam
+};
 
+// This class is responsible for parsing and executing a single json test file.
 class JsonTestCase {
 public:
     JsonTestCase(fs::path testFilePath) {
@@ -450,8 +449,7 @@ public:
     };
 
     TestCaseResult execute() {
-        std::unique_ptr<SdamConfiguration> config;
-        config =
+        std::unique_ptr<SdamConfiguration> config =
             std::make_unique<SdamConfiguration>(getSeedList(),
                                                 _initialType,
                                                 SdamConfiguration::kDefaultHeartbeatFrequencyMs,
@@ -462,7 +460,7 @@ public:
 
         TestCaseResult result{true, {}, _testFilePath, _testName};
 
-        for (const auto& testPhase : testPhases) {
+        for (const auto& testPhase : _testPhases) {
             std::cout << banner("Phase " + std::to_string(testPhase.getPhaseNum()));
             auto phaseResult = testPhase.execute(topology);
             result.phaseResults.push_back(phaseResult);
@@ -476,6 +474,11 @@ public:
         return result;
     }
 
+    const std::string& Name() const {
+        return _testName;
+    }
+
+private:
     void parseTest(fs::path testFilePath) {
         using namespace std;
 
@@ -508,7 +511,7 @@ public:
         int phase = 0;
         const std::vector<BSONElement>& bsonPhases = _jsonTest["phases"].Array();
         for (auto bsonPhase : bsonPhases) {
-            testPhases.push_back(TestCasePhase(phase++, _testUri, bsonPhase.Obj()));
+            _testPhases.push_back(TestCasePhase(phase++, _testUri, bsonPhase.Obj()));
         }
     }
 
@@ -520,22 +523,16 @@ public:
         return result;
     }
 
-
-private:
     BSONObj _jsonTest;
     std::string _testName;
     MongoURI _testUri;
     std::string _testFilePath;
     TopologyType _initialType;
     boost::optional<std::string> _replicaSetName;
-    std::vector<TestCasePhase> testPhases;
-
-public:
-    const std::string& Name() const {
-        return _testName;
-    }
+    std::vector<TestCasePhase> _testPhases;
 };
 
+// This class runs (potentially) multiple json tests and reports their results.
 class SdamJsonTestRunner {
 public:
     SdamJsonTestRunner(std::string testDirectory, std::vector<std::string> testFilters)
