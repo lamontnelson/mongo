@@ -166,22 +166,16 @@ public:
         std::string fieldName = expectedField.fieldName();
         if (fieldName == "type") {
             ServerType expectedServerType;
-            // PossiblePrimary only used for single threaded implementations
-            if (expectedField.String() == "PossiblePrimary") {
-                expectedServerType = ServerType::kUnknown;
-            } else {
-                auto serverTypeParseStatus = parseServerType(expectedField.String());
-                if (serverTypeParseStatus.isOK()) {
-                    expectedServerType = serverTypeParseStatus.getValue();
-                } else {
-                    result.success = false;
-                    auto errorDescription =
-                        std::make_pair(serverDescriptionFieldName(serverDescription, "type"),
-                                       serverTypeParseStatus.getStatus().toString());
-                    result.errorDescriptions.push_back(errorDescription);
-                    return;
-                }
+            auto serverTypeParseStatus = parseServerType(expectedField.String());
+            if (!serverTypeParseStatus.isOK()) {
+                result.success = false;
+                auto errorDescription =
+                    std::make_pair(serverDescriptionFieldName(serverDescription, "type"),
+                                   serverTypeParseStatus.getStatus().toString());
+                result.errorDescriptions.push_back(errorDescription);
+                return;
             }
+            expectedServerType = serverTypeParseStatus.getValue();
 
             if (expectedServerType != serverDescription->getType()) {
                 result.success = false;
@@ -414,8 +408,10 @@ public:
         PhaseResult testResult{true, {}, _phaseNum};
 
         for (auto response : _isMasterResponses) {
-            auto descriptionStr = (response.getResponse()) ? response.getResponse()->toString() : "[ Network Error ]";
-            std::cout << "Sending server description: " << response.getServer() << " : " << descriptionStr << std::endl;
+            auto descriptionStr =
+                (response.getResponse()) ? response.getResponse()->toString() : "[ Network Error ]";
+            std::cout << "Sending server description: " << response.getServer() << " : "
+                      << descriptionStr << std::endl;
             topology.onServerDescription(response);
         }
 
@@ -514,9 +510,6 @@ public:
         for (auto bsonPhase : bsonPhases) {
             testPhases.push_back(TestCasePhase(phase++, _testUri, bsonPhase.Obj()));
         }
-
-        std::cout << testFilePath.string() << ": " << _testName << ": " << testPhases.size()
-                  << " phase(s) parsed successfully" << std::endl;
     }
 
     std::vector<ServerAddress> getSeedList() {
@@ -575,7 +568,14 @@ public:
         int numTestCases = results.size();
         int numSuccess = 0;
         int numFailed = 0;
-        std::cout << std::endl << banner("Failed Test Results");
+
+        if (std::any_of(
+                results.begin(), results.end(), [](const JsonTestCase::TestCaseResult& result) {
+                    return !result.success;
+                })) {
+            std::cout << std::endl << banner("Failed Test Results");
+        }
+
         for (const auto result : results) {
             auto file = result.file;
             auto testName = result.name;

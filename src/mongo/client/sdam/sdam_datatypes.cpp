@@ -68,7 +68,7 @@ StatusWith<ServerType> parseServerType(StringData strServerType) {
         return ServerType::kRSOther;
     } else if (strServerType == "RSGhost") {
         return ServerType::kRSGhost;
-    } else if (strServerType == "Unknown") {
+    } else if (strServerType == "PossiblePrimary" || strServerType == "Unknown") {
         return ServerType::kUnknown;
     } else {
         std::stringstream errorMessage;
