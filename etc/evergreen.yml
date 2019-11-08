@@ -3857,6 +3857,7 @@ tasks:
           - "./etc/repo_config.yaml"
           - "./build/**.gcno"
           - "src/mongo/util/options_parser/test_config_files/**"
+          - "src/mongo/client/sdam/json_tests/**"
           - "library_dependency_graph.json"
           - "src/third_party/JSON-Schema-Test-Suite/tests/draft4/**"
           - "bypass_compile_expansions.yml"
@@ -4089,6 +4090,18 @@ tasks:
     - func: "run tests"
       vars:
         resmoke_args: --suites=libfuzzer
+
+- name: server_discovery_and_monitoring_json_test
+  commands:
+    - func: "scons compile"
+      vars:
+        targets: "sdam_json_test_runner"
+        task_compile_flags: >-
+          --detect-odr-violations
+        compiling_for_test: true
+    - func: "run tests"
+      vars:
+        resmoke_args: --suites=sdam_json_test
 
 ## dbtest ##
 - name: dbtest
@@ -9041,6 +9054,11 @@ task_groups:
   tasks:
   - compile_core_tools
 - <<: *compile_task_group_template
+  tags: ["integration"]
+  name: server_discovery_and_monitoring_json_test_TG
+  tasks:
+  - server_discovery_and_monitoring_json_test
+- <<: *compile_task_group_template
   name: dbtest_TG
   tasks:
   - dbtest
@@ -9976,6 +9994,7 @@ buildvariants:
     - name: burn_in_tests_gen
     - name: buildscripts_test
     - name: unittest_shell_hang_analyzer_gen
+    - name: server_discovery_and_monitoring_json_test_TG
     - name: dbtest_TG
       distros:
         - windows-64-vs2017-compile
@@ -13044,6 +13063,7 @@ buildvariants:
     scons_cache_scope: shared
   tasks:
   - name: compile_all_run_unittests_TG
+  - name: server_discovery_and_monitoring_json_test_TG
   - name: jsCore
   - name: jsCore_txns
 
