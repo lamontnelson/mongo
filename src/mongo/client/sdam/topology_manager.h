@@ -46,6 +46,7 @@ class TopologyManager : public mongo::ReplicaSetMonitor {
 
 public:
     TopologyManager(SdamConfiguration config, ClockSource* clockSource);
+    virtual ~TopologyManager() = default;
 
     /**
      * This function atomically:
