@@ -51,13 +51,131 @@ class ReplicaSetMonitorTest;
 struct ReadPreferenceSetting;
 typedef std::shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorPtr;
 
+
 /**
  * Holds state about a replica set and provides a means to refresh the local view.
  * All methods perform the required synchronization to allow callers from multiple threads.
  */
 class ReplicaSetMonitor {
-    ReplicaSetMonitor(const ReplicaSetMonitor&) = delete;
-    ReplicaSetMonitor& operator=(const ReplicaSetMonitor&) = delete;
+public:
+    // TODO: we probably don't need these anymore or replace with values from the specs
+    static constexpr auto kExpeditedRefreshPeriod = Milliseconds(500);
+    static constexpr auto kCheckTimeout = Seconds(5);
+    static constexpr auto kDefaultFindHostTimeout = Seconds(30);
+
+    /**
+     * Schedules the initial refresh task into task executor.
+     */
+    virtual void init() = 0;
+
+    /**
+     * Ends any ongoing refreshes.
+     */
+    virtual void drop() = 0;
+
+    /**
+     * Returns a host matching the given read preference or an error, if no host matches.
+     *
+     * @param readPref Read preference to match against
+     * @param maxWait If no host is readily available, which matches the specified read preference,
+     *   wait for one to become available for up to the specified time and periodically refresh
+     *   the view of the set. The call may return with an error earlier than the specified value,
+     *   if none of the known hosts for the set are reachable within some number of attempts.
+     *   Note that if a maxWait of 0ms is specified, this method may still attempt to contact
+     *   every host in the replica set up to one time.
+     *
+     * Known errors are:
+     *  FailedToSatisfyReadPreference, if node cannot be found, which matches the read preference.
+     */
+    virtual SemiFuture<HostAndPort> getHostOrRefresh(
+        const ReadPreferenceSetting& readPref, Milliseconds maxWait = kDefaultFindHostTimeout) = 0;
+
+    virtual SemiFuture<std::vector<HostAndPort>> getHostsOrRefresh(
+        const ReadPreferenceSetting& readPref, Milliseconds maxWait = kDefaultFindHostTimeout) = 0;
+
+    /**
+     * Returns the host we think is the current master or uasserts.
+     *
+     * This is a thin wrapper around getHostOrRefresh so this will also refresh our view if we
+     * don't think there is a master at first. The main difference is that this will uassert
+     * rather than returning an empty HostAndPort.
+     */
+    virtual HostAndPort getMasterOrUassert() = 0;
+
+    /**
+     * Notifies this Monitor that a host has failed because of the specified error 'status' and
+     * should be considered down.
+     *
+     * Call this when you get a connection error. If you get an error while trying to refresh our
+     * view of a host, call Refresher::failedHost instead because it bypasses taking the monitor's
+     * mutex.
+     */
+    virtual void failedHost(const HostAndPort& host, const Status& status) = 0;
+
+    /**
+     * Returns true if this node is the master based ONLY on local data. Be careful, return may
+     * be stale.
+     */
+    virtual bool isPrimary(const HostAndPort& host) const = 0;
+
+    /**
+     * Returns true if host is part of this set and is considered up (meaning it can accept
+     * queries).
+     */
+    virtual bool isHostUp(const HostAndPort& host) const = 0;
+
+    /**
+     * Returns the minimum wire version supported across the replica set.
+     */
+    virtual int getMinWireVersion() const = 0;
+
+    /**
+     * Returns the maximum wire version supported across the replica set.
+     */
+    virtual int getMaxWireVersion() const = 0;
+
+    /**
+     * The name of the set.
+     */
+    virtual std::string getName() const = 0;
+
+    /**
+     * Returns a std::string with the format name/server1,server2.
+     * If name is empty, returns just comma-separated list of servers.
+     * It IS updated to reflect the current members of the set.
+     */
+    virtual std::string getServerAddress() const = 0;
+
+    /**
+     * Returns the URI that was used to construct this monitor.
+     * It IS NOT updated to reflect the current members of the set.
+     */
+    virtual const MongoURI& getOriginalUri() const = 0;
+
+    /**
+     * Is server part of this set? Uses only cached information.
+     */
+    virtual bool contains(const HostAndPort& server) const = 0;
+
+    /**
+     * Writes information about our cached view of the set to a BSONObjBuilder. If
+     * forFTDC, trim to minimize its size for full-time diagnostic data capture.
+     */
+    virtual void appendInfo(BSONObjBuilder& b, bool forFTDC = false) const = 0;
+
+    /**
+     * Returns true if the monitor knows a usable primary from it's interal view.
+     */
+    virtual bool isKnownToHaveGoodPrimary() const = 0;
+};
+
+/**
+ * Holds state about a replica set and provides a means to refresh the local view.
+ * All methods perform the required synchronization to allow callers from multiple threads.
+ */
+class ReplicaSetMonitorImpl : public ReplicaSetMonitor {
+    ReplicaSetMonitorImpl(const ReplicaSetMonitor&) = delete;
+    ReplicaSetMonitorImpl& operator=(const ReplicaSetMonitor&) = delete;
 
 public:
     class Refresher;
@@ -68,7 +186,7 @@ public:
     /**
      * Initializes local state from a MongoURI.
      */
-    ReplicaSetMonitor(const MongoURI& uri);
+    ReplicaSetMonitorImpl(const MongoURI& uri);
 
     /**
      * Schedules the initial refresh task into task executor.
@@ -238,16 +356,18 @@ public:
     /**
      * Allows tests to set initial conditions and introspect the current state.
      */
-    explicit ReplicaSetMonitor(const SetStatePtr& initialState);
-    ~ReplicaSetMonitor();
+    explicit ReplicaSetMonitorImpl(const SetStatePtr& initialState);
+    virtual ~ReplicaSetMonitorImpl();
 
     /**
+     * TODO: check spec for this
      * The default timeout, which will be used for finding a replica set host if the caller does
      * not explicitly specify it.
      */
     static const Seconds kDefaultFindHostTimeout;
 
     /**
+     * TODO: remove
      * Defaults to false, meaning that if multiple hosts meet a criteria we pick one at random.
      * This is required by the replica set driver spec. Set this to true in tests that need host
      * selection to be deterministic.
@@ -282,7 +402,7 @@ private:
  * lives in this class. Use of this class should always be guarded by SetState::mutex unless in
  * single-threaded use by ReplicaSetMonitorTest.
  */
-class ReplicaSetMonitor::Refresher {
+class ReplicaSetMonitorImpl::Refresher {
 public:
     explicit Refresher(const SetStatePtr& setState);
 

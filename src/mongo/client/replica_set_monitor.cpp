@@ -70,12 +70,12 @@ MONGO_FAIL_POINT_DEFINE(modifyReplicaSetMonitorDefaultRefreshPeriod);
 namespace {
 
 // Pull nested types to top-level scope
-typedef ReplicaSetMonitor::IsMasterReply IsMasterReply;
-typedef ReplicaSetMonitor::ScanState ScanState;
-typedef ReplicaSetMonitor::ScanStatePtr ScanStatePtr;
-typedef ReplicaSetMonitor::SetState SetState;
-typedef ReplicaSetMonitor::SetStatePtr SetStatePtr;
-typedef ReplicaSetMonitor::Refresher Refresher;
+typedef ReplicaSetMonitorImpl::IsMasterReply IsMasterReply;
+typedef ReplicaSetMonitorImpl::ScanState ScanState;
+typedef ReplicaSetMonitorImpl::ScanStatePtr ScanStatePtr;
+typedef ReplicaSetMonitorImpl::SetState SetState;
+typedef ReplicaSetMonitorImpl::SetStatePtr SetStatePtr;
+typedef ReplicaSetMonitorImpl::Refresher Refresher;
 typedef ScanState::UnconfirmedReplies UnconfirmedReplies;
 typedef SetState::Node Node;
 typedef SetState::Nodes Nodes;
@@ -165,19 +165,16 @@ int32_t pingTimeMillis(const Node& node) {
     return latencyMillis;
 }
 
-/**
- * Replica set refresh period on the task executor.
- */
 const Seconds kDefaultRefreshPeriod(30);
 }  // namespace
 
 // If we cannot find a host after 15 seconds of refreshing, give up
-const Seconds ReplicaSetMonitor::kDefaultFindHostTimeout(15);
+const Seconds ReplicaSetMonitorImpl::kDefaultFindHostTimeout(15);
 
 // Defaults to random selection as required by the spec
-bool ReplicaSetMonitor::useDeterministicHostSelection = false;
+bool ReplicaSetMonitorImpl::useDeterministicHostSelection = false;
 
-Seconds ReplicaSetMonitor::getDefaultRefreshPeriod() {
+Seconds ReplicaSetMonitorImpl::getDefaultRefreshPeriod() {
     Seconds r = kDefaultRefreshPeriod;
     static constexpr auto kPeriodField = "period"_sd;
     modifyReplicaSetMonitorDefaultRefreshPeriod.executeIf(
@@ -186,13 +183,13 @@ Seconds ReplicaSetMonitor::getDefaultRefreshPeriod() {
     return r;
 }
 
-ReplicaSetMonitor::ReplicaSetMonitor(const SetStatePtr& initialState) : _state(initialState) {}
+ReplicaSetMonitorImpl::ReplicaSetMonitorImpl(const SetStatePtr& initialState) : _state(initialState) {}
 
-ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri)
-    : ReplicaSetMonitor(std::make_shared<SetState>(
+ReplicaSetMonitorImpl::ReplicaSetMonitorImpl(const MongoURI& uri)
+    : ReplicaSetMonitorImpl(std::make_shared<SetState>(
           uri, &globalRSMonitorManager.getNotifier(), globalRSMonitorManager.getExecutor())) {}
 
-void ReplicaSetMonitor::init() {
+void ReplicaSetMonitorImpl::init() {
     if (areRefreshRetriesDisabledForTest.load()) {
         // This is for MockReplicaSet. Those tests want to control when scanning happens.
         warning() << "*** Not starting background refresh because refresh retries are disabled.";
@@ -205,19 +202,19 @@ void ReplicaSetMonitor::init() {
     }
 }
 
-void ReplicaSetMonitor::drop() {
+void ReplicaSetMonitorImpl::drop() {
     {
         stdx::lock_guard lk(_state->mutex);
         _state->drop();
     }
 }
 
-ReplicaSetMonitor::~ReplicaSetMonitor() {
+ReplicaSetMonitorImpl::~ReplicaSetMonitorImpl() {
     drop();
 }
 
 template <typename Callback>
-auto ReplicaSetMonitor::SetState::scheduleWorkAt(Date_t when, Callback&& cb) const {
+auto ReplicaSetMonitorImpl::SetState::scheduleWorkAt(Date_t when, Callback&& cb) const {
     auto wrappedCallback = [cb = std::forward<Callback>(cb),
                             anchor = shared_from_this()](const CallbackArgs& cbArgs) mutable {
         if (ErrorCodes::isCancelationError(cbArgs.status)) {
@@ -236,7 +233,7 @@ auto ReplicaSetMonitor::SetState::scheduleWorkAt(Date_t when, Callback&& cb) con
     return executor->scheduleWorkAt(std::move(when), std::move(wrappedCallback));
 }
 
-void ReplicaSetMonitor::SetState::rescheduleRefresh(SchedulingStrategy strategy) {
+void ReplicaSetMonitorImpl::SetState::rescheduleRefresh(SchedulingStrategy strategy) {
     // Reschedule the refresh
 
     if (!executor || isMocked) {
@@ -299,8 +296,8 @@ void ReplicaSetMonitor::SetState::rescheduleRefresh(SchedulingStrategy strategy)
     refresherHandle = std::move(swHandle.getValue());
 }
 
-SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
-                                                            Milliseconds maxWait) {
+SemiFuture<HostAndPort> ReplicaSetMonitorImpl::getHostOrRefresh(
+    const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
     return _getHostsOrRefresh(criteria, maxWait)
         .then([](const auto& hosts) {
             invariant(hosts.size());
@@ -309,12 +306,12 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
         .semi();
 }
 
-SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
+SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitorImpl::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
     return _getHostsOrRefresh(criteria, maxWait).semi();
 }
 
-Future<std::vector<HostAndPort>> ReplicaSetMonitor::_getHostsOrRefresh(
+Future<std::vector<HostAndPort>> ReplicaSetMonitorImpl::_getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
 
     stdx::lock_guard<Latch> lk(_state->mutex);
@@ -347,11 +344,11 @@ Future<std::vector<HostAndPort>> ReplicaSetMonitor::_getHostsOrRefresh(
 
     return std::move(pf.future);
 }
-HostAndPort ReplicaSetMonitor::getMasterOrUassert() {
+HostAndPort ReplicaSetMonitorImpl::getMasterOrUassert() {
     return getHostOrRefresh(kPrimaryOnlyReadPreference).get();
 }
 
-void ReplicaSetMonitor::failedHost(const HostAndPort& host, const Status& status) {
+void ReplicaSetMonitorImpl::failedHost(const HostAndPort& host, const Status& status) {
     stdx::lock_guard<Latch> lk(_state->mutex);
     Node* node = _state->findNode(host);
     if (node)
@@ -360,19 +357,19 @@ void ReplicaSetMonitor::failedHost(const HostAndPort& host, const Status& status
         _state->checkInvariants();
 }
 
-bool ReplicaSetMonitor::isPrimary(const HostAndPort& host) const {
+bool ReplicaSetMonitorImpl::isPrimary(const HostAndPort& host) const {
     stdx::lock_guard<Latch> lk(_state->mutex);
     Node* node = _state->findNode(host);
     return node ? node->isMaster : false;
 }
 
-bool ReplicaSetMonitor::isHostUp(const HostAndPort& host) const {
+bool ReplicaSetMonitorImpl::isHostUp(const HostAndPort& host) const {
     stdx::lock_guard<Latch> lk(_state->mutex);
     Node* node = _state->findNode(host);
     return node ? node->isUp : false;
 }
 
-int ReplicaSetMonitor::getMinWireVersion() const {
+int ReplicaSetMonitorImpl::getMinWireVersion() const {
     stdx::lock_guard<Latch> lk(_state->mutex);
     int minVersion = 0;
     for (const auto& host : _state->nodes) {
@@ -384,7 +381,7 @@ int ReplicaSetMonitor::getMinWireVersion() const {
     return minVersion;
 }
 
-int ReplicaSetMonitor::getMaxWireVersion() const {
+int ReplicaSetMonitorImpl::getMaxWireVersion() const {
     stdx::lock_guard<Latch> lk(_state->mutex);
     int maxVersion = std::numeric_limits<int>::max();
     for (const auto& host : _state->nodes) {
@@ -396,43 +393,43 @@ int ReplicaSetMonitor::getMaxWireVersion() const {
     return maxVersion;
 }
 
-std::string ReplicaSetMonitor::getName() const {
+std::string ReplicaSetMonitorImpl::getName() const {
     // name is const so don't need to lock
     return _state->name;
 }
 
-std::string ReplicaSetMonitor::getServerAddress() const {
+std::string ReplicaSetMonitorImpl::getServerAddress() const {
     stdx::lock_guard<Latch> lk(_state->mutex);
     // We return our setUri until first confirmation
     return _state->seedConnStr.isValid() ? _state->seedConnStr.toString()
                                          : _state->setUri.connectionString().toString();
 }
 
-const MongoURI& ReplicaSetMonitor::getOriginalUri() const {
+const MongoURI& ReplicaSetMonitorImpl::getOriginalUri() const {
     // setUri is const so no need to lock.
     return _state->setUri;
 }
 
-bool ReplicaSetMonitor::contains(const HostAndPort& host) const {
+bool ReplicaSetMonitorImpl::contains(const HostAndPort& host) const {
     stdx::lock_guard<Latch> lk(_state->mutex);
     return _state->seedNodes.count(host);
 }
 
-shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::createIfNeeded(const string& name,
-                                                                const set<HostAndPort>& servers) {
+shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorImpl::createIfNeeded(
+    const string& name, const set<HostAndPort>& servers) {
     return globalRSMonitorManager.getOrCreateMonitor(
         ConnectionString::forReplicaSet(name, vector<HostAndPort>(servers.begin(), servers.end())));
 }
 
-shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::createIfNeeded(const MongoURI& uri) {
+shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorImpl::createIfNeeded(const MongoURI& uri) {
     return globalRSMonitorManager.getOrCreateMonitor(uri);
 }
 
-shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::get(const std::string& name) {
+shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorImpl::get(const std::string& name) {
     return globalRSMonitorManager.getMonitor(name);
 }
 
-void ReplicaSetMonitor::remove(const string& name) {
+void ReplicaSetMonitorImpl::remove(const string& name) {
     globalRSMonitorManager.removeMonitor(name);
 
     // Kill all pooled ReplicaSetConnections for this set. They will not function correctly
@@ -440,12 +437,12 @@ void ReplicaSetMonitor::remove(const string& name) {
     globalConnPool.removeHost(name);
 }
 
-ReplicaSetChangeNotifier& ReplicaSetMonitor::getNotifier() {
+ReplicaSetChangeNotifier& ReplicaSetMonitorImpl::getNotifier() {
     return globalRSMonitorManager.getNotifier();
 }
 
 // TODO move to correct order with non-statics before pushing
-void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC) const {
+void ReplicaSetMonitorImpl::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC) const {
     stdx::lock_guard<Latch> lk(_state->mutex);
 
     BSONObjBuilder monitorInfo(bsonObjBuilder.subobjStart(getName()));
@@ -478,19 +475,19 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
     }
 }
 
-void ReplicaSetMonitor::shutdown() {
+void ReplicaSetMonitorImpl::shutdown() {
     globalRSMonitorManager.shutdown();
 }
 
-void ReplicaSetMonitor::cleanup() {
+void ReplicaSetMonitorImpl::cleanup() {
     globalRSMonitorManager.removeAllMonitors();
 }
 
-void ReplicaSetMonitor::disableRefreshRetries_forTest() {
+void ReplicaSetMonitorImpl::disableRefreshRetries_forTest() {
     areRefreshRetriesDisabledForTest.store(true);
 }
 
-bool ReplicaSetMonitor::isKnownToHaveGoodPrimary() const {
+bool ReplicaSetMonitorImpl::isKnownToHaveGoodPrimary() const {
     stdx::lock_guard<Latch> lk(_state->mutex);
 
     for (const auto& node : _state->nodes) {
@@ -502,7 +499,7 @@ bool ReplicaSetMonitor::isKnownToHaveGoodPrimary() const {
     return false;
 }
 
-void ReplicaSetMonitor::runScanForMockReplicaSet() {
+void ReplicaSetMonitorImpl::runScanForMockReplicaSet() {
     stdx::lock_guard<Latch> lk(_state->mutex);
     _ensureScanInProgress(_state);
 
@@ -511,7 +508,7 @@ void ReplicaSetMonitor::runScanForMockReplicaSet() {
     invariant(_state->currentScan == nullptr);
 }
 
-void ReplicaSetMonitor::_ensureScanInProgress(const SetStatePtr& state) {
+void ReplicaSetMonitorImpl::_ensureScanInProgress(const SetStatePtr& state) {
     Refresher(state).scheduleNetworkRequests();
 }
 
@@ -1234,7 +1231,7 @@ std::vector<HostAndPort> SetState::getMatchingHosts(const ReadPreferenceSetting&
             // Note that the host list is only deterministic (or random) for the first node.
             // The rest of the list is in matchingNodes order (latency) with one element swapped
             // for the first element.
-            if (auto bestHostIdx = ReplicaSetMonitor::useDeterministicHostSelection
+            if (auto bestHostIdx = ReplicaSetMonitorImpl::useDeterministicHostSelection
                     ? roundRobin++ % hosts.size()
                     : rand.nextInt32(hosts.size())) {
                 using std::swap;

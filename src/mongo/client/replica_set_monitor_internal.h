@@ -51,7 +51,7 @@
 
 namespace mongo {
 
-struct ReplicaSetMonitor::IsMasterReply {
+struct ReplicaSetMonitorImpl::IsMasterReply {
     IsMasterReply() : ok(false) {}
     IsMasterReply(const HostAndPort& host, int64_t latencyMicros, const BSONObj& reply)
         : ok(false), host(host), latencyMicros(latencyMicros) {
@@ -92,8 +92,8 @@ struct ReplicaSetMonitor::IsMasterReply {
  * be offloaded to the RSM eventually. In all other cases, the RSM and RSM::Refresher use the
  * SetState lock to synchronize.
  */
-struct ReplicaSetMonitor::SetState
-    : public std::enable_shared_from_this<ReplicaSetMonitor::SetState> {
+struct ReplicaSetMonitorImpl::SetState
+    : public std::enable_shared_from_this<ReplicaSetMonitorImpl::SetState> {
     SetState(const SetState&) = delete;
     SetState& operator=(const SetState&) = delete;
 
@@ -288,7 +288,7 @@ public:
     Date_t nextScanTime;        // The time at which the next scan is scheduled to start
 };
 
-struct ReplicaSetMonitor::ScanState {
+struct ReplicaSetMonitorImpl::ScanState {
     ScanState(const ScanState&) = delete;
     ScanState& operator=(const ScanState&) = delete;
 

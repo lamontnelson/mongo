@@ -174,7 +174,7 @@ private:
 
 void ShardingTaskExecutorPoolController::init(ConnectionPool* parent) {
     ControllerInterface::init(parent);
-    _listener = ReplicaSetMonitor::getNotifier().makeListener<ReplicaSetChangeListener>(this);
+    _listener = ReplicaSetMonitorImpl::getNotifier().makeListener<ReplicaSetChangeListener>(this);
 }
 
 void ShardingTaskExecutorPoolController::addHost(PoolId id, const HostAndPort& host) {

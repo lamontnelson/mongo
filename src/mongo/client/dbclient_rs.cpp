@@ -138,9 +138,9 @@ DBClientReplicaSet::DBClientReplicaSet(const string& name,
       _so_timeout(so_timeout),
       _uri(std::move(uri)) {
     if (_uri.isValid()) {
-        _rsm = ReplicaSetMonitor::createIfNeeded(_uri);
+        _rsm = ReplicaSetMonitorImpl::createIfNeeded(_uri);
     } else {
-        _rsm = ReplicaSetMonitor::createIfNeeded(name,
+        _rsm = ReplicaSetMonitorImpl::createIfNeeded(name,
                                                  set<HostAndPort>(servers.begin(), servers.end()));
     }
 }

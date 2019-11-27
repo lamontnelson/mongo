@@ -426,7 +426,7 @@ BSONObj replMonitorStats(const BSONObj& a, void* data) {
             a.nFields() == 1 && a.firstElement().type() == String);
 
     auto name = a.firstElement().valuestrsafe();
-    ReplicaSetMonitorPtr rsm = ReplicaSetMonitor::get(name);
+    ReplicaSetMonitorPtr rsm = ReplicaSetMonitorImpl::get(name);
     if (!rsm) {
         return BSON(""
                     << "no ReplSetMonitor exists by that name");

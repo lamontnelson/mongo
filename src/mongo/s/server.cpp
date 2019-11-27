@@ -147,7 +147,7 @@ Status waitForSigningKeys(OperationContext* opCtx) {
         invariant(shardRegistry->isUp());
 
         auto configCS = shardRegistry->getConfigServerConnectionString();
-        auto rsm = ReplicaSetMonitor::get(configCS.getSetName());
+        auto rsm = ReplicaSetMonitorImpl::get(configCS.getSetName());
         // mongod will set minWireVersion == maxWireVersion for isMaster requests from
         // internalClient.
         if (rsm && (rsm->getMaxWireVersion() < WireVersion::SUPPORTS_OP_MSG)) {
@@ -276,7 +276,7 @@ void cleanupTask(ServiceContext* serviceContext) {
             lsc->joinOnShutDown();
         }
 
-        ReplicaSetMonitor::shutdown();
+        ReplicaSetMonitorImpl::shutdown();
 
         opCtx->setIsExecutingShutdown();
 
@@ -537,7 +537,7 @@ ExitCode runMongosServer(ServiceContext* serviceContext) {
     // Hook up a Listener for changes from the ReplicaSetMonitor
     // This will last for the scope of this function. i.e. until shutdown finishes
     auto shardingRSCL =
-        ReplicaSetMonitor::getNotifier().makeListener<ShardingReplicaSetChangeListener>(
+        ReplicaSetMonitorImpl::getNotifier().makeListener<ShardingReplicaSetChangeListener>(
             serviceContext);
 
     // Mongos connection pools already takes care of authenticating new connections so the

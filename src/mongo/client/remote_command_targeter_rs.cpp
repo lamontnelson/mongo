@@ -50,7 +50,7 @@ RemoteCommandTargeterRS::RemoteCommandTargeterRS(const std::string& rsName,
     : _rsName(rsName) {
 
     std::set<HostAndPort> seedServers(seedHosts.begin(), seedHosts.end());
-    _rsMonitor = ReplicaSetMonitor::createIfNeeded(rsName, seedServers);
+    _rsMonitor = ReplicaSetMonitorImpl::createIfNeeded(rsName, seedServers);
 
     LOG(1) << "Started targeter for "
            << ConnectionString::forReplicaSet(

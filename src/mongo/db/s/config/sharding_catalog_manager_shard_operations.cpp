@@ -574,7 +574,7 @@ StatusWith<std::string> ShardingCatalogManager::addShard(
             // requested to be added and we put that bad connection string on the global replica set
             // monitor registry. It needs to be cleaned up so that when a correct replica set is
             // added, it will be recreated.
-            ReplicaSetMonitor::remove(shardConnectionString.getSetName());
+            ReplicaSetMonitorImpl::remove(shardConnectionString.getSetName());
         }
     });
 
@@ -847,7 +847,7 @@ RemoveShardProgress ShardingCatalogManager::removeShard(OperationContext* opCtx,
         str::stream() << "error completing removeShard operation on: " << name);
 
     shardConnectionPool.removeHost(name);
-    ReplicaSetMonitor::remove(name);
+    ReplicaSetMonitorImpl::remove(name);
 
     shardRegistry->reload(opCtx);
 

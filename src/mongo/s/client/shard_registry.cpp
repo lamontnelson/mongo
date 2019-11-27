@@ -336,7 +336,7 @@ bool ShardRegistry::reload(OperationContext* opCtx) {
         invariant(shard);
 
         auto name = shard->getConnString().getSetName();
-        ReplicaSetMonitor::remove(name);
+        ReplicaSetMonitorImpl::remove(name);
         for (auto& callback : _shardRemovalHooks) {
             // Run callbacks asynchronously.
             ExecutorFuture<void>(Grid::get(opCtx)->getExecutorPool()->getFixedExecutor())

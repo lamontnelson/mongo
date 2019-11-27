@@ -151,7 +151,7 @@ void ShardingInitializationMongoD::initializeShardingEnvironmentOnShardServer(
         opCtx, shardIdentity.getConfigsvrConnectionString(), distLockProcessId);
 
     _replicaSetChangeListener =
-        ReplicaSetMonitor::getNotifier().makeListener<ShardingReplicaSetChangeListener>(
+        ReplicaSetMonitorImpl::getNotifier().makeListener<ShardingReplicaSetChangeListener>(
             opCtx->getServiceContext());
 
     // Determine primary/secondary/standalone state in order to properly initialize sharding

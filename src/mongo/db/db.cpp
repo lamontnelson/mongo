@@ -983,7 +983,7 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     // Depends on setKillAllOperations() above to interrupt the index build operations.
     IndexBuildsCoordinator::get(serviceContext)->shutdown();
 
-    ReplicaSetMonitor::shutdown();
+    ReplicaSetMonitorImpl::shutdown();
 
     if (auto sr = Grid::get(serviceContext)->shardRegistry()) {
         sr->shutdown();

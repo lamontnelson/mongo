@@ -63,13 +63,13 @@ using executor::TaskExecutor;
 using executor::TaskExecutorPool;
 using executor::ThreadPoolTaskExecutor;
 
-ReplicaSetMonitorManager::ReplicaSetMonitorManager() {}
+ReplicaSetMonitorManagerImpl::ReplicaSetMonitorManagerImpl() {}
 
-ReplicaSetMonitorManager::~ReplicaSetMonitorManager() {
+ReplicaSetMonitorManagerImpl::~ReplicaSetMonitorManagerImpl() {
     shutdown();
 }
 
-shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getMonitor(StringData setName) {
+shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManagerImpl::getMonitor(StringData setName) {
     stdx::lock_guard<Latch> lk(_mutex);
 
     if (auto monitor = _monitors[setName].lock()) {
@@ -79,7 +79,7 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getMonitor(StringData se
     }
 }
 
-void ReplicaSetMonitorManager::_setupTaskExecutorInLock() {
+void ReplicaSetMonitorManagerImpl::_setupTaskExecutorInLock() {
     if (_isShutdown || _taskExecutor) {
         // do not restart taskExecutor if is in shutdown
         return;
@@ -100,12 +100,12 @@ void uassertNotMixingSSL(transport::ConnectSSLMode a, transport::ConnectSSLMode 
 }
 }  // namespace
 
-shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(
+shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManagerImpl::getOrCreateMonitor(
     const ConnectionString& connStr) {
     return getOrCreateMonitor(MongoURI(connStr));
 }
 
-shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const MongoURI& uri) {
+shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManagerImpl::getOrCreateMonitor(const MongoURI& uri) {
     invariant(uri.type() == ConnectionString::SET);
 
     stdx::lock_guard<Latch> lk(_mutex);
@@ -123,13 +123,13 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
 
     log() << "Starting new replica set monitor for " << uri.toString();
 
-    auto newMonitor = std::make_shared<ReplicaSetMonitor>(uri);
+    auto newMonitor = std::make_shared<ReplicaSetMonitorImpl>(uri);
     _monitors[setName] = newMonitor;
     newMonitor->init();
     return newMonitor;
 }
 
-vector<string> ReplicaSetMonitorManager::getAllSetNames() {
+vector<string> ReplicaSetMonitorManagerImpl::getAllSetNames() {
     vector<string> allNames;
 
     stdx::lock_guard<Latch> lk(_mutex);
@@ -141,7 +141,7 @@ vector<string> ReplicaSetMonitorManager::getAllSetNames() {
     return allNames;
 }
 
-void ReplicaSetMonitorManager::removeMonitor(StringData setName) {
+void ReplicaSetMonitorManagerImpl::removeMonitor(StringData setName) {
     stdx::lock_guard<Latch> lk(_mutex);
     ReplicaSetMonitorsMap::const_iterator it = _monitors.find(setName);
     if (it != _monitors.end()) {
@@ -153,7 +153,7 @@ void ReplicaSetMonitorManager::removeMonitor(StringData setName) {
     }
 }
 
-void ReplicaSetMonitorManager::shutdown() {
+void ReplicaSetMonitorManagerImpl::shutdown() {
     // Sadly, this function can run very late in the post-main shutdown because there is still
     // a globalRSMonitorManager. We have to be very carefully how we log because this can actually
     // shutdown later than the logging subsystem. This will be less of an issue once SERVER-42437 is
@@ -193,7 +193,7 @@ void ReplicaSetMonitorManager::shutdown() {
     }
 }
 
-void ReplicaSetMonitorManager::removeAllMonitors() {
+void ReplicaSetMonitorManagerImpl::removeAllMonitors() {
     shutdown();
 
     {
@@ -202,7 +202,7 @@ void ReplicaSetMonitorManager::removeAllMonitors() {
     }
 }
 
-void ReplicaSetMonitorManager::report(BSONObjBuilder* builder, bool forFTDC) {
+void ReplicaSetMonitorManagerImpl::report(BSONObjBuilder* builder, bool forFTDC) {
     // Don't hold _mutex the whole time to avoid ever taking a monitor's mutex while holding the
     // manager's mutex.  Otherwise we could get a deadlock between the manager's, monitor's, and
     // ShardRegistry's mutex due to the ReplicaSetMonitor's AsynchronousConfigChangeHook potentially
@@ -221,16 +221,16 @@ void ReplicaSetMonitorManager::report(BSONObjBuilder* builder, bool forFTDC) {
     }
 }
 
-TaskExecutor* ReplicaSetMonitorManager::getExecutor() {
+TaskExecutor* ReplicaSetMonitorManagerImpl::getExecutor() {
     invariant(_taskExecutor);
     return _taskExecutor.get();
 }
 
-ReplicaSetChangeNotifier& ReplicaSetMonitorManager::getNotifier() {
+ReplicaSetChangeNotifier& ReplicaSetMonitorManagerImpl::getNotifier() {
     return _notifier;
 }
 
-bool ReplicaSetMonitorManager::isShutdown() const {
+bool ReplicaSetMonitorManagerImpl::isShutdown() const {
     stdx::lock_guard<Latch> lk(_mutex);
     return _isShutdown;
 }

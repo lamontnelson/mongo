@@ -42,6 +42,6 @@ extern DBConnectionPool globalConnPool;
 /**
  * Maintains the replica set monitors associated with the global connection pool.
  */
-extern ReplicaSetMonitorManager globalRSMonitorManager;
+extern ReplicaSetMonitorManagerImpl globalRSMonitorManager;
 
 }  // namespace mongo

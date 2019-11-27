@@ -793,7 +793,7 @@ void MongoBase::Functions::_markNodeAsFailed::call(JSContext* cx, JS::CallArgs a
     auto reason = ValueWriter(cx, args.get(2)).toString();
 
     const auto& replicaSetName = rsConn->getSetName();
-    ReplicaSetMonitor::get(replicaSetName)
+    ReplicaSetMonitorImpl::get(replicaSetName)
         ->failedHost(HostAndPort(hostAndPort),
                      Status{static_cast<ErrorCodes::Error>(code), reason});
 

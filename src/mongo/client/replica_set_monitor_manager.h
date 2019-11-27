@@ -48,12 +48,60 @@ class MongoURI;
  * Manages the lifetime of a set of replica set monitors.
  */
 class ReplicaSetMonitorManager {
-    ReplicaSetMonitorManager(const ReplicaSetMonitorManager&) = delete;
-    ReplicaSetMonitorManager& operator=(const ReplicaSetMonitorManager&) = delete;
+public:
+    /**
+     * Create or retrieve a monitor for a particular replica set. The getter method returns
+     * nullptr if there is no monitor registered for the particular replica set.
+     */
+    virtual std::shared_ptr<ReplicaSetMonitor> getMonitor(StringData setName) = 0;
+    virtual std::shared_ptr<ReplicaSetMonitor> getOrCreateMonitor(const ConnectionString& connStr) = 0;
+    virtual std::shared_ptr<ReplicaSetMonitor> getOrCreateMonitor(const MongoURI& uri) = 0;
+
+    /**
+     * Retrieves the names of all sets tracked by this manager.
+     */
+    virtual std::vector<std::string> getAllSetNames() = 0;
+
+    /**
+     * Removes the specified replica set monitor from being tracked, if it exists. Otherwise
+     * does nothing. Once all shared_ptr references to that monitor are released, the monitor
+     * will be destroyed and will no longer be tracked.
+     */
+    virtual void removeMonitor(StringData setName) = 0;
+
+    /**
+     * Removes and destroys all replica set monitors. Should be used for unit tests only.
+     */
+    virtual void removeAllMonitors() = 0;
+
+    /**
+     * Shuts down _taskExecutor.
+     */
+    virtual void shutdown() = 0;
+
+    /**
+     * Reports information about the replica sets tracked by us, for diagnostic purposes. If
+     * forFTDC, trim to minimize its size for full-time diagnostic data capture.
+     */
+    virtual void report(BSONObjBuilder* builder, bool forFTDC = false) = 0;
+
+    /**
+     * Returns an executor for running RSM tasks.
+     */
+    virtual executor::TaskExecutor* getExecutor() = 0;
+
+    virtual ReplicaSetChangeNotifier& getNotifier() = 0;
+
+    virtual bool isShutdown() const = 0;
+};
+
+class ReplicaSetMonitorManagerImpl : public ReplicaSetMonitorManager {
+    ReplicaSetMonitorManagerImpl(const ReplicaSetMonitorManagerImpl&) = delete;
+    ReplicaSetMonitorManagerImpl& operator=(const ReplicaSetMonitorManagerImpl&) = delete;
 
 public:
-    ReplicaSetMonitorManager();
-    ~ReplicaSetMonitorManager();
+    ReplicaSetMonitorManagerImpl();
+    virtual ~ReplicaSetMonitorManagerImpl();
 
     /**
      * Create or retrieve a monitor for a particular replica set. The getter method returns
