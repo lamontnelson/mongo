@@ -147,12 +147,6 @@ public:
     virtual std::string getServerAddress() const = 0;
 
     /**
-     * Returns the URI that was used to construct this monitor.
-     * It IS NOT updated to reflect the current members of the set.
-     */
-    virtual const MongoURI& getOriginalUri() const = 0;
-
-    /**
      * Is server part of this set? Uses only cached information.
      */
     virtual bool contains(const HostAndPort& server) const = 0;
