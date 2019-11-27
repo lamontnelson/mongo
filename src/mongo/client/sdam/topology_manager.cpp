@@ -32,20 +32,6 @@
 
 namespace mongo::sdam {
 
-// Utility functions to use when finding servers
-static auto minWireCompare = [](const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
-    return a->getMinWireVersion() < b->getMinWireVersion();
-};
-
-static auto maxWireCompare = [](const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
-    return a->getMaxWireVersion() < b->getMaxWireVersion();
-};
-
-static auto primaryPredicate = [](const ServerDescriptionPtr& server) {
-    return server->getType() == ServerType::kRSPrimary;
-};
-
-
 TopologyManager::TopologyManager(SdamConfiguration config, ClockSource* clockSource)
     : _config(std::move(config)),
       _clockSource(clockSource),
@@ -73,7 +59,24 @@ const std::shared_ptr<TopologyDescription> TopologyManager::getTopologyDescripti
     return _topologyDescription;
 }
 
+/////////////////////////////////
 // Replica Set Monitor Interface
+/////////////////////////////////
+
+// Utility functions to use when finding servers
+static auto minWireCompare = [](const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
+  return a->getMinWireVersion() < b->getMinWireVersion();
+};
+
+static auto maxWireCompare = [](const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
+  return a->getMaxWireVersion() < b->getMaxWireVersion();
+};
+
+static auto primaryPredicate = [](const ServerDescriptionPtr& server) {
+  return server->getType() == ServerType::kRSPrimary;
+};
+
+
 /**
  * Schedules the initial refresh task into task executor.
  */
@@ -85,7 +88,7 @@ void TopologyManager::init(){
  * Ends any ongoing refreshes.
  */
 void TopologyManager::drop(){
-    // TODO
+    // TODO: probably don't need this
 };
 
 /**
@@ -138,7 +141,6 @@ void TopologyManager::failedHost(const HostAndPort& host, const Status& status){
     // TODO
 };
 
-
 boost::optional<ServerDescriptionPtr> TopologyManager::_currentPrimary() const {
     const auto primaries = getTopologyDescription()->findServers(primaryPredicate);
     invariant(primaries.size() <= 1);  // TODO: check this invariant
@@ -162,10 +164,9 @@ bool TopologyManager::isPrimary(const HostAndPort& host) const {
  * queries).
  */
 bool TopologyManager::isHostUp(const HostAndPort& host) const {
-    // TODO: this is probably the right impl since sdam remove servers that have problems
+    // TODO: this is probably the right impl since sdam removes servers that have problems
     return getTopologyDescription()->findServerByAddress(host.toString()) != boost::none;
 };
-
 
 /**
  * Returns the minimum wire version supported across the replica set.
@@ -180,7 +181,6 @@ int TopologyManager::getMinWireVersion() const {
         return -1;  // TODO: check this case / MONGO_UNREACHABLE?
     }
 };
-
 
 /**
  * Returns the maximum wire version supported across the replica set.
@@ -241,8 +241,8 @@ bool TopologyManager::contains(const HostAndPort& server) const {
  */
 void TopologyManager::appendInfo(BSONObjBuilder& b, bool forFTDC) const {
     MONGO_UNREACHABLE;
+    // TODO
 };
-
 
 /**
  * Returns true if the monitor knows a usable primary from it's interal view.
