@@ -103,13 +103,13 @@ void TopologyManager::drop(){
  *  FailedToSatisfyReadPreference, if node cannot be found, which matches the read preference.
  */
 SemiFuture<HostAndPort> TopologyManager::getHostOrRefresh(const ReadPreferenceSetting& readPref,
-                                                          Milliseconds maxWait){
+                                                          Milliseconds maxWait) {
     // TODO
     return SemiFuture<HostAndPort>();
 };
 
 SemiFuture<std::vector<HostAndPort>> TopologyManager::getHostsOrRefresh(
-    const ReadPreferenceSetting& readPref, Milliseconds maxWait){
+    const ReadPreferenceSetting& readPref, Milliseconds maxWait) {
     // TODO
     return SemiFuture<std::vector<HostAndPort>>();
 };
@@ -121,7 +121,7 @@ SemiFuture<std::vector<HostAndPort>> TopologyManager::getHostsOrRefresh(
  * don't think there is a master at first. The main difference is that this will uassert
  * rather than returning an empty HostAndPort.
  */
-HostAndPort TopologyManager::getMasterOrUassert(){
+HostAndPort TopologyManager::getMasterOrUassert() {
     // TODO
     return HostAndPort();
 };
@@ -141,7 +141,7 @@ void TopologyManager::failedHost(const HostAndPort& host, const Status& status){
 
 boost::optional<ServerDescriptionPtr> TopologyManager::_currentPrimary() const {
     const auto primaries = getTopologyDescription()->findServers(primaryPredicate);
-    invariant(primaries.size() <= 1);
+    invariant(primaries.size() <= 1);  // TODO: check this invariant
     return (primaries.size()) ? boost::optional<ServerDescriptionPtr>(primaries[0]) : boost::none;
 }
 
