@@ -125,7 +125,6 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
 
     auto newMonitor = std::make_shared<ReplicaSetMonitor>(uri);
     _monitors[setName] = newMonitor;
-    newMonitor->init();
     return newMonitor;
 }
 
@@ -146,7 +145,7 @@ void ReplicaSetMonitorManager::removeMonitor(StringData setName) {
     ReplicaSetMonitorsMap::const_iterator it = _monitors.find(setName);
     if (it != _monitors.end()) {
         if (auto monitor = it->second.lock()) {
-            monitor->drop();
+//            monitor->drop();
         }
         _monitors.erase(it);
         log() << "Removed ReplicaSetMonitor for replica set " << setName;
@@ -185,7 +184,7 @@ void ReplicaSetMonitorManager::shutdown() {
             continue;
         }
 
-        anchor->drop();
+//        anchor->drop();
     }
 
     if (taskExecutor) {

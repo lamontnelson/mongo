@@ -42,6 +42,7 @@
 #include "mongo/util/duration.h"
 #include "mongo/util/net/hostandport.h"
 #include "mongo/util/time_support.h"
+#include "mongo/client/sdam/topology_manager.h"
 
 namespace mongo {
 
@@ -69,16 +70,6 @@ public:
      * Initializes local state from a MongoURI.
      */
     ReplicaSetMonitor(const MongoURI& uri);
-
-    /**
-     * Schedules the initial refresh task into task executor.
-     */
-    void init();
-
-    /**
-     * Ends any ongoing refreshes.
-     */
-    void drop();
 
     /**
      * Returns a host matching the given read preference or an error, if no host matches.
@@ -229,16 +220,6 @@ public:
     // internal types (defined in replica_set_monitor_internal.h)
     //
 
-    struct IsMasterReply;
-    struct ScanState;
-    struct SetState;
-    typedef std::shared_ptr<ScanState> ScanStatePtr;
-    typedef std::shared_ptr<SetState> SetStatePtr;
-
-    /**
-     * Allows tests to set initial conditions and introspect the current state.
-     */
-    explicit ReplicaSetMonitor(const SetStatePtr& initialState);
     ~ReplicaSetMonitor();
 
     /**
@@ -265,90 +246,8 @@ public:
 private:
     Future<std::vector<HostAndPort>> _getHostsOrRefresh(const ReadPreferenceSetting& readPref,
                                                         Milliseconds maxWait);
-    /**
-     * If no scan is in-progress, this function is responsible for setting up a new scan. Otherwise,
-     * does nothing.
-     */
-    static void _ensureScanInProgress(const SetStatePtr&);
 
-    const SetStatePtr _state;
+    sdam::TopologyManagerPtr _topologyManager;
+    const MongoURI _uri;
 };
-
-
-/**
- * Refreshes the local view of a replica set.
- *
- * All logic related to choosing the hosts to contact and updating the SetState based on replies
- * lives in this class. Use of this class should always be guarded by SetState::mutex unless in
- * single-threaded use by ReplicaSetMonitorTest.
- */
-class ReplicaSetMonitor::Refresher {
-public:
-    explicit Refresher(const SetStatePtr& setState);
-
-    struct NextStep {
-        enum StepKind {
-            CONTACT_HOST,  /// Contact the returned host
-            WAIT,          /// Wait on condition variable and try again.
-            DONE,          /// No more hosts to contact in this Refresh round
-        };
-
-        explicit NextStep(StepKind step, const HostAndPort& host = HostAndPort())
-            : step(step), host(host) {}
-
-        StepKind step;
-        HostAndPort host;
-    };
-
-    /**
-     * Returns the next step to take.
-     *
-     * By calling this, you promise to call receivedIsMaster or failedHost if the NextStep is
-     * CONTACT_HOST.
-     */
-    NextStep getNextStep();
-
-    /**
-     * Call this if a host returned from getNextStep successfully replied to an isMaster call.
-     * Negative latencyMicros are ignored.
-     */
-    void receivedIsMaster(const HostAndPort& from, int64_t latencyMicros, const BSONObj& reply);
-
-    /**
-     * Call this if a host returned from getNextStep failed to reply to an isMaster call.
-     */
-    void failedHost(const HostAndPort& host, const Status& status);
-
-    /**
-     * Starts a new scan over the hosts in set.
-     */
-    void startNewScan();
-
-    /**
-     * First, checks that the "reply" is not from a stale primary by comparing the electionId of
-     * "reply" to the maxElectionId recorded by the SetState and returns OK status if "reply"
-     * belongs to a non-stale primary. Otherwise returns a failed status.
-     *
-     * The 'from' parameter specifies the node from which the response is received.
-     *
-     * Updates _set and _scan based on set-membership information from a master.
-     * Applies _scan->unconfirmedReplies to confirmed nodes.
-     * Does not update this host's node in _set->nodes.
-     */
-    Status receivedIsMasterFromMaster(const HostAndPort& from, const IsMasterReply& reply);
-
-    /**
-     * Schedules isMaster requests to all hosts that currently need to be contacted.
-     * Does nothing if requests have already been sent to all known hosts.
-     */
-    void scheduleNetworkRequests();
-
-    void scheduleIsMaster(const HostAndPort& host);
-
-private:
-    // Both pointers are never NULL
-    SetStatePtr _set;
-    ScanStatePtr _scan;  // May differ from _set->currentScan if a new scan has started.
-};
-
 }  // namespace mongo
