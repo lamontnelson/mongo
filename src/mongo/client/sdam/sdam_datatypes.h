@@ -126,4 +126,7 @@ using ServerDescriptionPtr = std::shared_ptr<ServerDescription>;
 
 class TopologyDescription;
 using TopologyDescriptionPtr = std::shared_ptr<TopologyDescription>;
+
+class TopologyManager;
+using TopologyManagerPtr = std::unique_ptr<TopologyManager>;
 };  // namespace mongo::sdam
