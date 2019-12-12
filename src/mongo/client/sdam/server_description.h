@@ -78,6 +78,7 @@ public:
     const boost::optional<ServerAddress>& getMe() const;
     const boost::optional<std::string>& getSetName() const;
     const std::map<std::string, std::string>& getTags() const;
+    void getBsonTags(BSONObjBuilder& builder) const;
 
     // network attributes
     const boost::optional<std::string>& getError() const;
@@ -104,9 +105,11 @@ public:
     const boost::optional<int>& getSetVersion() const;
     const boost::optional<OID>& getElectionId() const;
     const boost::optional<TopologyVersion>& getTopologyVersion() const;
+    const boost::optional<TopologyDescriptionPtr> getTopologyDescription();
 
     BSONObj toBson() const;
     std::string toString() const;
+    ServerDescriptionPtr cloneWithRTT(IsMasterRTT rtt);
 
 private:
     /**
@@ -202,6 +205,10 @@ private:
     // pool for server. Incremented on network error or timeout.
     int _poolResetCounter = 0;
 
+    // The topology description of that we are a part of
+    boost::optional<std::weak_ptr<TopologyDescription>> _topologyDescription;
+
+    friend class TopologyDescription;
     friend class ServerDescriptionBuilder;
 };
 

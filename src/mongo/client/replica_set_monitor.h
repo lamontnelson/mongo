@@ -31,13 +31,18 @@
 
 #include <functional>
 #include <memory>
+#include <mongo/executor/task_executor.h>
 #include <set>
 #include <string>
 
 #include "mongo/base/string_data.h"
 #include "mongo/client/mongo_uri.h"
 #include "mongo/client/replica_set_change_notifier.h"
+#include "mongo/client/sdam/sdam.h"
+#include "mongo/client/sdam/sdam_datatypes.h"
+#include "mongo/client/server_is_master_monitor.h"
 #include "mongo/executor/task_executor.h"
+#include "mongo/logger/log_component.h"
 #include "mongo/util/concurrency/with_lock.h"
 #include "mongo/util/duration.h"
 #include "mongo/util/net/hostandport.h"
@@ -55,7 +60,9 @@ typedef std::shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorPtr;
  * Holds state about a replica set and provides a means to refresh the local view.
  * All methods perform the required synchronization to allow callers from multiple threads.
  */
-class ReplicaSetMonitor {
+class ReplicaSetMonitor : public sdam::TopologyListener,
+                          public std::enable_shared_from_this<ReplicaSetMonitor> {
+
     ReplicaSetMonitor(const ReplicaSetMonitor&) = delete;
     ReplicaSetMonitor& operator=(const ReplicaSetMonitor&) = delete;
 
@@ -66,19 +73,39 @@ public:
     static constexpr auto kCheckTimeout = Seconds(5);
 
     /**
-     * Initializes local state from a MongoURI.
+     * Constructs a RSM instance from a mongoURI.
+     * If the executor param is provided the RSM will use this to execute isMaster requests (for
+     * testing)
      */
-    ReplicaSetMonitor(const MongoURI& uri);
+    ReplicaSetMonitor(const MongoURI& uri,
+                      std::shared_ptr<executor::TaskExecutor> executor = nullptr);
 
     /**
-     * Schedules the initial refresh task into task executor.
+     * Performs post-construction initialization. This function must be called exactly once before
+     * the instance is used. Call the make static function to create and init RSM instances.
      */
     void init();
 
     /**
-     * Ends any ongoing refreshes.
+     * Closes this RSM instance. This RSM instance is no longer useable once the function exits.
+     * Should be called exactly once.
      */
-    void drop();
+    void close();
+    inline bool isClosed() const;
+
+    /**
+     * Create a Replica Set monitor instance and fully initialize it.
+     * Use this instead of the constructor to create instances.
+     */
+    static ReplicaSetMonitorPtr make(const MongoURI& uri,
+                                     std::shared_ptr<executor::TaskExecutor> executor = nullptr);
+
+    /**
+     * Permanently stops all monitoring on replica sets and clears all cached information
+     * as well. As a consequence, NEVER call this if you have other threads that have a
+     * DBClientReplicaSet instance. This method should be used for unit test only.
+     */
+    static void cleanup();
 
     /**
      * Returns a host matching the given read preference or an error, if no host matches.
@@ -112,12 +139,9 @@ public:
     /**
      * Notifies this Monitor that a host has failed because of the specified error 'status' and
      * should be considered down.
-     *
-     * Call this when you get a connection error. If you get an error while trying to refresh our
-     * view of a host, call Refresher::failedHost instead because it bypasses taking the monitor's
-     * mutex.
      */
     void failedHost(const HostAndPort& host, const Status& status);
+    void failedHost(const HostAndPort& host, BSONObj bson, const Status& status);
 
     /**
      * Returns true if this node is the master based ONLY on local data. Be careful, return may
@@ -202,18 +226,6 @@ public:
      */
     static ReplicaSetChangeNotifier& getNotifier();
 
-    /**
-     * Permanently stops all monitoring on replica sets and clears all cached information
-     * as well. As a consequence, NEVER call this if you have other threads that have a
-     * DBClientReplicaSet instance. This method should be used for unit test only.
-     */
-    static void cleanup();
-
-    /**
-     * Use these to speed up tests by disabling the sleep-and-retry loops and cause errors to be
-     * reported immediately.
-     */
-    static void disableRefreshRetries_forTest();
 
     /**
      * Permanently stops all monitoring on replica sets.
@@ -221,134 +233,85 @@ public:
     static void shutdown();
 
     /**
-     * Returns the refresh period that is given to all new SetStates.
-     */
-    static Seconds getDefaultRefreshPeriod();
-
-    //
-    // internal types (defined in replica_set_monitor_internal.h)
-    //
-
-    struct IsMasterReply;
-    struct ScanState;
-    struct SetState;
-    typedef std::shared_ptr<ScanState> ScanStatePtr;
-    typedef std::shared_ptr<SetState> SetStatePtr;
-
-    /**
-     * Allows tests to set initial conditions and introspect the current state.
-     */
-    explicit ReplicaSetMonitor(const SetStatePtr& initialState);
-    ~ReplicaSetMonitor();
-
-    /**
      * The default timeout, which will be used for finding a replica set host if the caller does
      * not explicitly specify it.
      */
-    static const Seconds kDefaultFindHostTimeout;
-
-    /**
-     * Defaults to false, meaning that if multiple hosts meet a criteria we pick one at random.
-     * This is required by the replica set driver spec. Set this to true in tests that need host
-     * selection to be deterministic.
-     *
-     * NOTE: Used by unit-tests only.
-     */
-    static bool useDeterministicHostSelection;
-
-    /**
-     * This is for use in tests using MockReplicaSet to ensure that a full scan completes before
-     * continuing.
-     */
-    void runScanForMockReplicaSet();
+    static inline const Seconds kDefaultFindHostTimeout{15};
 
 private:
-    Future<std::vector<HostAndPort>> _getHostsOrRefresh(const ReadPreferenceSetting& readPref,
-                                                        Milliseconds maxWait);
-    /**
-     * If no scan is in-progress, this function is responsible for setting up a new scan. Otherwise,
-     * does nothing.
-     */
-    static void _ensureScanInProgress(const SetStatePtr&);
-
-    const SetStatePtr _state;
-};
-
-
-/**
- * Refreshes the local view of a replica set.
- *
- * All logic related to choosing the hosts to contact and updating the SetState based on replies
- * lives in this class. Use of this class should always be guarded by SetState::mutex unless in
- * single-threaded use by ReplicaSetMonitorTest.
- */
-class ReplicaSetMonitor::Refresher {
-public:
-    explicit Refresher(const SetStatePtr& setState);
-
-    struct NextStep {
-        enum StepKind {
-            CONTACT_HOST,  /// Contact the returned host
-            WAIT,          /// Wait on condition variable and try again.
-            DONE,          /// No more hosts to contact in this Refresh round
-        };
-
-        explicit NextStep(StepKind step, const HostAndPort& host = HostAndPort())
-            : step(step), host(host) {}
-
-        StepKind step;
-        HostAndPort host;
+    struct HostQuery {
+        Date_t deadline;
+        executor::TaskExecutor::CallbackHandle deadlineHandle;
+        ReadPreferenceSetting criteria;
+        Date_t start = Date_t::now();
+        bool done = false;
+        Promise<std::vector<HostAndPort>> promise;
     };
+    using HostQueryPtr = std::shared_ptr<HostQuery>;
 
-    /**
-     * Returns the next step to take.
-     *
-     * By calling this, you promise to call receivedIsMaster or failedHost if the NextStep is
-     * CONTACT_HOST.
-     */
-    NextStep getNextStep();
+    std::vector<HostAndPort> _extractHosts(
+        const std::vector<sdam::ServerDescriptionPtr>& serverDescriptions);
+    boost::optional<std::vector<HostAndPort>> _getHosts(const ReadPreferenceSetting& criteria);
+    void _satisfyOutstandingQueries(WithLock);
 
-    /**
-     * Call this if a host returned from getNextStep successfully replied to an isMaster call.
-     * Negative latencyMicros are ignored.
-     */
-    void receivedIsMaster(const HostAndPort& from, int64_t latencyMicros, const BSONObj& reply);
+    void onTopologyDescriptionChangedEvent(UUID topologyId,
+                                           sdam::TopologyDescriptionPtr previousDescription,
+                                           sdam::TopologyDescriptionPtr newDescription) override;
 
-    /**
-     * Call this if a host returned from getNextStep failed to reply to an isMaster call.
-     */
-    void failedHost(const HostAndPort& host, const Status& status);
+    void onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durationMs,
+                                         const sdam::ServerAddress& hostAndPort,
+                                         const BSONObj reply) override;
 
-    /**
-     * Starts a new scan over the hosts in set.
-     */
-    void startNewScan();
+    void onServerPingFailedEvent(const sdam::ServerAddress& hostAndPort,
+                                 const Status& status) override;
 
-    /**
-     * First, checks that the "reply" is not from a stale primary by comparing the electionId of
-     * "reply" to the maxElectionId recorded by the SetState and returns OK status if "reply"
-     * belongs to a non-stale primary. Otherwise returns a failed status.
-     *
-     * The 'from' parameter specifies the node from which the response is received.
-     *
-     * Updates _set and _scan based on set-membership information from a master.
-     * Applies _scan->unconfirmedReplies to confirmed nodes.
-     * Does not update this host's node in _set->nodes.
-     */
-    Status receivedIsMasterFromMaster(const HostAndPort& from, const IsMasterReply& reply);
+    void onServerPingSucceededEvent(sdam::IsMasterRTT durationMS,
+                                    const sdam::ServerAddress& hostAndPort) override;
 
-    /**
-     * Schedules isMaster requests to all hosts that currently need to be contacted.
-     * Does nothing if requests have already been sent to all known hosts.
-     */
-    void scheduleNetworkRequests();
+    // Get a pointer to the current primary's ServerDescription
+    // To ensure a consistent view of the Topology either _currentPrimary or _currentTopology should
+    // be called (not both) since the topology can change between the function invocations.
+    boost::optional<sdam::ServerDescriptionPtr> _currentPrimary() const;
 
-    void scheduleIsMaster(const HostAndPort& host);
+    // Get the current TopologyDescription
+    // Note that most functions will want to save the result of this function once per computation
+    // so that we are operating on a consistent read-only view of the topology.
+    sdam::TopologyDescriptionPtr _currentTopology() const;
+    boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
+    std::shared_ptr<executor::TaskExecutor> _initTaskExecutor(
+        std::shared_ptr<executor::TaskExecutor> executor);
+    void _startOutstandingQueryProcessor();
+    logger::LogstreamBuilder _logger(int n = -1);
 
-private:
-    // Both pointers are never NULL
-    SetStatePtr _set;
-    ScanStatePtr _scan;  // May differ from _set->currentScan if a new scan has started.
+    sdam::SdamConfiguration _sdamConfig;
+    sdam::TopologyManagerPtr _topologyManager;
+    sdam::ServerSelectorPtr _serverSelector;
+    sdam::TopologyEventsPublisherPtr _eventsPublisher;
+    ServerIsMasterMonitorPtr _isMasterMonitor;
+
+    const MongoURI _uri;
+
+    std::shared_ptr<executor::TaskExecutor> _executor;
+    std::thread _queryProcessorThread;
+    std::atomic_bool _isClosed = true;
+
+    mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
+    // variables below are protected by the mutex
+    ClockSource* _clockSource;
+    stdx::condition_variable _outstandingQueriesCV;
+    std::vector<HostQueryPtr> _outstandingQueries;
+    mutable PseudoRandom _random;
+
+    static inline const auto kServerSelectionConfig =
+        sdam::ServerSelectionConfiguration::defaultConfiguration();
+    static inline const auto kLogPrefix = "ReplicaSetMonitor ";
+
+    void _failOutstandingWitStatus(WithLock, Status status);
+    bool _hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
+                              sdam::TopologyDescriptionPtr newDescription);
+
+    Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
+    Status _makeReplicaSetMonitorRemovedError() const;
 };
 
 }  // namespace mongo

@@ -95,7 +95,7 @@ public:
     /**
      * Returns an executor for running RSM tasks.
      */
-    executor::TaskExecutor* getExecutor();
+    std::shared_ptr<executor::TaskExecutor> getExecutor();
 
     ReplicaSetChangeNotifier& getNotifier();
 
@@ -109,7 +109,7 @@ private:
         MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(4), "ReplicaSetMonitorManager::_mutex");
 
     // Executor for monitoring replica sets.
-    std::unique_ptr<executor::TaskExecutor> _taskExecutor;
+    std::shared_ptr<executor::TaskExecutor> _taskExecutor;
 
     // Widget to notify listeners when a RSM notices a change
     ReplicaSetChangeNotifier _notifier;

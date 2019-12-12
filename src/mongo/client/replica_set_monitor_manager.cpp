@@ -90,7 +90,7 @@ void ReplicaSetMonitorManager::_setupTaskExecutorInLock() {
     auto net = executor::makeNetworkInterface(
         "ReplicaSetMonitor-TaskExecutor", nullptr, std::move(hookList));
     auto pool = std::make_unique<NetworkInterfaceThreadPool>(net.get());
-    _taskExecutor = std::make_unique<ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
+    _taskExecutor = std::make_shared<ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
     _taskExecutor->startup();
 }
 
@@ -107,7 +107,7 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(
 
 shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const MongoURI& uri) {
     invariant(uri.type() == ConnectionString::SET);
-
+    log() << "getOrCreateMonitor " << uri.toString();
     stdx::lock_guard<Latch> lk(_mutex);
     uassert(ErrorCodes::ShutdownInProgress,
             str::stream() << "Unable to get monitor for '" << uri << "' due to shutdown",
@@ -118,14 +118,15 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
     auto monitor = _monitors[setName].lock();
     if (monitor) {
         uassertNotMixingSSL(monitor->getOriginalUri().getSSLMode(), uri.getSSLMode());
+        log() << "getOrCreateMonitor" << uri.toString() << " - " << (size_t)monitor.get();
         return monitor;
     }
 
     log() << "Starting new replica set monitor for " << uri.toString();
 
-    auto newMonitor = std::make_shared<ReplicaSetMonitor>(uri);
+    auto newMonitor = ReplicaSetMonitor::make(uri, getExecutor());
     _monitors[setName] = newMonitor;
-    newMonitor->init();
+    log() << "getOrCreateMonitor" << uri.toString() << " - " << (size_t)newMonitor.get();
     return newMonitor;
 }
 
@@ -146,7 +147,7 @@ void ReplicaSetMonitorManager::removeMonitor(StringData setName) {
     ReplicaSetMonitorsMap::const_iterator it = _monitors.find(setName);
     if (it != _monitors.end()) {
         if (auto monitor = it->second.lock()) {
-            monitor->drop();
+            monitor->close();
         }
         _monitors.erase(it);
         log() << "Removed ReplicaSetMonitor for replica set " << setName;
@@ -176,16 +177,13 @@ void ReplicaSetMonitorManager::shutdown() {
         taskExecutor->shutdown();
     }
 
-    if (monitors.size()) {
-        log() << "Dropping all ongoing scans against replica sets";
-    }
     for (auto& [name, monitor] : monitors) {
         auto anchor = monitor.lock();
         if (!anchor) {
             continue;
         }
-
-        anchor->drop();
+        log() << "Closing ReplicaSetMonitor " << anchor->getName();
+        anchor->close();
     }
 
     if (taskExecutor) {
@@ -221,9 +219,9 @@ void ReplicaSetMonitorManager::report(BSONObjBuilder* builder, bool forFTDC) {
     }
 }
 
-TaskExecutor* ReplicaSetMonitorManager::getExecutor() {
+std::shared_ptr<TaskExecutor> ReplicaSetMonitorManager::getExecutor() {
     invariant(_taskExecutor);
-    return _taskExecutor.get();
+    return _taskExecutor;
 }
 
 ReplicaSetChangeNotifier& ReplicaSetMonitorManager::getNotifier() {
