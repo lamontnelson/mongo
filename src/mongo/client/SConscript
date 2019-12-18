@@ -202,6 +202,7 @@ clientDriverEnv.Library(
         '$BUILD_DIR/mongo/util/background_job',
         '$BUILD_DIR/mongo/util/md5',
         '$BUILD_DIR/mongo/util/net/network',
+        '$BUILD_DIR/mongo/client/sdam/sdam',
         'clientdriver_minimal',
         'read_preference',
     ],
