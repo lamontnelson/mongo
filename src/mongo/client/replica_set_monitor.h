@@ -246,8 +246,15 @@ public:
 private:
     Future<std::vector<HostAndPort>> _getHostsOrRefresh(const ReadPreferenceSetting& readPref,
                                                         Milliseconds maxWait);
+    boost::optional<sdam::ServerDescriptionPtr> _currentPrimary() const;
+
+
+    boost::optional<HostAndPort> getMatchingHost(sdam::TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) const;
+    boost::optional<std::vector<HostAndPort>> getMatchingHosts(sdam::TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) const;
 
     sdam::TopologyManagerPtr _topologyManager;
     const MongoURI _uri;
+
+    Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
 };
 }  // namespace mongo

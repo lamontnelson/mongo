@@ -39,51 +39,9 @@
 #include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/platform/basic.h"
+#include "mongo/client/sdam/sdam_configuration.h"
 
 namespace mongo::sdam {
-class SdamConfiguration {
-public:
-    SdamConfiguration() : SdamConfiguration(boost::none){};
-
-    /**
-     * Initialize the TopologyDescription. This constructor may uassert if the provided
-     * configuration options are not valid according to the Server Discovery & Monitoring Spec.
-     *
-     * Initial Servers
-     * initial servers may be set to a seed list of one or more server addresses.
-     *
-     * Initial TopologyType
-     * The initial TopologyType may be set to Single, Unknown, or ReplicaSetNoPrimary.
-     *
-     * Initial setName
-     * The client's initial replica set name is required in order to initially configure the
-     * topology type as ReplicaSetNoPrimary.
-     *
-     * Allowed configuration combinations
-     * TopologyType Single cannot be used with multiple seeds.
-     * If setName is not null, only TopologyType ReplicaSetNoPrimary and Single, are
-     * allowed.
-     */
-    SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
-                      TopologyType initialType = TopologyType::kUnknown,
-                      mongo::Milliseconds heartBeatFrequencyMs = kDefaultHeartbeatFrequencyMs,
-                      boost::optional<std::string> setName = boost::none);
-
-    const boost::optional<std::vector<ServerAddress>>& getSeedList() const;
-    TopologyType getInitialType() const;
-    Milliseconds getHeartBeatFrequency() const;
-    const boost::optional<std::string>& getSetName() const;
-
-    static inline const mongo::Milliseconds kDefaultHeartbeatFrequencyMs = mongo::Seconds(10);
-    static inline const mongo::Milliseconds kMinHeartbeatFrequencyMS = mongo::Milliseconds(500);
-
-private:
-    boost::optional<std::vector<ServerAddress>> _seedList;
-    TopologyType _initialType;
-    mongo::Milliseconds _heartBeatFrequencyMs;
-    boost::optional<std::string> _setName;
-};
-
 class TopologyDescription {
 public:
     TopologyDescription() : TopologyDescription(SdamConfiguration()) {}
