@@ -45,18 +45,20 @@ namespace mongo::sdam {
  */
 class ServerSelector {
 public:
+    /**
+     * Finds a list of candidate servers according to the ReadPreferenceSetting, but without the latency filter.
+     */
     virtual boost::optional<std::vector<ServerDescriptionPtr>> selectServers(
         TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) = 0;
 
+    /**
+     * Select a single server according to the ReadPreference and latency of the ServerDescription(s)
+     */
     virtual boost::optional<ServerDescriptionPtr> selectServer(
         const TopologyDescriptionPtr topologyDescription,
         const ReadPreferenceSetting& criteria) = 0;
 };
 
-/**
- * We follow the rules for defined in the Server Selection spec here:
- * https://github.com/mongodb/specifications/blob/master/source/server-selection/server-selection.rst#read-operations
- */
 class SdamServerSelector : public ServerSelector {
 public:
     SdamServerSelector(const ServerSelectionConfiguration& config);
@@ -68,13 +70,51 @@ public:
     boost::optional<ServerDescriptionPtr> selectServer(
         const TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria);
 
-private:
-    ServerDescriptionPtr selectRandomly(const std::vector<ServerDescriptionPtr>& servers) const;
+    // remove servers that do not match the TagSet
+    void filterTags(std::vector<ServerDescriptionPtr>* servers, const TagSet& tagSet);
 
-    // TODO: move this to TopologyDesc
-    static const inline auto secondaryFilter = [](const ServerDescriptionPtr& s) { return s->getType() == ServerType::kRSSecondary; };
-    
-	ServerSelectionConfiguration _config;
+private:
+    ServerDescriptionPtr _randomSelect(const std::vector<ServerDescriptionPtr>& servers) const;
+    void _getCandidateServers(std::vector<ServerDescriptionPtr>* result,
+                              const TopologyDescriptionPtr topologyDescription,
+                              const ReadPreferenceSetting& criteria);
+    bool _containsAllTags(ServerDescriptionPtr server, const BSONObj& tags);
+
+    static const inline auto recencyFilter = [](const ReadPreferenceSetting& readPref,
+                                                const ServerDescriptionPtr& s) {
+        bool result = true;
+
+        if (!readPref.minOpTime.isNull()) {
+            result = result && readPref.minOpTime <= s->getOpTime();
+        }
+
+        if (readPref.maxStalenessSeconds.count()) {
+            const Date_t minWriteDate = Date_t::now() - Seconds(readPref.maxStalenessSeconds);
+            result = result && minWriteDate <= s->getLastWriteDate();
+        }
+
+        return result;
+    };
+
+    static const inline auto secondaryFilter = [](const ReadPreferenceSetting& readPref) {
+        return [&](const ServerDescriptionPtr& s) {
+            return s->getType() == ServerType::kRSSecondary && recencyFilter(readPref, s);
+        };
+    };
+
+    static const inline auto primaryFilter = [](const ReadPreferenceSetting& readPref) {
+        return [&](const ServerDescriptionPtr& s) {
+            return s->getType() == ServerType::kRSPrimary && recencyFilter(readPref, s);
+        };
+    };
+
+    static const inline auto nearestFilter = [](const ReadPreferenceSetting& readPref) {
+        return [&](const ServerDescriptionPtr& s) {
+            return s->getType() != ServerType::kUnknown && recencyFilter(readPref, s);
+        };
+    };
+
+    ServerSelectionConfiguration _config;
     mutable PseudoRandom _random;
 };
 

@@ -37,16 +37,46 @@ namespace mongo::sdam {
 SdamServerSelector::SdamServerSelector(const ServerSelectionConfiguration& config)
     : _config(config), _random(PseudoRandom(Date_t::now().asInt64())) {}
 
-/*
-If the topology wire version is invalid, raise an error
-Find suitable servers by topology type and operation type
-Filter the suitable servers by calling the optional, application-provided server selector.
-If there are any suitable servers, choose one at random from those within the latency window and
-return it; otherwise, continue to the next step Request an immediate topology check, then block the
-server selection thread until the topology changes or until the server selection timeout has elapsed
-If more than serverSelectionTimeoutMS milliseconds have elapsed since the selection start time,
-raise a server selection error Goto Step #2
-*/
+void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>* result,
+                                              const TopologyDescriptionPtr topologyDescription,
+                                              const mongo::ReadPreferenceSetting& criteria) {
+    switch (criteria.pref) {
+        case ReadPreference::Nearest:
+            *result = topologyDescription->findServers(nearestFilter(criteria));
+            return;
+
+        case ReadPreference::SecondaryOnly:
+            *result = topologyDescription->findServers(secondaryFilter(criteria));
+            return;
+
+        case ReadPreference::PrimaryOnly: {
+            const auto primaryCriteria = ReadPreferenceSetting(criteria.pref);
+            *result = topologyDescription->findServers(primaryFilter(primaryCriteria));
+            return;
+        }
+
+        case ReadPreference::PrimaryPreferred: {
+            auto primaryCriteria = ReadPreferenceSetting(ReadPreference::PrimaryOnly);
+            _getCandidateServers(result, topologyDescription, primaryCriteria);
+            if (result->size())
+                return;
+            *result = topologyDescription->findServers(secondaryFilter(criteria));
+        }
+
+        case ReadPreference::SecondaryPreferred: {
+            auto secondaryCriteria = criteria;
+            secondaryCriteria.pref = ReadPreference::SecondaryOnly;
+            _getCandidateServers(result, topologyDescription, secondaryCriteria);
+            if (result->size())
+                return;
+            *result = topologyDescription->findServers(primaryFilter(criteria));
+        }
+
+        default:
+            MONGO_UNREACHABLE
+    }
+}
+
 boost::optional<std::vector<ServerDescriptionPtr>> SdamServerSelector::selectServers(
     const TopologyDescriptionPtr topologyDescription,
     const mongo::ReadPreferenceSetting& criteria) {
@@ -61,47 +91,79 @@ boost::optional<std::vector<ServerDescriptionPtr>> SdamServerSelector::selectSer
         return boost::none;
     }
 
-    std::vector<ServerDescriptionPtr> candidateServers = []() {
-    switch (criteria.pref) {
-        case ReadPreference::Nearest:
-            return topologyDescription->getServers();
-        case ReadPreference::SecondaryOnly:
-            return topologyDescription->findServers(secondaryFilter);
-        case ReadPreference::PrimaryOnly:
-			
-            break;
-        case ReadPreference::PrimaryPreferred:
-        case ReadPreference::SecondaryPreferred:
-            break;
+    if (topologyDescription->getType() == TopologyType::kSingle) {
+        auto servers = topologyDescription->getServers();
+        return (servers.size() && servers[0]->getType() != ServerType::kUnknown)
+            ? boost::optional<std::vector<ServerDescriptionPtr>>{{servers[0]}}
+            : boost::none;
     }
-	}();
+
+    std::vector<ServerDescriptionPtr> results;
+    _getCandidateServers(&results, topologyDescription, criteria);
+    filterTags(&results, criteria.tags);
+
+    if (results.size()) {
+        return results;
+    }
+    return boost::none;
 }
 
-
-ServerDescriptionPtr SdamServerSelector::selectRandomly(
+ServerDescriptionPtr SdamServerSelector::_randomSelect(
     const std::vector<ServerDescriptionPtr>& servers) const {
-    int64_t index = _random.nextInt64(servers.size() - 1);
-    std::cout << "numServers: " << servers.size() << "chose: " << index << std::endl;
-    return servers[index];
+    return servers[_random.nextInt64(servers.size())];
 }
 
 boost::optional<ServerDescriptionPtr> SdamServerSelector::selectServer(
     const TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) {
     auto servers = selectServers(topologyDescription, criteria);
     if (servers) {
-        // TODO: remove this scan; should probably keep the list sorted by latency
         ServerDescriptionPtr minServer =
             *std::min_element(servers->begin(), servers->end(), LatencyWindow::rttCompareFn);
 
-        // TODO: this assumes that Rtt is always present; fix
+        invariant(minServer->getRtt());
         auto latencyWindow = LatencyWindow(*minServer->getRtt(), _config.getLocalThresholdMs());
-        latencyWindow.filterServers(&(*servers));
+        latencyWindow.filterServers(&servers.get());
 
-        return selectRandomly(*servers);
+        return _randomSelect(*servers);
     }
 
     return boost::none;
 }
+
+bool SdamServerSelector::_containsAllTags(ServerDescriptionPtr server, const BSONObj& tags) {
+    auto serverTags = server->getTags();
+    for (auto& checkTag : tags) {
+        auto checkKey = checkTag.fieldName();
+        auto checkValue = checkTag.String();
+        auto pos = serverTags.find(checkKey);
+        if (pos == serverTags.end() || pos->second != checkValue) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void SdamServerSelector::filterTags(std::vector<ServerDescriptionPtr>* servers,
+                                    const TagSet& tagSet) {
+    const auto& checkTags = tagSet.getTagBSON();
+    const auto predicate = [&](const ServerDescriptionPtr& s) {
+        auto it = checkTags.begin();
+        while (it != checkTags.end()) {
+            if (_containsAllTags(s, it->Obj())) {
+                // found a match -- don't remove the server
+                return false;
+            }
+            ++it;
+        }
+        return true;
+    };
+
+    if (checkTags.nFields() == 0)
+        return;
+
+    servers->erase(std::remove_if(servers->begin(), servers->end(), predicate), servers->end());
+}
+
 
 void LatencyWindow::filterServers(std::vector<ServerDescriptionPtr>* servers) {
     servers->erase(std::remove_if(servers->begin(),
