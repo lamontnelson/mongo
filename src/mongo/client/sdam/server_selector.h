@@ -46,7 +46,7 @@ namespace mongo::sdam {
 class ServerSelector {
 public:
     /**
-     * Finds a list of candidate servers according to the ReadPreferenceSetting, but without the latency filter.
+     * Finds a list of candidate servers according to the ReadPreferenceSetting.
      */
     virtual boost::optional<std::vector<ServerDescriptionPtr>> selectServers(
         TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) = 0;
@@ -57,7 +57,10 @@ public:
     virtual boost::optional<ServerDescriptionPtr> selectServer(
         const TopologyDescriptionPtr topologyDescription,
         const ReadPreferenceSetting& criteria) = 0;
+
+    virtual ~ServerSelector() {};
 };
+using ServerSelectorPtr = std::unique_ptr<ServerSelector>;
 
 class SdamServerSelector : public ServerSelector {
 public:

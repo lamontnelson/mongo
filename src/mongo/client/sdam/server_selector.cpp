@@ -103,6 +103,13 @@ boost::optional<std::vector<ServerDescriptionPtr>> SdamServerSelector::selectSer
     filterTags(&results, criteria.tags);
 
     if (results.size()) {
+        ServerDescriptionPtr minServer =
+            *std::min_element(results.begin(), results.end(), LatencyWindow::rttCompareFn);
+
+        invariant(minServer->getRtt());
+        auto latencyWindow = LatencyWindow(*minServer->getRtt(), _config.getLocalThresholdMs());
+        latencyWindow.filterServers(&results);
+
         return results;
     }
     return boost::none;
@@ -116,18 +123,7 @@ ServerDescriptionPtr SdamServerSelector::_randomSelect(
 boost::optional<ServerDescriptionPtr> SdamServerSelector::selectServer(
     const TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) {
     auto servers = selectServers(topologyDescription, criteria);
-    if (servers) {
-        ServerDescriptionPtr minServer =
-            *std::min_element(servers->begin(), servers->end(), LatencyWindow::rttCompareFn);
-
-        invariant(minServer->getRtt());
-        auto latencyWindow = LatencyWindow(*minServer->getRtt(), _config.getLocalThresholdMs());
-        latencyWindow.filterServers(&servers.get());
-
-        return _randomSelect(*servers);
-    }
-
-    return boost::none;
+    return (servers) ? boost::optional<ServerDescriptionPtr>(_randomSelect(*servers)) : boost::none;
 }
 
 bool SdamServerSelector::_containsAllTags(ServerDescriptionPtr server, const BSONObj& tags) {
