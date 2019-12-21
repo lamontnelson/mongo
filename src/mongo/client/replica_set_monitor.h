@@ -37,12 +37,12 @@
 #include "mongo/base/string_data.h"
 #include "mongo/client/mongo_uri.h"
 #include "mongo/client/replica_set_change_notifier.h"
+#include "mongo/client/sdam/sdam.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/util/concurrency/with_lock.h"
 #include "mongo/util/duration.h"
 #include "mongo/util/net/hostandport.h"
 #include "mongo/util/time_support.h"
-#include "mongo/client/sdam/topology_manager.h"
 
 namespace mongo {
 
@@ -201,60 +201,52 @@ public:
     static void cleanup();
 
     /**
-     * Use these to speed up tests by disabling the sleep-and-retry loops and cause errors to be
-     * reported immediately.
-     */
-    static void disableRefreshRetries_forTest();
-
-    /**
      * Permanently stops all monitoring on replica sets.
      */
     static void shutdown();
 
-    /**
-     * Returns the refresh period that is given to all new SetStates.
-     */
-    static Seconds getDefaultRefreshPeriod();
-
-    //
-    // internal types (defined in replica_set_monitor_internal.h)
-    //
-
     ~ReplicaSetMonitor();
 
     /**
-     * The default timeout, which will be used for finding a replica set host if the caller does
-     * not explicitly specify it.
-     */
-    static const Seconds kDefaultFindHostTimeout;
-
-    /**
-     * Defaults to false, meaning that if multiple hosts meet a criteria we pick one at random.
-     * This is required by the replica set driver spec. Set this to true in tests that need host
-     * selection to be deterministic.
-     *
-     * NOTE: Used by unit-tests only.
-     */
-    static bool useDeterministicHostSelection;
-
-    /**
-     * This is for use in tests using MockReplicaSet to ensure that a full scan completes before
-     * continuing.
-     */
-    void runScanForMockReplicaSet();
+-     * The default timeout, which will be used for finding a replica set host if the caller does
+-     * not explicitly specify it.
+-     */
+    static inline const Seconds kDefaultFindHostTimeout{15};
 
 private:
-    Future<std::vector<HostAndPort>> _getHostsOrRefresh(const ReadPreferenceSetting& readPref,
-                                                        Milliseconds maxWait);
+    struct OutstandingHostsQuery {
+        Date_t deadline;
+        Promise<std::vector<HostAndPort>> promise;
+        ReadPreferenceSetting query;
+    };
+
+    std::vector<HostAndPort> _extractHosts(
+        const std::vector<sdam::ServerDescriptionPtr>& serverDescriptions);
+    boost::optional<std::vector<HostAndPort>> _getHosts(const ReadPreferenceSetting& criteria);
+    Date_t _now();
+
+    // Get a pointer to the current primary's ServerDescription
+    // To ensure a consistent view of the Topology either _currentPrimary or _currentTopology should
+    // be called (not both) since the topology can change between the function invocations.
     boost::optional<sdam::ServerDescriptionPtr> _currentPrimary() const;
 
+    // Get the current TopologyDescription
+    // Note that most functions will want to save the result of this function once per computation
+    // so that we are operating on a consistent read-only view of the topology.
+    sdam::TopologyDescriptionPtr _currentTopology() const;
 
-    boost::optional<HostAndPort> getMatchingHost(sdam::TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) const;
-    boost::optional<std::vector<HostAndPort>> getMatchingHosts(sdam::TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) const;
-
+    sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
+    sdam::ServerSelectorPtr _serverSelector;
+
     const MongoURI _uri;
 
     Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
+    // variables below are protected by the mutex
+    ClockSource* _clockSource;
+    std::vector<OutstandingHostsQuery> _outstandingQueries;
+
+    static inline const auto SERVER_SELECTION_CONFIG =
+        sdam::ServerSelectionConfiguration::defaultConfiguration();
 };
 }  // namespace mongo

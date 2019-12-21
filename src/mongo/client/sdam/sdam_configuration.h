@@ -76,8 +76,6 @@ private:
 };
 
 class ServerSelectionConfiguration {
-    ServerSelectionConfiguration() = delete;
-
 public:
     ServerSelectionConfiguration(
         const Milliseconds localThresholdMs = kDefaultLocalThresholdMS,
@@ -90,7 +88,12 @@ public:
     static inline const mongo::Milliseconds kDefaultServerSelectionTimeoutMs =
         mongo::Milliseconds(30000);
 
+    static ServerSelectionConfiguration defaultConfiguration() {
+        return ServerSelectionConfiguration(kDefaultLocalThresholdMS, kDefaultServerSelectionTimeoutMs);
+    }
+
 private:
+    ServerSelectionConfiguration(){};
     mongo::Milliseconds _localThresholdMs;
     mongo::Milliseconds _serverSelectionTimeoutMs;
 };

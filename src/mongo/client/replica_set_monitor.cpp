@@ -56,6 +56,7 @@
 #include "mongo/util/timer.h"
 
 namespace mongo {
+using namespace mongo::sdam;
 
 using std::numeric_limits;
 using std::set;
@@ -71,11 +72,6 @@ namespace {
 using executor::TaskExecutor;
 using CallbackArgs = TaskExecutor::CallbackArgs;
 using CallbackHandle = TaskExecutor::CallbackHandle;
-
-using TopologyManagerPtr = sdam::TopologyManagerPtr;
-using TopologyDescriptionPtr = sdam::TopologyDescriptionPtr;
-using ServerDescriptionPtr = sdam::ServerDescriptionPtr;
-using ServerType = sdam::ServerType;
 
 const ReadPreferenceSetting kPrimaryOnlyReadPreference(ReadPreference::PrimaryOnly, TagSet());
 
@@ -93,103 +89,88 @@ static auto primaryPredicate = [](const ServerDescriptionPtr& server) {
 };
 }  // namespace
 
-// If we cannot find a host after 15 seconds of refreshing, give up
-const Seconds ReplicaSetMonitor::kDefaultFindHostTimeout(15);
-
-ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri) : _uri(uri) {}
+ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri)
+    : _serverSelector(std::make_unique<SdamServerSelector>(SERVER_SELECTION_CONFIG)), _uri(uri) {
+    // TODO: sdam should use the HostAndPort type for ServerAddress
+    std::vector<ServerAddress> seeds;
+    for (const auto seed : uri.getServers()) {
+        seeds.push_back(seed.toString());
+    }
+    _sdamConfig = SdamConfiguration(seeds);
+    _clockSource = getGlobalServiceContext()->getPreciseClockSource();
+    _topologyManager = std::make_unique<TopologyManager>(_sdamConfig, _clockSource);
+}
 
 ReplicaSetMonitor::~ReplicaSetMonitor() {}
 
 
-boost::optional<HostAndPort> ReplicaSetMonitor::getMatchingHost(
-    TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) const {
-    auto hosts = getMatchingHosts(criteria);
-    if (hosts) {
-        return (*hosts)[0];
-    }
-    return boost::none;
-}
-
-boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::getMatchingHosts(
-    TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) const {
-    switch (criteria.pref) {
-        // "Prefered" read preferences are defined in terms of other preferences
-        case ReadPreference::PrimaryPreferred: {
-            boost::optional<std::vector<HostAndPort>> out =
-                getMatchingHosts(ReadPreferenceSetting(ReadPreference::PrimaryOnly, criteria.tags));
-            // NOTE: the spec says we should use the primary even if tags don't match
-            // TODO: double check this
-            if (out)
-                return out;
-            return getMatchingHosts(ReadPreferenceSetting(
-                ReadPreference::SecondaryOnly, criteria.tags, criteria.maxStalenessSeconds));
-        }
-
-        case ReadPreference::SecondaryPreferred: {
-            boost::optional<std::vector<HostAndPort>> out = getMatchingHosts(ReadPreferenceSetting(
-                ReadPreference::SecondaryOnly, criteria.tags, criteria.maxStalenessSeconds));
-            if (out)
-                return out;
-            // NOTE: the spec says we should use the primary even if tags don't match
-            // TODO: double check this
-            return getMatchingHosts(
-                ReadPreferenceSetting(ReadPreference::PrimaryOnly, criteria.tags));
-        }
-
-        case ReadPreference::PrimaryOnly: {
-            auto primary = _currentPrimary();
-            if (primary) {
-                return std::vector<HostAndPort>{HostAndPort((*primary)->getAddress())};
-            }
-            return boost::none;
-        }
-
-        case ReadPreference::SecondaryOnly:
-        case ReadPreference::Nearest: {
-        }
-        default:
-            uassert(16337, "Unknown read preference", false);
-            break;
-    }
-}
-
-
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
-    return _getHostsOrRefresh(criteria, maxWait)
-        .then([](const auto& hosts) {
-            invariant(hosts.size());
-            return hosts[0];
-        })
-        .semi();
+    return {HostAndPort("")};
 }
+
+// TODO: get rid of this; change ServerAddress underlying type to HostAndPort
+std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
+    const std::vector<ServerDescriptionPtr>& serverDescriptions) {
+    std::vector<HostAndPort> result;
+    for (const auto server : serverDescriptions) {
+        result.push_back(HostAndPort(server->getAddress()));
+    }
+    return result;
+}
+
+Date_t ReplicaSetMonitor::_now() {
+    // TODO: executor has a notion of time which we should probably use
+    // putting this function here for now to provide a level of indirection
+    return _clockSource->now();
+}
+
 
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
-    return _getHostsOrRefresh(criteria, maxWait).semi();
+    const auto deadline = _now() + maxWait;
+
+    // try to satisfy query immediately
+    const auto& immediateResult = _getHosts(criteria);
+    if (immediateResult) {
+        return {std::move(*immediateResult)};
+    }
+
+    // fail fast on timeout
+    if (deadline - _now() < Milliseconds(0)) {
+        SemiFuture<std::vector<HostAndPort>>(
+            Status(ErrorCodes::FailedToSatisfyReadPreference, "failed to satisfy read preference"));
+    }
+
+    // otherwise, do async version
+    auto pf = makePromiseFuture<std::vector<HostAndPort>>();
+    stdx::lock_guard<Mutex> lk(_mutex);
+    _outstandingQueries.emplace_back(
+        OutstandingHostsQuery{deadline, std::move(pf.promise), criteria});
+    return std::move(pf.future).semi();
 }
 
-Future<std::vector<HostAndPort>> ReplicaSetMonitor::_getHostsOrRefresh(
-    const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
-    const auto topologyDescription = _topologyManager->getTopologyDescription();
-    topologyDescription->findServers(
-        [this, &criteria](const ServerDescriptionPtr& serverDescription) {
-            auto stalenessCutoff = criteria.maxStalenessSeconds;
-
-            return true;
-        });
+boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
+    const ReadPreferenceSetting& criteria) {
+    auto topologyDescription = _currentTopology();
+    auto result = _serverSelector->selectServers(topologyDescription, criteria);
+    if (result) {
+        return _extractHosts(*result);
+    }
+    return boost::none;
 }
 
 HostAndPort ReplicaSetMonitor::getMasterOrUassert() {
     return getHostOrRefresh(kPrimaryOnlyReadPreference).get();
 }
 
-void ReplicaSetMonitor::failedHost(const HostAndPort& host, const Status& status) {}
+void ReplicaSetMonitor::failedHost(const HostAndPort& host, const Status& status) {
+    IsMasterOutcome outcome(host.toString(), status.toString());
+    _topologyManager->onServerDescription(outcome);
+}
 
 boost::optional<ServerDescriptionPtr> ReplicaSetMonitor::_currentPrimary() const {
-    const auto primaries =
-        _topologyManager->getTopologyDescription()->findServers(primaryPredicate);
-    invariant(primaries.size() <= 1);  // TODO: check this invariant
+    const auto primaries = _currentTopology()->findServers(primaryPredicate);
     return (primaries.size()) ? boost::optional<ServerDescriptionPtr>(primaries[0]) : boost::none;
 }
 
@@ -199,20 +180,18 @@ bool ReplicaSetMonitor::isPrimary(const HostAndPort& host) const {
 }
 
 bool ReplicaSetMonitor::isHostUp(const HostAndPort& host) const {
-    // TODO: check this impl; maybe verify serverType also
-    return _topologyManager->getTopologyDescription()->findServerByAddress(host.toString()) !=
-        boost::none;
+    return _currentTopology()->findServerByAddress(host.toString()) != boost::none;
 }
 
 int ReplicaSetMonitor::getMinWireVersion() const {
-    const std::vector<ServerDescriptionPtr>& servers =
-        _topologyManager->getTopologyDescription()->getServers();
+    const std::vector<ServerDescriptionPtr>& servers = _currentTopology()->getServers();
     if (servers.size() > 0) {
         const auto serverDescription =
             *std::min_element(servers.begin(), servers.end(), minWireCompare);
         return serverDescription->getMinWireVersion();
     } else {
-        return AGG_RETURNS_CURSORS;  // TODO: check this case / MONGO_UNREACHABLE?
+        // TODO: what did the old RSM do in this case?
+        return -1;
     }
 }
 
@@ -224,17 +203,18 @@ int ReplicaSetMonitor::getMaxWireVersion() const {
             *std::max_element(servers.begin(), servers.end(), maxWireCompare);
         return serverDescription->getMaxWireVersion();
     } else {
-        return -1;  // TODO: check this case / MONGO_UNREACHABLE?
+        // TODO: what did the old RSM do in this case?
+        return -1;
     }
 }
 
 std::string ReplicaSetMonitor::getName() const {
-    const auto setName = _topologyManager->getTopologyDescription()->getSetName();
+    const auto setName = _currentTopology()->getSetName();
     return (setName) ? *setName : "";
 }
 
 std::string ReplicaSetMonitor::getServerAddress() const {
-    const auto topologyDescription = _topologyManager->getTopologyDescription();
+    const auto topologyDescription = _currentTopology();
     const auto setName = topologyDescription->getSetName();
     const auto servers = topologyDescription->getServers();
 
@@ -257,8 +237,7 @@ const MongoURI& ReplicaSetMonitor::getOriginalUri() const {
 }
 
 bool ReplicaSetMonitor::contains(const HostAndPort& host) const {
-    return _topologyManager->getTopologyDescription()->findServerByAddress(host.toString()) !=
-        boost::none;
+    return _currentTopology()->findServerByAddress(host.toString()) != boost::none;
 }
 
 shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::createIfNeeded(const string& name,
@@ -319,15 +298,11 @@ void ReplicaSetMonitor::shutdown() {
     //    globalRSMonitorManager.shutdown();
 }
 
-void ReplicaSetMonitor::cleanup() {
-    //    globalRSMonitorManager.removeAllMonitors();
-}
-
-void ReplicaSetMonitor::disableRefreshRetries_forTest() {}
-
 bool ReplicaSetMonitor::isKnownToHaveGoodPrimary() const {
     return _currentPrimary() != boost::none;
 }
 
-void ReplicaSetMonitor::runScanForMockReplicaSet() {}
+sdam::TopologyDescriptionPtr ReplicaSetMonitor::_currentTopology() const {
+    return _topologyManager->getTopologyDescription();
+}
 }  // namespace mongo
