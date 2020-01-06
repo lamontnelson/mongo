@@ -214,10 +214,20 @@ public:
     static inline const Seconds kDefaultFindHostTimeout{15};
 
 private:
-    struct OutstandingHostsQuery {
+    enum class HostQueryType { SINGLE, MULTI };
+    struct HostQuery {
+        HostQueryType type;
         Date_t deadline;
+        ReadPreferenceSetting criteria;
+    };
+    using HostQueryPtr = std::shared_ptr<HostQuery>;
+
+    struct MultiHostQuery : public HostQuery {
         Promise<std::vector<HostAndPort>> promise;
-        ReadPreferenceSetting query;
+    };
+
+    struct SingleHostQuery : public HostQuery {
+        Promise<HostAndPort> promise;
     };
 
     std::vector<HostAndPort> _extractHosts(
@@ -238,15 +248,19 @@ private:
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
     sdam::ServerSelectorPtr _serverSelector;
+    ExecutorPtr _taskExecutor;
 
     const MongoURI _uri;
 
     Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
     // variables below are protected by the mutex
     ClockSource* _clockSource;
-    std::vector<OutstandingHostsQuery> _outstandingQueries;
+    std::vector<HostQueryPtr> _outstandingQueries;
 
     static inline const auto SERVER_SELECTION_CONFIG =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
+    SemiFuture<std::vector<HostAndPort>> _asyncGetHosts(const Date_t deadline,
+                                                        const ReadPreferenceSetting& criteria);
+    boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
 };
 }  // namespace mongo

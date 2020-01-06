@@ -90,7 +90,9 @@ static auto primaryPredicate = [](const ServerDescriptionPtr& server) {
 }  // namespace
 
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri)
-    : _serverSelector(std::make_unique<SdamServerSelector>(SERVER_SELECTION_CONFIG)), _uri(uri) {
+    : _serverSelector(std::make_unique<SdamServerSelector>(SERVER_SELECTION_CONFIG)),
+      _taskExecutor(globalRSMonitorManager.getExecutor()),
+      _uri(uri) {
     // TODO: sdam should use the HostAndPort type for ServerAddress
     std::vector<ServerAddress> seeds;
     for (const auto seed : uri.getServers()) {
@@ -106,7 +108,30 @@ ReplicaSetMonitor::~ReplicaSetMonitor() {}
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
-    return {HostAndPort("")};
+    const auto deadline = _now() + maxWait;
+
+    // try to satisfy query immediately
+    const auto& immediateResult = _getHost(criteria);
+    if (immediateResult) {
+        return {std::move(*immediateResult)};
+    }
+
+    // fail fast on timeout
+    if (deadline - _now() < Milliseconds(0)) {
+        return SemiFuture<HostAndPort>(
+            Status(ErrorCodes::FailedToSatisfyReadPreference, "failed to satisfy read preference"));
+    }
+
+    // otherwise, do async version
+    std::lock_guard<Mutex> lk(_mutex);
+    auto pf = makePromiseFuture<HostAndPort>();
+    auto query = std::make_shared<SingleHostQuery>();
+    query->type = HostQueryType::SINGLE;
+    query->deadline = deadline;
+    query->criteria = criteria;
+    query->promise = std::move(pf.promise);
+    _outstandingQueries.emplace_back(query);
+    return std::move(pf.future).semi();
 }
 
 // TODO: get rid of this; change ServerAddress underlying type to HostAndPort
@@ -125,7 +150,6 @@ Date_t ReplicaSetMonitor::_now() {
     return _clockSource->now();
 }
 
-
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
     const auto deadline = _now() + maxWait;
@@ -138,26 +162,34 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
 
     // fail fast on timeout
     if (deadline - _now() < Milliseconds(0)) {
-        SemiFuture<std::vector<HostAndPort>>(
+        return SemiFuture<std::vector<HostAndPort>>(
             Status(ErrorCodes::FailedToSatisfyReadPreference, "failed to satisfy read preference"));
     }
 
     // otherwise, do async version
+    std::lock_guard<Mutex> lk(_mutex);
     auto pf = makePromiseFuture<std::vector<HostAndPort>>();
-    stdx::lock_guard<Mutex> lk(_mutex);
-    _outstandingQueries.emplace_back(
-        OutstandingHostsQuery{deadline, std::move(pf.promise), criteria});
+    auto query = std::make_shared<MultiHostQuery>();
+    query->type = HostQueryType::MULTI;
+    query->deadline = deadline;
+    query->criteria = criteria;
+    query->promise = std::move(pf.promise);
+    _outstandingQueries.emplace_back(query);
     return std::move(pf.future).semi();
 }
 
 boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
     const ReadPreferenceSetting& criteria) {
-    auto topologyDescription = _currentTopology();
-    auto result = _serverSelector->selectServers(topologyDescription, criteria);
+    auto result = _serverSelector->selectServers(_currentTopology(), criteria);
     if (result) {
         return _extractHosts(*result);
     }
     return boost::none;
+}
+
+boost::optional<HostAndPort> ReplicaSetMonitor::_getHost(const ReadPreferenceSetting& criteria) {
+    auto result = _serverSelector->selectServer(_currentTopology(), criteria);
+    return result ? boost::optional<HostAndPort>((*result)->getAddress()) : boost::none;
 }
 
 HostAndPort ReplicaSetMonitor::getMasterOrUassert() {
@@ -240,62 +272,67 @@ bool ReplicaSetMonitor::contains(const HostAndPort& host) const {
     return _currentTopology()->findServerByAddress(host.toString()) != boost::none;
 }
 
+
 shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::createIfNeeded(const string& name,
                                                                 const set<HostAndPort>& servers) {
-    //    return globalRSMonitorManager.getOrCreateMonitor(
-    //        ConnectionString::forReplicaSet(name, vector<HostAndPort>(servers.begin(),
-    //        servers.end())));
-    return nullptr;
+    return globalRSMonitorManager.getOrCreateMonitor(
+        ConnectionString::forReplicaSet(name, vector<HostAndPort>(servers.begin(), servers.end())));
 }
 
 shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::createIfNeeded(const MongoURI& uri) {
-    return nullptr;
+    return globalRSMonitorManager.getOrCreateMonitor(uri);
 }
 
 shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::get(const std::string& name) {
-    return nullptr;
+    return globalRSMonitorManager.getMonitor(name);
 }
 
-void ReplicaSetMonitor::remove(const string& name) {}
+void ReplicaSetMonitor::remove(const string& name) {
+    globalRSMonitorManager.removeMonitor(name);
+
+    // Kill all pooled ReplicaSetConnections for this set. They will not function correctly
+    // after we kill the ReplicaSetMonitor.
+    globalConnPool.removeHost(name);
+}
 
 ReplicaSetChangeNotifier& ReplicaSetMonitor::getNotifier() {
     return globalRSMonitorManager.getNotifier();
 }
 
 void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC) const {
-    //    stdx::lock_guard<Latch> lk(_state->mutex);
-    //    BSONObjBuilder monitorInfo(bsonObjBuilder.subobjStart(getName()));
-    //    if (forFTDC) {
+    //        stdx::lock_guard<Latch> lk(_state->mutex);
+    //        BSONObjBuilder monitorInfo(bsonObjBuilder.subobjStart(getName()));
+    //        if (forFTDC) {
+    //            for (size_t i = 0; i < _state->nodes.size(); i++) {
+    //                const Node& node = _state->nodes[i];
+    //                monitorInfo.appendNumber(node.host.toString(), pingTimeMillis(node));
+    //            }
+    //            return;
+    //        }
+    //
+    //        // NOTE: the format here must be consistent for backwards compatibility
+    //        BSONArrayBuilder hosts(monitorInfo.subarrayStart("hosts"));
     //        for (size_t i = 0; i < _state->nodes.size(); i++) {
     //            const Node& node = _state->nodes[i];
-    //            monitorInfo.appendNumber(node.host.toString(), pingTimeMillis(node));
+    //
+    //            BSONObjBuilder builder;
+    //            builder.append("addr", node.host.toString());
+    //            builder.append("ok", node.isUp);
+    //            builder.append("ismaster", node.isMaster);  // intentionally not camelCase
+    //            builder.append("hidden", false);            // we don't keep hidden nodes in the
+    //            set builder.append("secondary", node.isUp && !node.isMaster);
+    //            builder.append("pingTimeMillis", pingTimeMillis(node));
+    //
+    //            if (!node.tags.isEmpty()) {
+    //                builder.append("tags", node.tags);
+    //            }
+    //
+    //            hosts.append(builder.obj());
     //        }
-    //        return;
-    //    }
-    //
-    //    // NOTE: the format here must be consistent for backwards compatibility
-    //    BSONArrayBuilder hosts(monitorInfo.subarrayStart("hosts"));
-    //    for (size_t i = 0; i < _state->nodes.size(); i++) {
-    //        const Node& node = _state->nodes[i];
-    //
-    //        BSONObjBuilder builder;
-    //        builder.append("addr", node.host.toString());
-    //        builder.append("ok", node.isUp);
-    //        builder.append("ismaster", node.isMaster);  // intentionally not camelCase
-    //        builder.append("hidden", false);            // we don't keep hidden nodes in the set
-    //        builder.append("secondary", node.isUp && !node.isMaster);
-    //        builder.append("pingTimeMillis", pingTimeMillis(node));
-    //
-    //        if (!node.tags.isEmpty()) {
-    //            builder.append("tags", node.tags);
-    //        }
-    //
-    //        hosts.append(builder.obj());
-    //    }
 }
 
 void ReplicaSetMonitor::shutdown() {
-    //    globalRSMonitorManager.shutdown();
+    globalRSMonitorManager.shutdown();
 }
 
 bool ReplicaSetMonitor::isKnownToHaveGoodPrimary() const {
