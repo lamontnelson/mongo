@@ -58,7 +58,7 @@ public:
         const TopologyDescriptionPtr topologyDescription,
         const ReadPreferenceSetting& criteria) = 0;
 
-    virtual ~ServerSelector() {};
+    virtual ~ServerSelector();
 };
 using ServerSelectorPtr = std::unique_ptr<ServerSelector>;
 
@@ -71,17 +71,19 @@ public:
         const ReadPreferenceSetting& criteria) override;
 
     boost::optional<ServerDescriptionPtr> selectServer(
-        const TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria);
+        const TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) override;
 
     // remove servers that do not match the TagSet
     void filterTags(std::vector<ServerDescriptionPtr>* servers, const TagSet& tagSet);
 
 private:
-    ServerDescriptionPtr _randomSelect(const std::vector<ServerDescriptionPtr>& servers) const;
     void _getCandidateServers(std::vector<ServerDescriptionPtr>* result,
                               const TopologyDescriptionPtr topologyDescription,
                               const ReadPreferenceSetting& criteria);
+
     bool _containsAllTags(ServerDescriptionPtr server, const BSONObj& tags);
+
+    ServerDescriptionPtr _randomSelect(const std::vector<ServerDescriptionPtr>& servers) const;
 
     static const inline auto recencyFilter = [](const ReadPreferenceSetting& readPref,
                                                 const ServerDescriptionPtr& s) {
@@ -92,7 +94,7 @@ private:
         }
 
         if (readPref.maxStalenessSeconds.count()) {
-            const Date_t minWriteDate = Date_t::now() - Seconds(readPref.maxStalenessSeconds);
+            const Date_t minWriteDate = Date_t::now() - readPref.maxStalenessSeconds;
             result = result && minWriteDate <= s->getLastWriteDate();
         }
 
