@@ -34,6 +34,8 @@
 #include "mongo/platform/random.h"
 
 namespace mongo::sdam {
+ServerSelector::~ServerSelector() {}
+
 SdamServerSelector::SdamServerSelector(const ServerSelectionConfiguration& config)
     : _config(config), _random(PseudoRandom(Date_t::now().asInt64())) {}
 
@@ -123,7 +125,7 @@ ServerDescriptionPtr SdamServerSelector::_randomSelect(
 boost::optional<ServerDescriptionPtr> SdamServerSelector::selectServer(
     const TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) {
     auto servers = selectServers(topologyDescription, criteria);
-    return (servers) ? boost::optional<ServerDescriptionPtr>(_randomSelect(*servers)) : boost::none;
+    return servers ? boost::optional<ServerDescriptionPtr>(_randomSelect(*servers)) : boost::none;
 }
 
 bool SdamServerSelector::_containsAllTags(ServerDescriptionPtr server, const BSONObj& tags) {
@@ -142,6 +144,10 @@ bool SdamServerSelector::_containsAllTags(ServerDescriptionPtr server, const BSO
 void SdamServerSelector::filterTags(std::vector<ServerDescriptionPtr>* servers,
                                     const TagSet& tagSet) {
     const auto& checkTags = tagSet.getTagBSON();
+
+    if (checkTags.nFields() == 0)
+        return;
+
     const auto predicate = [&](const ServerDescriptionPtr& s) {
         auto it = checkTags.begin();
         while (it != checkTags.end()) {
@@ -153,9 +159,6 @@ void SdamServerSelector::filterTags(std::vector<ServerDescriptionPtr>* servers,
         }
         return true;
     };
-
-    if (checkTags.nFields() == 0)
-        return;
 
     servers->erase(std::remove_if(servers->begin(), servers->end(), predicate), servers->end());
 }
