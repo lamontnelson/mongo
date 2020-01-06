@@ -54,7 +54,7 @@ public:
      * If setName is not null, only TopologyType ReplicaSetNoPrimary and Single, are
      * allowed.
      */
-    explicit SdamConfiguration(
+    SdamConfiguration(
         boost::optional<std::vector<ServerAddress>> seedList,
         TopologyType initialType = TopologyType::kUnknown,
         mongo::Milliseconds heartBeatFrequencyMs = kDefaultHeartbeatFrequencyMs,
