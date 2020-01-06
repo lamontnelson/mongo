@@ -123,6 +123,7 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     }
 
     // otherwise, do async version
+    // TODO: refactor this
     std::lock_guard<Mutex> lk(_mutex);
     auto pf = makePromiseFuture<HostAndPort>();
     auto query = std::make_shared<SingleHostQuery>();
@@ -167,6 +168,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     }
 
     // otherwise, do async version
+    // TODO: refactor this
     std::lock_guard<Mutex> lk(_mutex);
     auto pf = makePromiseFuture<std::vector<HostAndPort>>();
     auto query = std::make_shared<MultiHostQuery>();
@@ -222,8 +224,7 @@ int ReplicaSetMonitor::getMinWireVersion() const {
             *std::min_element(servers.begin(), servers.end(), minWireCompare);
         return serverDescription->getMinWireVersion();
     } else {
-        // TODO: what did the old RSM do in this case?
-        return -1;
+        return 0;
     }
 }
 
@@ -235,8 +236,7 @@ int ReplicaSetMonitor::getMaxWireVersion() const {
             *std::max_element(servers.begin(), servers.end(), maxWireCompare);
         return serverDescription->getMaxWireVersion();
     } else {
-        // TODO: what did the old RSM do in this case?
-        return -1;
+        return std::numeric_limits<int>::max();
     }
 }
 
@@ -300,6 +300,7 @@ ReplicaSetChangeNotifier& ReplicaSetMonitor::getNotifier() {
 }
 
 void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC) const {
+    //        TODO: implement
     //        stdx::lock_guard<Latch> lk(_state->mutex);
     //        BSONObjBuilder monitorInfo(bsonObjBuilder.subobjStart(getName()));
     //        if (forFTDC) {
