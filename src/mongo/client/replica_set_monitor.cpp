@@ -124,7 +124,7 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
 
     // otherwise, do async version
     // TODO: refactor this
-    std::lock_guard<Mutex> lk(_mutex);
+    mongo::stdx::lock_guard<Mutex> lk(_mutex);
     auto pf = makePromiseFuture<HostAndPort>();
     auto query = std::make_shared<SingleHostQuery>();
     query->type = HostQueryType::SINGLE;
@@ -169,7 +169,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
 
     // otherwise, do async version
     // TODO: refactor this
-    std::lock_guard<Mutex> lk(_mutex);
+    mongo::stdx::lock_guard<Mutex> lk(_mutex);
     auto pf = makePromiseFuture<std::vector<HostAndPort>>();
     auto query = std::make_shared<MultiHostQuery>();
     query->type = HostQueryType::MULTI;
