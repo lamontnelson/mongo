@@ -259,8 +259,6 @@ private:
 
     static inline const auto SERVER_SELECTION_CONFIG =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
-    SemiFuture<std::vector<HostAndPort>> _asyncGetHosts(const Date_t deadline,
-                                                        const ReadPreferenceSetting& criteria);
     boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
 };
 }  // namespace mongo
