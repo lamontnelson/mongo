@@ -103,10 +103,6 @@ public:
     /**
      * Notifies this Monitor that a host has failed because of the specified error 'status' and
      * should be considered down.
-     *
-     * Call this when you get a connection error. If you get an error while trying to refresh our
-     * view of a host, call Refresher::failedHost instead because it bypasses taking the monitor's
-     * mutex.
      */
     void failedHost(const HostAndPort& host, const Status& status);
 
