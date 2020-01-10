@@ -405,6 +405,12 @@ std::string ServerDescription::toString() const {
     return toBson().toString();
 }
 
+ServerDescriptionPtr ServerDescription::cloneWithRTT(IsMasterRTT rtt) {
+    auto newServerDescription = std::make_shared<ServerDescription>(*this);
+    newServerDescription->_rtt = rtt;
+    return newServerDescription;
+}
+
 
 bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b) {
     return a.isEquivalent(b);

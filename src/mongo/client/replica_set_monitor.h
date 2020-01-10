@@ -31,6 +31,7 @@
 
 #include <functional>
 #include <memory>
+#include <mongo/executor/task_executor.h>
 #include <set>
 #include <string>
 
@@ -52,11 +53,19 @@ class ReplicaSetMonitorTest;
 struct ReadPreferenceSetting;
 typedef std::shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorPtr;
 
+class ServerIsMasterMonitor {
+public:
+    ServerIsMasterMonitor(executor::TaskExecutor* executor) {}
+};
+using ServerIsMasterMonitorPtr = std::unique_ptr<ServerIsMasterMonitor>;
+
 /**
  * Holds state about a replica set and provides a means to refresh the local view.
  * All methods perform the required synchronization to allow callers from multiple threads.
  */
-class ReplicaSetMonitor {
+class ReplicaSetMonitor : public sdam::NoOpTopologyListener,
+                          public std::enable_shared_from_this<ReplicaSetMonitor> {
+
     ReplicaSetMonitor(const ReplicaSetMonitor&) = delete;
     ReplicaSetMonitor& operator=(const ReplicaSetMonitor&) = delete;
 
@@ -201,7 +210,7 @@ public:
      */
     static void shutdown();
 
-    ~ReplicaSetMonitor();
+    virtual ~ReplicaSetMonitor();
 
     /**
 -     * The default timeout, which will be used for finding a replica set host if the caller does
@@ -231,6 +240,19 @@ private:
     boost::optional<std::vector<HostAndPort>> _getHosts(const ReadPreferenceSetting& criteria);
     Date_t _now();
 
+    void onTopologyDescriptionChangedEvent(UUID topologyId,
+                                           sdam::TopologyDescriptionPtr previousDescription,
+                                           sdam::TopologyDescriptionPtr newDescription) override;
+
+    void onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
+                                         sdam::ServerAddress hostAndPort) override;
+
+    void onServerPingFailedEvent(const sdam::ServerAddress hostAndPort,
+                                 const Status& status) override;
+
+    void onServerPingSucceededEvent(mongo::Milliseconds durationMS,
+                                    sdam::ServerAddress hostAndPort) override;
+
     // Get a pointer to the current primary's ServerDescription
     // To ensure a consistent view of the Topology either _currentPrimary or _currentTopology should
     // be called (not both) since the topology can change between the function invocations.
@@ -244,6 +266,7 @@ private:
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
     sdam::ServerSelectorPtr _serverSelector;
+    ServerIsMasterMonitorPtr _isMasterMonitor;
     ExecutorPtr _taskExecutor;
 
     const MongoURI _uri;
@@ -257,4 +280,5 @@ private:
         sdam::ServerSelectionConfiguration::defaultConfiguration();
     boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
 };
+
 }  // namespace mongo

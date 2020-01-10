@@ -104,4 +104,18 @@ const std::shared_ptr<TopologyDescription> TopologyManager::getTopologyDescripti
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
     return _topologyDescription;
 }
+
+void TopologyManager::onServerRTTUpdated(ServerAddress hostAndPort, IsMasterRTT rtt) {
+    stdx::lock_guard<mongo::Mutex> lock(_mutex);
+    auto oldServerDescription = _topologyDescription->findServerByAddress(hostAndPort);
+    if (oldServerDescription) {
+        auto newServerDescription = (*oldServerDescription)->cloneWithRTT(rtt);
+        auto newTopologyDescription = std::make_unique<TopologyDescription>(*_topologyDescription);
+        newTopologyDescription->installServerDescription(newServerDescription);
+        _topologyDescription = std::move(newTopologyDescription);
+        return;
+    }
+
+    // otherwise, the server was removed from the topology. Nothing to do.
+}
 };  // namespace mongo::sdam
