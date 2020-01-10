@@ -32,6 +32,7 @@
 
 namespace mongo::sdam {
 class TopologyListener {
+public:
     /**
      * Published when topology description changes.
      */
@@ -67,15 +68,25 @@ class TopologyListener {
          * The name of this field is flexible to match the object that is returned from the driver.
          */
         ServerAddress hostAndPort) = 0;
+
+    virtual void onServerPingFailedEvent(const ServerAddress hostAndPort, const Status& status) = 0;
+
+    virtual void onServerPingSucceededEvent(mongo::Milliseconds durationMS,
+                                            ServerAddress hostAndPort) = 0;
 };
 
 class NoOpTopologyListener : public TopologyListener {
+public:
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            TopologyDescriptionPtr previousDescription,
-                                           TopologyDescriptionPtr newDescription) override {};
+                                           TopologyDescriptionPtr newDescription) override{};
 
     void onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
-                                         ServerAddress hostAndPort) override {};
+                                         ServerAddress hostAndPort) override{};
+
+    void onServerPingFailedEvent(const ServerAddress hostAndPort, const Status& status) override{};
+
+    void onServerPingSucceededEvent(mongo::Milliseconds durationMS,
+                                    ServerAddress hostAndPort) override{};
 };
 }  // namespace mongo::sdam
-

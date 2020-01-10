@@ -59,6 +59,16 @@ public:
      */
     void onServerDescription(const IsMasterOutcome& isMasterOutcome);
 
+
+    /**
+     * This function updates the RTT value for a server without executing any state machine actions. It atomically:
+     *   1. Clones the current TopologyDescription
+     *   2. Clones the ServerDescription corresponding to hostAndPort such that it contains the new RTT value.
+     *   3. Installs the cloned ServerDescription into the TopologyDescription from step 1
+     *   4. Installs the cloned TopologyDescription as the current one.
+     */
+    void onServerRTTUpdated(ServerAddress hostAndPort, IsMasterRTT rtt);
+
     /**
      * Get the current TopologyDescription. This is safe to call from multiple threads.
      */

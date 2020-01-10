@@ -101,6 +101,7 @@ public:
 
     BSONObj toBson() const;
     std::string toString() const;
+    ServerDescriptionPtr cloneWithRTT(IsMasterRTT rtt);
 
 private:
     /**

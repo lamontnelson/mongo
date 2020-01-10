@@ -93,6 +93,7 @@ static auto primaryPredicate = [](const ServerDescriptionPtr& server) {
 
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri)
     : _serverSelector(std::make_unique<SdamServerSelector>(SERVER_SELECTION_CONFIG)),
+      _isMasterMonitor(std::make_unique<ServerIsMasterMonitor>(globalRSMonitorManager.getExecutor())),
       _taskExecutor(globalRSMonitorManager.getExecutor()),
       _uri(uri) {
     // TODO: sdam should use the HostAndPort type for ServerAddress
@@ -106,7 +107,6 @@ ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri)
 }
 
 ReplicaSetMonitor::~ReplicaSetMonitor() {}
-
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
@@ -216,7 +216,9 @@ bool ReplicaSetMonitor::isPrimary(const HostAndPort& host) const {
 }
 
 bool ReplicaSetMonitor::isHostUp(const HostAndPort& host) const {
-    return _currentTopology()->findServerByAddress(host.toString()) != boost::none;
+    const boost::optional<ServerDescriptionPtr>& serverDescription =
+        _currentTopology()->findServerByAddress(host.toString());
+    return serverDescription != boost::none && (*serverDescription)->getType() != ServerType::kUnknown;
 }
 
 int ReplicaSetMonitor::getMinWireVersion() const {
@@ -273,7 +275,6 @@ const MongoURI& ReplicaSetMonitor::getOriginalUri() const {
 bool ReplicaSetMonitor::contains(const HostAndPort& host) const {
     return _currentTopology()->findServerByAddress(host.toString()) != boost::none;
 }
-
 
 shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::createIfNeeded(const string& name,
                                                                 const set<HostAndPort>& servers) {
@@ -344,5 +345,26 @@ bool ReplicaSetMonitor::isKnownToHaveGoodPrimary() const {
 
 sdam::TopologyDescriptionPtr ReplicaSetMonitor::_currentTopology() const {
     return _topologyManager->getTopologyDescription();
+}
+
+void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
+    UUID topologyId,
+    TopologyDescriptionPtr previousDescription,
+    TopologyDescriptionPtr newDescription) {
+}
+
+void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
+                                                        ServerAddress hostAndPort) {
+
+}
+
+void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress hostAndPort,
+                                                const Status& status) {
+    failedHost(HostAndPort(hostAndPort), status);
+}
+
+void ReplicaSetMonitor::onServerPingSucceededEvent(mongo::Milliseconds durationMS,
+                                                   ServerAddress hostAndPort) {
+    _topologyManager->onServerRTTUpdated(hostAndPort, durationMS);
 }
 }  // namespace mongo
