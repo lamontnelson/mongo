@@ -93,8 +93,8 @@ static auto primaryPredicate = [](const ServerDescriptionPtr& server) {
 
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri)
     : _serverSelector(std::make_unique<SdamServerSelector>(SERVER_SELECTION_CONFIG)),
-      _isMasterMonitor(std::make_unique<ServerIsMasterMonitor>(globalRSMonitorManager.getExecutor())),
-      _taskExecutor(globalRSMonitorManager.getExecutor()),
+      // TODO: create executor instead of using this one
+      _isMasterMonitor(std::make_unique<ServerIsMasterMonitor>(_sdamConfig, _eventsPublisher, std::shared_ptr<executor::TaskExecutor>(globalRSMonitorManager.getExecutor()))),
       _uri(uri) {
     // TODO: sdam should use the HostAndPort type for ServerAddress
     std::vector<ServerAddress> seeds;
@@ -354,7 +354,8 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
 }
 
 void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
-                                                        ServerAddress hostAndPort) {
+                                                        ServerAddress hostAndPort,
+                                                        const BSONObj reply) {
 
 }
 

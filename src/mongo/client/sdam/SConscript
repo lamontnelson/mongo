@@ -11,8 +11,9 @@ env.Library(
         'sdam_datatypes.cpp',
         'server_description.cpp',
         'topology_description.cpp',
-        'topology_state_machine.cpp',
+        'topology_listener.cpp',
         'topology_manager.cpp',
+        'topology_state_machine.cpp',
         'server_selector.cpp',
     ],
     LIBDEPS=[

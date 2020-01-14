@@ -39,6 +39,7 @@
 #include "mongo/client/mongo_uri.h"
 #include "mongo/client/replica_set_change_notifier.h"
 #include "mongo/client/sdam/sdam.h"
+#include "mongo/client/server_is_master_monitor.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/util/concurrency/with_lock.h"
 #include "mongo/util/duration.h"
@@ -53,17 +54,11 @@ class ReplicaSetMonitorTest;
 struct ReadPreferenceSetting;
 typedef std::shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorPtr;
 
-class ServerIsMasterMonitor {
-public:
-    ServerIsMasterMonitor(executor::TaskExecutor* executor) {}
-};
-using ServerIsMasterMonitorPtr = std::unique_ptr<ServerIsMasterMonitor>;
-
 /**
  * Holds state about a replica set and provides a means to refresh the local view.
  * All methods perform the required synchronization to allow callers from multiple threads.
  */
-class ReplicaSetMonitor : public sdam::NoOpTopologyListener,
+class ReplicaSetMonitor : public sdam::TopologyListener,
                           public std::enable_shared_from_this<ReplicaSetMonitor> {
 
     ReplicaSetMonitor(const ReplicaSetMonitor&) = delete;
@@ -245,7 +240,8 @@ private:
                                            sdam::TopologyDescriptionPtr newDescription) override;
 
     void onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
-                                         sdam::ServerAddress hostAndPort) override;
+                                         sdam::ServerAddress hostAndPort,
+                                         const BSONObj reply) override;
 
     void onServerPingFailedEvent(const sdam::ServerAddress hostAndPort,
                                  const Status& status) override;
@@ -262,12 +258,13 @@ private:
     // Note that most functions will want to save the result of this function once per computation
     // so that we are operating on a consistent read-only view of the topology.
     sdam::TopologyDescriptionPtr _currentTopology() const;
+    boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
     sdam::ServerSelectorPtr _serverSelector;
+    sdam::TopologyEventsPublisherPtr _eventsPublisher;
     ServerIsMasterMonitorPtr _isMasterMonitor;
-    ExecutorPtr _taskExecutor;
 
     const MongoURI _uri;
 
@@ -278,7 +275,6 @@ private:
 
     static inline const auto SERVER_SELECTION_CONFIG =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
-    boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
 };
 
 }  // namespace mongo
