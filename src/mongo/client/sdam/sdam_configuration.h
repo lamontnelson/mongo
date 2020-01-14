@@ -89,7 +89,7 @@ public:
         mongo::Milliseconds(30000);
 
     static ServerSelectionConfiguration defaultConfiguration() {
-        return ServerSelectionConfiguration(kDefaultLocalThresholdMS, kDefaultServerSelectionTimeoutMs);
+        return ServerSelectionConfiguration{kDefaultLocalThresholdMS, kDefaultServerSelectionTimeoutMs};
     }
 
 private:
