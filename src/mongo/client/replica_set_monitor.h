@@ -71,9 +71,38 @@ public:
     static constexpr auto kCheckTimeout = Seconds(5);
 
     /**
-     * Initializes local state from a MongoURI.
+     * Constructs a RSM instance from a mongoURI.
+     * If the executor param is provided the RSM will use this to execute isMaster requests (for
+     * testing)
      */
-    ReplicaSetMonitor(const MongoURI& uri);
+    ReplicaSetMonitor(const MongoURI& uri,
+                      std::shared_ptr<executor::TaskExecutor> executor = nullptr);
+
+    /**
+     * Performs post-construction initialization. This function must be called exactly once before
+     * the instance is used. Call the make static function to create and init RSM instances.
+     */
+    void init();
+
+    /**
+     * Closes this RSM instance. This RSM instance is no longer useable once the function exits.
+     * Should be called exactly once.
+     */
+    void close();
+
+    /**
+     * Create a Replica Set monitor instance and fully initialize it.
+     * Use this instead of the constructor to create instances.
+     */
+    static ReplicaSetMonitorPtr make(const MongoURI& uri,
+                                     std::shared_ptr<executor::TaskExecutor> executor = nullptr);
+
+    /**
+     * Permanently stops all monitoring on replica sets and clears all cached information
+     * as well. As a consequence, NEVER call this if you have other threads that have a
+     * DBClientReplicaSet instance. This method should be used for unit test only.
+     */
+    static void cleanup();
 
     /**
      * Returns a host matching the given read preference or an error, if no host matches.
@@ -193,19 +222,11 @@ public:
      */
     static ReplicaSetChangeNotifier& getNotifier();
 
-    /**
-     * Permanently stops all monitoring on replica sets and clears all cached information
-     * as well. As a consequence, NEVER call this if you have other threads that have a
-     * DBClientReplicaSet instance. This method should be used for unit test only.
-     */
-    static void cleanup();
 
     /**
      * Permanently stops all monitoring on replica sets.
      */
     static void shutdown();
-
-    virtual ~ReplicaSetMonitor();
 
     /**
 -     * The default timeout, which will be used for finding a replica set host if the caller does
@@ -259,6 +280,8 @@ private:
     // so that we are operating on a consistent read-only view of the topology.
     sdam::TopologyDescriptionPtr _currentTopology() const;
     boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
+    std::shared_ptr<executor::TaskExecutor> _initTaskExecutor(
+        std::shared_ptr<executor::TaskExecutor> executor);
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
@@ -268,10 +291,13 @@ private:
 
     const MongoURI _uri;
 
+    std::shared_ptr<executor::TaskExecutor> _executor;
+
     Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
     // variables below are protected by the mutex
     ClockSource* _clockSource;
     std::vector<HostQueryPtr> _outstandingQueries;
+    bool _isClosed = true;
 
     static inline const auto SERVER_SELECTION_CONFIG =
         sdam::ServerSelectionConfiguration::defaultConfiguration();

@@ -90,7 +90,7 @@ void ReplicaSetMonitorManager::_setupTaskExecutorInLock() {
     auto net = executor::makeNetworkInterface(
         "ReplicaSetMonitor-TaskExecutor", nullptr, std::move(hookList));
     auto pool = std::make_unique<NetworkInterfaceThreadPool>(net.get());
-    _taskExecutor = std::make_unique<ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
+    _taskExecutor = std::make_shared<ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
     _taskExecutor->startup();
 }
 
@@ -123,7 +123,7 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
 
     log() << "Starting new replica set monitor for " << uri.toString();
 
-    auto newMonitor = std::make_shared<ReplicaSetMonitor>(uri);
+    auto newMonitor = ReplicaSetMonitor::make(uri, getExecutor());
     _monitors[setName] = newMonitor;
     return newMonitor;
 }
@@ -145,7 +145,7 @@ void ReplicaSetMonitorManager::removeMonitor(StringData setName) {
     ReplicaSetMonitorsMap::const_iterator it = _monitors.find(setName);
     if (it != _monitors.end()) {
         if (auto monitor = it->second.lock()) {
-//            monitor->drop();
+            monitor->close();
         }
         _monitors.erase(it);
         log() << "Removed ReplicaSetMonitor for replica set " << setName;
@@ -220,9 +220,9 @@ void ReplicaSetMonitorManager::report(BSONObjBuilder* builder, bool forFTDC) {
     }
 }
 
-TaskExecutor* ReplicaSetMonitorManager::getExecutor() {
+std::shared_ptr<TaskExecutor> ReplicaSetMonitorManager::getExecutor() {
     invariant(_taskExecutor);
-    return _taskExecutor.get();
+    return _taskExecutor;
 }
 
 ReplicaSetChangeNotifier& ReplicaSetMonitorManager::getNotifier() {

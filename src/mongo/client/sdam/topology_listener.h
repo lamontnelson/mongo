@@ -28,8 +28,8 @@
  */
 #pragma once
 #include "mongo/client/sdam/sdam_datatypes.h"
-#include "mongo/util/uuid.h"
 #include "mongo/executor/task_executor.h"
+#include "mongo/util/uuid.h"
 
 namespace mongo::sdam {
 class TopologyListener {
@@ -71,7 +71,12 @@ public:
          */
         ServerAddress hostAndPort,
 
-        const BSONObj reply) {};
+        const BSONObj reply){};
+
+    virtual void onServerHeartbeatFailureEvent(mongo::Milliseconds durationMs,
+                                               Status errorStatus,
+                                               ServerAddress hostAndPort,
+                                               const BSONObj reply){};
 
     virtual void onServerPingFailedEvent(const ServerAddress hostAndPort, const Status& status){};
 
@@ -79,20 +84,42 @@ public:
                                             ServerAddress hostAndPort){};
 };
 
-
-class TopologyEventsPublisher : public TopologyListener {
+/**
+ * This class publishes TopologyListener events to a group of registered listeners.
+ *
+ * To publish an event to all registered listeners call the corresponding event function on the
+ * TopologyEventsPublisher instance.
+ */
+class TopologyEventsPublisher : public TopologyListener,
+                                public std::enable_shared_from_this<TopologyEventsPublisher> {
 public:
     TopologyEventsPublisher(std::shared_ptr<executor::TaskExecutor> executor)
-        : _executor(executor) {};
+        : _executor(executor){};
     void registerListener(TopologyListenerPtr listener);
     void removeListener(TopologyListenerPtr listener);
+    void close();
 
     virtual ~TopologyEventsPublisher() {}
+
+    void onTopologyDescriptionChangedEvent(UUID topologyId,
+                                           TopologyDescriptionPtr previousDescription,
+                                           TopologyDescriptionPtr newDescription) override;
+    void onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
+                                         ServerAddress hostAndPort,
+                                         const BSONObj reply) override;
+    void onServerHeartbeatFailureEvent(mongo::Milliseconds durationMs,
+                                       Status errorStatus,
+                                       ServerAddress hostAndPort,
+                                       const BSONObj reply) override;
+    void onServerPingFailedEvent(const ServerAddress hostAndPort, const Status& status) override;
+    void onServerPingSucceededEvent(mongo::Milliseconds durationMS,
+                                    ServerAddress hostAndPort) override;
 
 private:
     Mutex _mutex;
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::vector<TopologyListenerPtr> _listeners;
+    void run(OutOfLineExecutor::Task functor);
 };
 using TopologyEventsPublisherPtr = std::shared_ptr<TopologyEventsPublisher>;
 }  // namespace mongo::sdam

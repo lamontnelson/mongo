@@ -44,9 +44,12 @@
 #include "mongo/db/operation_context.h"
 #include "mongo/db/repl/bson_extract_optime.h"
 #include "mongo/db/server_options.h"
+#include "mongo/executor/network_interface_factory.h"
+#include "mongo/executor/network_interface_thread_pool.h"
 #include "mongo/executor/thread_pool_task_executor.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/platform/mutex.h"
+#include "mongo/rpc/metadata/egress_metadata_hook_list.h"
 #include "mongo/stdx/condition_variable.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/thread_pool.h"
@@ -91,22 +94,49 @@ static auto primaryPredicate = [](const ServerDescriptionPtr& server) {
 };
 }  // namespace
 
-ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri)
+ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskExecutor> executor)
     : _serverSelector(std::make_unique<SdamServerSelector>(SERVER_SELECTION_CONFIG)),
-      // TODO: create executor instead of using this one
-      _isMasterMonitor(std::make_unique<ServerIsMasterMonitor>(_sdamConfig, _eventsPublisher, std::shared_ptr<executor::TaskExecutor>(globalRSMonitorManager.getExecutor()))),
-      _uri(uri) {
+      _uri(uri),
+      _executor(_initTaskExecutor(executor)) {
+
     // TODO: sdam should use the HostAndPort type for ServerAddress
     std::vector<ServerAddress> seeds;
     for (const auto seed : uri.getServers()) {
         seeds.push_back(seed.toString());
     }
+
     _sdamConfig = SdamConfiguration(seeds);
     _clockSource = getGlobalServiceContext()->getPreciseClockSource();
-    _topologyManager = std::make_unique<TopologyManager>(_sdamConfig, _clockSource);
 }
 
-ReplicaSetMonitor::~ReplicaSetMonitor() {}
+ReplicaSetMonitorPtr ReplicaSetMonitor::make(const MongoURI& uri,
+                                             std::shared_ptr<TaskExecutor> executor) {
+    auto result = std::make_shared<ReplicaSetMonitor>(uri, executor);
+    result->init();
+    return result;
+}
+
+void ReplicaSetMonitor::init() {
+    stdx::lock_guard<Mutex> lock(_mutex);
+    LOG(0) << "Starting Replica Set Monitor " << _uri;
+    _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
+    _topologyManager =
+        std::make_unique<TopologyManager>(_sdamConfig, _clockSource, _eventsPublisher);
+    _isMasterMonitor = std::make_unique<ServerIsMasterMonitor>(_sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription());
+
+    _eventsPublisher->registerListener(shared_from_this());
+    _eventsPublisher->registerListener(_isMasterMonitor);
+
+}
+
+void ReplicaSetMonitor::close() {
+    stdx::lock_guard<Mutex> lock(_mutex);
+    LOG(0) << "Shutting down Replica Set Monitor " << _uri;
+    _eventsPublisher->close();
+    _isMasterMonitor = nullptr;
+    _eventsPublisher = nullptr;
+    _executor = nullptr;
+}
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
@@ -218,7 +248,8 @@ bool ReplicaSetMonitor::isPrimary(const HostAndPort& host) const {
 bool ReplicaSetMonitor::isHostUp(const HostAndPort& host) const {
     const boost::optional<ServerDescriptionPtr>& serverDescription =
         _currentTopology()->findServerByAddress(host.toString());
-    return serverDescription != boost::none && (*serverDescription)->getType() != ServerType::kUnknown;
+    return serverDescription != boost::none &&
+        (*serverDescription)->getType() != ServerType::kUnknown;
 }
 
 int ReplicaSetMonitor::getMinWireVersion() const {
@@ -350,13 +381,13 @@ sdam::TopologyDescriptionPtr ReplicaSetMonitor::_currentTopology() const {
 void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     TopologyDescriptionPtr previousDescription,
-    TopologyDescriptionPtr newDescription) {
-}
+    TopologyDescriptionPtr newDescription) {}
 
 void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
                                                         ServerAddress hostAndPort,
                                                         const BSONObj reply) {
-
+   IsMasterOutcome outcome(hostAndPort, reply, durationMs);
+   _topologyManager->onServerDescription(outcome);
 }
 
 void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress hostAndPort,
@@ -368,4 +399,20 @@ void ReplicaSetMonitor::onServerPingSucceededEvent(mongo::Milliseconds durationM
                                                    ServerAddress hostAndPort) {
     _topologyManager->onServerRTTUpdated(hostAndPort, durationMS);
 }
+
+std::shared_ptr<executor::TaskExecutor> ReplicaSetMonitor::_initTaskExecutor(
+    std::shared_ptr<executor::TaskExecutor> executor) {
+    if (executor)
+        return executor;
+
+    auto hookList = std::make_unique<rpc::EgressMetadataHookList>();
+    auto net = executor::makeNetworkInterface(
+        "ReplicaSetMonitor-TaskExecutor", nullptr, std::move(hookList));
+    auto pool = std::make_unique<executor::NetworkInterfaceThreadPool>(net.get());
+    auto _executor =
+        std::make_shared<executor::ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
+    _executor->startup();
+    return _executor;
+}
+
 }  // namespace mongo
