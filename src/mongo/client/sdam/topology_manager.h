@@ -31,6 +31,7 @@
 
 #include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/sdam/topology_description.h"
+#include "mongo/client/sdam/topology_listener.h"
 #include "mongo/client/sdam/topology_state_machine.h"
 
 namespace mongo::sdam {
@@ -44,7 +45,9 @@ class TopologyManager {
     TopologyManager(const TopologyManager&) = delete;
 
 public:
-    TopologyManager(SdamConfiguration config, ClockSource* clockSource);
+    TopologyManager(SdamConfiguration config,
+                    ClockSource* clockSource,
+                    TopologyEventsPublisherPtr eventsPublisher = nullptr);
 
     /**
      * This function atomically:
@@ -61,9 +64,11 @@ public:
 
 
     /**
-     * This function updates the RTT value for a server without executing any state machine actions. It atomically:
+     * This function updates the RTT value for a server without executing any state machine actions.
+     * It atomically:
      *   1. Clones the current TopologyDescription
-     *   2. Clones the ServerDescription corresponding to hostAndPort such that it contains the new RTT value.
+     *   2. Clones the ServerDescription corresponding to hostAndPort such that it contains the new
+     * RTT value.
      *   3. Installs the cloned ServerDescription into the TopologyDescription from step 1
      *   4. Installs the cloned TopologyDescription as the current one.
      */
@@ -75,10 +80,15 @@ public:
     const TopologyDescriptionPtr getTopologyDescription() const;
 
 private:
+    void _publishTopologyDescriptionChanged(
+        const TopologyDescriptionPtr& oldTopologyDescription,
+        const TopologyDescriptionPtr& newTopologyDescription) const;
+
     mutable mongo::Mutex _mutex = MONGO_MAKE_LATCH("TopologyManager");
     const SdamConfiguration _config;
     ClockSource* _clockSource;
-    std::shared_ptr<TopologyDescription> _topologyDescription;
+    TopologyDescriptionPtr _topologyDescription;
     std::unique_ptr<TopologyStateMachine> _topologyStateMachine;
+    TopologyEventsPublisherPtr _topologyEventsPublisher;
 };
 }  // namespace mongo::sdam

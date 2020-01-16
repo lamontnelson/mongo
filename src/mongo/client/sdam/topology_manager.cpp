@@ -31,11 +31,12 @@
 #include "mongo/client/sdam/topology_state_machine.h"
 
 namespace mongo::sdam {
-TopologyManager::TopologyManager(SdamConfiguration config, ClockSource* clockSource)
+TopologyManager::TopologyManager(SdamConfiguration config, ClockSource* clockSource, TopologyEventsPublisherPtr eventsPublisher)
     : _config(std::move(config)),
       _clockSource(clockSource),
       _topologyDescription(std::make_unique<TopologyDescription>(_config)),
-      _topologyStateMachine(std::make_unique<TopologyStateMachine>(_config)) {}
+      _topologyStateMachine(std::make_unique<TopologyStateMachine>(_config)),
+      _topologyEventsPublisher(eventsPublisher) {}
 
 void TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome) {
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
@@ -48,9 +49,11 @@ void TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome
     auto newServerDescription =
         std::make_shared<ServerDescription>(_clockSource, isMasterOutcome, lastRTT);
 
-    auto newTopologyDescription = std::make_unique<TopologyDescription>(*_topologyDescription);
-    _topologyStateMachine->onServerDescription(*newTopologyDescription, newServerDescription);
-    _topologyDescription = std::move(newTopologyDescription);
+    auto oldTopologyDescription = _topologyDescription;
+    _topologyDescription = std::make_shared<TopologyDescription>(*_topologyDescription);
+    _topologyStateMachine->onServerDescription(*_topologyDescription, newServerDescription);
+
+    _publishTopologyDescriptionChanged(oldTopologyDescription, _topologyDescription);
 }
 
 const std::shared_ptr<TopologyDescription> TopologyManager::getTopologyDescription() const {
@@ -60,15 +63,27 @@ const std::shared_ptr<TopologyDescription> TopologyManager::getTopologyDescripti
 
 void TopologyManager::onServerRTTUpdated(ServerAddress hostAndPort, IsMasterRTT rtt) {
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
+
     auto oldServerDescription = _topologyDescription->findServerByAddress(hostAndPort);
     if (oldServerDescription) {
         auto newServerDescription = (*oldServerDescription)->cloneWithRTT(rtt);
-        auto newTopologyDescription = std::make_unique<TopologyDescription>(*_topologyDescription);
-        newTopologyDescription->installServerDescription(newServerDescription);
-        _topologyDescription = std::move(newTopologyDescription);
+
+        auto oldTopologyDescription = _topologyDescription;
+        _topologyDescription = std::make_shared<TopologyDescription>(*_topologyDescription);
+        _topologyDescription->installServerDescription(newServerDescription);
+
+        _publishTopologyDescriptionChanged(oldTopologyDescription, _topologyDescription);
+
         return;
     }
 
     // otherwise, the server was removed from the topology. Nothing to do.
+}
+
+void TopologyManager::_publishTopologyDescriptionChanged(
+    const TopologyDescriptionPtr& oldTopologyDescription,
+    const TopologyDescriptionPtr& newTopologyDescription) const {
+    if (_topologyEventsPublisher)
+        _topologyEventsPublisher->onTopologyDescriptionChangedEvent(newTopologyDescription->getId(), oldTopologyDescription, newTopologyDescription);
 }
 };  // namespace mongo::sdam
