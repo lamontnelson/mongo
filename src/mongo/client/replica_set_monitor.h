@@ -240,6 +240,8 @@ private:
         HostQueryType type;
         Date_t deadline;
         ReadPreferenceSetting criteria;
+
+        virtual ~HostQuery(){};
     };
     using HostQueryPtr = std::shared_ptr<HostQuery>;
 
@@ -254,7 +256,7 @@ private:
     std::vector<HostAndPort> _extractHosts(
         const std::vector<sdam::ServerDescriptionPtr>& serverDescriptions);
     boost::optional<std::vector<HostAndPort>> _getHosts(const ReadPreferenceSetting& criteria);
-    Date_t _now();
+    void _satisfyOutstandingQueries();
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            sdam::TopologyDescriptionPtr previousDescription,
@@ -293,14 +295,16 @@ private:
 
     std::shared_ptr<executor::TaskExecutor> _executor;
 
-    Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
+    mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
     // variables below are protected by the mutex
     ClockSource* _clockSource;
+    stdx::condition_variable _outstandingQueriesCV;
     std::vector<HostQueryPtr> _outstandingQueries;
     bool _isClosed = true;
 
     static inline const auto SERVER_SELECTION_CONFIG =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
+    void _startOutstandingQueryProcessor();
 };
 
 }  // namespace mongo

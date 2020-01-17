@@ -34,15 +34,15 @@ void SingleServerIsMasterMonitor::init() {
 }
 
 void SingleServerIsMasterMonitor::_scheduleNextIsMaster() {
-    std::shared_ptr<Timer> timer = std::make_shared<Timer>();
+    Timer timer;
     auto swCbHandle = _executor->scheduleWorkAt(
         _executor->now() + _heartbeatFrequencyMS,
-        [self = shared_from_this(), timer](const executor::TaskExecutor::CallbackArgs& cbData) {
-            self->_doRemoteCommand(timer);
+        [self = shared_from_this()](const executor::TaskExecutor::CallbackArgs& cbData) {
+            self->_doRemoteCommand();
         });
 
     if (!swCbHandle.isOK()) {
-        mongo::Microseconds latency(timer->micros());
+        mongo::Microseconds latency(timer.micros());
         _onIsMasterFailure(latency, swCbHandle.getStatus(), BSONObj());
         return;
     }
@@ -50,10 +50,11 @@ void SingleServerIsMasterMonitor::_scheduleNextIsMaster() {
     _nextIsMasterHandle = swCbHandle.getValue();
 }
 
-void SingleServerIsMasterMonitor::_doRemoteCommand(std::shared_ptr<Timer> timer) {
+void SingleServerIsMasterMonitor::_doRemoteCommand() {
     auto request = executor::RemoteCommandRequest(
         HostAndPort(_host), "admin", IS_MASTER_BSON, nullptr, _timeoutMS);
     // request.sslMode = _set->setUri.getSSLMode();
+    Timer timer;
     stdx::lock_guard<Mutex> lk(_mutex);
     if (!_active)
         return;
@@ -66,7 +67,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand(std::shared_ptr<Timer> timer)
             if (!self->_active)
                 return;
 
-            Microseconds latency(timer->micros());
+            Microseconds latency(timer.micros());
             if (result.response.isOK()) {
                 self->_onIsMasterSuccess(latency, result.response.data);
             } else {
@@ -77,7 +78,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand(std::shared_ptr<Timer> timer)
         });
 
     if (!swCbHandle.isOK()) {
-        mongo::Microseconds latency(timer->micros());
+        mongo::Microseconds latency(timer.micros());
         _onIsMasterFailure(latency, swCbHandle.getStatus(), BSONObj());
         return;
     }
