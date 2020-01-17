@@ -122,11 +122,14 @@ void ReplicaSetMonitor::init() {
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
     _topologyManager =
         std::make_unique<TopologyManager>(_sdamConfig, _clockSource, _eventsPublisher);
-    _isMasterMonitor = std::make_unique<ServerIsMasterMonitor>(_sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription());
+    _isMasterMonitor = std::make_unique<ServerIsMasterMonitor>(
+        _sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription());
 
     _eventsPublisher->registerListener(shared_from_this());
     _eventsPublisher->registerListener(_isMasterMonitor);
+    _isClosed = false;
 
+    _startOutstandingQueryProcessor();
 }
 
 void ReplicaSetMonitor::close() {
@@ -136,11 +139,12 @@ void ReplicaSetMonitor::close() {
     _isMasterMonitor = nullptr;
     _eventsPublisher = nullptr;
     _executor = nullptr;
+    _isClosed = true;
 }
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
-    const auto deadline = _now() + maxWait;
+    const auto deadline = _clockSource->now() + maxWait;
 
     // try to satisfy query immediately
     const auto& immediateResult = _getHost(criteria);
@@ -149,7 +153,9 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     }
 
     // fail fast on timeout
-    if (deadline - _now() < Milliseconds(0)) {
+    // TODO: executor has a notion of time which we should probably use
+    // putting this function here for now to provide a level of indirection
+    if (deadline - _clockSource->now() < Milliseconds(0)) {
         return SemiFuture<HostAndPort>(
             Status(ErrorCodes::FailedToSatisfyReadPreference, "failed to satisfy read preference"));
     }
@@ -177,16 +183,8 @@ std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
     return result;
 }
 
-Date_t ReplicaSetMonitor::_now() {
-    // TODO: executor has a notion of time which we should probably use
-    // putting this function here for now to provide a level of indirection
-    return _clockSource->now();
-}
-
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
-    const auto deadline = _now() + maxWait;
-
     // try to satisfy query immediately
     const auto& immediateResult = _getHosts(criteria);
     if (immediateResult) {
@@ -194,7 +192,8 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     }
 
     // fail fast on timeout
-    if (deadline - _now() < Milliseconds(0)) {
+    const auto deadline = _clockSource->now() + maxWait;
+    if (deadline - _clockSource->now() < Milliseconds(0)) {
         return SemiFuture<std::vector<HostAndPort>>(
             Status(ErrorCodes::FailedToSatisfyReadPreference, "failed to satisfy read preference"));
     }
@@ -333,37 +332,48 @@ ReplicaSetChangeNotifier& ReplicaSetMonitor::getNotifier() {
     return globalRSMonitorManager.getNotifier();
 }
 
+int32_t pingTimeMillis(const ServerDescriptionPtr& serverDescription) {
+    static const Milliseconds::rep maxLatency = numeric_limits<int32_t>::max();
+    auto latencyMillis =
+        duration_cast<Milliseconds>(serverDescription->getRtt().value_or(Milliseconds(maxLatency)))
+            .count();
+    return std::min(latencyMillis, maxLatency);
+}
+
 void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC) const {
     //        TODO: implement
-    //        stdx::lock_guard<Latch> lk(_state->mutex);
-    //        BSONObjBuilder monitorInfo(bsonObjBuilder.subobjStart(getName()));
-    //        if (forFTDC) {
-    //            for (size_t i = 0; i < _state->nodes.size(); i++) {
-    //                const Node& node = _state->nodes[i];
-    //                monitorInfo.appendNumber(node.host.toString(), pingTimeMillis(node));
-    //            }
-    //            return;
-    //        }
-    //
-    //        // NOTE: the format here must be consistent for backwards compatibility
-    //        BSONArrayBuilder hosts(monitorInfo.subarrayStart("hosts"));
-    //        for (size_t i = 0; i < _state->nodes.size(); i++) {
-    //            const Node& node = _state->nodes[i];
-    //
-    //            BSONObjBuilder builder;
-    //            builder.append("addr", node.host.toString());
-    //            builder.append("ok", node.isUp);
-    //            builder.append("ismaster", node.isMaster);  // intentionally not camelCase
-    //            builder.append("hidden", false);            // we don't keep hidden nodes in the
-    //            set builder.append("secondary", node.isUp && !node.isMaster);
-    //            builder.append("pingTimeMillis", pingTimeMillis(node));
-    //
-    //            if (!node.tags.isEmpty()) {
-    //                builder.append("tags", node.tags);
-    //            }
-    //
-    //            hosts.append(builder.obj());
-    //        }
+    auto topologyDescription = _currentTopology();
+
+    BSONObjBuilder monitorInfo(bsonObjBuilder.subobjStart(getName()));
+    if (forFTDC) {
+        for (auto serverDescription : topologyDescription->getServers()) {
+            monitorInfo.appendNumber(serverDescription->getAddress(),
+                                     pingTimeMillis(serverDescription));
+        }
+        return;
+    }
+
+    // NOTE: the format here must be consistent for backwards compatibility
+    BSONArrayBuilder hosts(monitorInfo.subarrayStart("hosts"));
+    for (auto serverDescription : topologyDescription->getServers()) {
+        bool isUp = serverDescription->getType() != ServerType::kUnknown;
+        bool isMaster = serverDescription->getPrimary() == serverDescription->getAddress();
+
+        BSONObjBuilder builder;
+        builder.append("addr", serverDescription->getAddress());
+        builder.append("ok", isUp);       // TODO: check what defines up
+        builder.append("ismaster", isMaster);     // intentionally not camelCase
+        builder.append("hidden", false);  // we don't keep hidden nodes in the
+        builder.append("secondary", isUp && isMaster);
+        builder.append("pingTimeMillis", pingTimeMillis(serverDescription));
+
+        auto tags = serverDescription->getTags();
+        if (tags.size() > 0) {
+            builder.append("tags", BSONObj()); // TODO: implement getBsonTags on ServerDescription
+        }
+
+        hosts.append(builder.obj());
+    }
 }
 
 void ReplicaSetMonitor::shutdown() {
@@ -386,8 +396,8 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
 void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
                                                         ServerAddress hostAndPort,
                                                         const BSONObj reply) {
-   IsMasterOutcome outcome(hostAndPort, reply, durationMs);
-   _topologyManager->onServerDescription(outcome);
+    IsMasterOutcome outcome(hostAndPort, reply, durationMs);
+    _topologyManager->onServerDescription(outcome);
 }
 
 void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress hostAndPort,
@@ -415,4 +425,51 @@ std::shared_ptr<executor::TaskExecutor> ReplicaSetMonitor::_initTaskExecutor(
     return _executor;
 }
 
+// TODO: we don't really need to call _getHost(s) for every outstanding query
+// since some might be duplicates. but we do still want the randomization for multiple hosts.
+void ReplicaSetMonitor::_satisfyOutstandingQueries() {
+    auto topologyDescription = _currentTopology();
+
+    std::unordered_set<HostQueryPtr> toRemove;
+
+    for (const auto& query : _outstandingQueries) {
+        if (query->type == HostQueryType::MULTI) {
+            auto multiQuery = std::dynamic_pointer_cast<MultiHostQuery>(query);
+            auto multiResult = _getHosts(multiQuery->criteria);
+            if (multiResult) {
+                multiQuery->promise.emplaceValue(*multiResult);
+                toRemove.insert(query);
+            }
+        } else {
+            auto singleQuery = std::dynamic_pointer_cast<SingleHostQuery>(query);
+            auto singleResult = _getHost(singleQuery->criteria);
+            if (singleResult) {
+                singleQuery->promise.emplaceValue(*singleResult);
+                toRemove.insert(query);
+            }
+        }
+    }
+
+    _outstandingQueriesCV.notify_all();
+
+    std::remove_if(
+        _outstandingQueries.begin(), _outstandingQueries.end(), [&toRemove](const HostQueryPtr& q) {
+            return toRemove.find(q) != toRemove.end();
+        });
+}
+
+void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
+    _executor->schedule([self = shared_from_this()](Status s) {
+        while (true) {
+            stdx::unique_lock<Mutex> lock(self->_mutex);
+            self->_outstandingQueriesCV.wait(
+                lock, [self] { return self->_isClosed && self->_outstandingQueries.size() > 0; });
+
+            if (self->_isClosed)
+                return;
+
+            self->_satisfyOutstandingQueries();
+        }
+    });
+}
 }  // namespace mongo

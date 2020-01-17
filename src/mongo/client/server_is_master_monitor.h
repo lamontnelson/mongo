@@ -21,7 +21,7 @@ public:
 
 private:
     void _scheduleNextIsMaster();
-    void _doRemoteCommand(std::shared_ptr<Timer> timer);
+    void _doRemoteCommand();
 
     void _onIsMasterSuccess(sdam::IsMasterRTT latency, const BSONObj bson);
     void _onIsMasterFailure(sdam::IsMasterRTT latency, const Status& status, const BSONObj bson);
@@ -58,6 +58,9 @@ public:
                                            sdam::TopologyDescriptionPtr newDescription) override;
 
 private:
+    /**
+     * If the provided executor exists, use that one (for testing). Otherwise create a new one.
+     */
     std::shared_ptr<executor::TaskExecutor> _setupExecutor(
         const std::shared_ptr<executor::TaskExecutor>& executor);
     static const int kLogDebugLevel = 0;
