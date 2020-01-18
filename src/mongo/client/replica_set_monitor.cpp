@@ -134,6 +134,7 @@ void ReplicaSetMonitor::init() {
     _isClosed = false;
 
     _startOutstandingQueryProcessor();
+    log() << "fire onFoundSet for replica set " << getName();
     globalRSMonitorManager.getNotifier().onFoundSet(getName());
 }
 
@@ -145,6 +146,7 @@ void ReplicaSetMonitor::close() {
     _eventsPublisher = nullptr;
     _executor = nullptr;
     _isClosed = true;
+    log() << "fire onDroppedSet for replica set " << getName();
     globalRSMonitorManager.getNotifier().onDroppedSet(getName());
 }
 
@@ -402,6 +404,7 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     auto primaryResult = newDescription->findServers(primaryPredicate);
 
     if (primaryResult.size()) {
+        log() << "fire onConfirmed set for replica set " << getName();
         invariant(primaryResult.size() == 1);
         auto primaryAddress = HostAndPort(primaryResult[0]->getAddress());
 
@@ -414,6 +417,7 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
         globalRSMonitorManager.getNotifier().onConfirmedSet(
             connectionString, primaryAddress, secondaries);
     } else {
+        log() << "fire onPossible set for replica set " << getName();
         globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
     }
 }
