@@ -92,6 +92,10 @@ static auto maxWireCompare = [](const ServerDescriptionPtr& a, const ServerDescr
 static auto primaryPredicate = [](const ServerDescriptionPtr& server) {
     return server->getType() == ServerType::kRSPrimary;
 };
+
+static auto secondaryPredicate = [](const ServerDescriptionPtr& server) {
+    return server->getType() == ServerType::kRSPrimary;
+};
 }  // namespace
 
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskExecutor> executor)
@@ -130,6 +134,7 @@ void ReplicaSetMonitor::init() {
     _isClosed = false;
 
     _startOutstandingQueryProcessor();
+    globalRSMonitorManager.getNotifier().onFoundSet(getName());
 }
 
 void ReplicaSetMonitor::close() {
@@ -140,6 +145,7 @@ void ReplicaSetMonitor::close() {
     _eventsPublisher = nullptr;
     _executor = nullptr;
     _isClosed = true;
+    globalRSMonitorManager.getNotifier().onDroppedSet(getName());
 }
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
@@ -361,15 +367,15 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
 
         BSONObjBuilder builder;
         builder.append("addr", serverDescription->getAddress());
-        builder.append("ok", isUp);       // TODO: check what defines up
-        builder.append("ismaster", isMaster);     // intentionally not camelCase
-        builder.append("hidden", false);  // we don't keep hidden nodes in the
+        builder.append("ok", isUp);            // TODO: check what defines up
+        builder.append("ismaster", isMaster);  // intentionally not camelCase
+        builder.append("hidden", false);       // we don't keep hidden nodes in the
         builder.append("secondary", isUp && isMaster);
         builder.append("pingTimeMillis", pingTimeMillis(serverDescription));
 
         auto tags = serverDescription->getTags();
         if (tags.size() > 0) {
-            builder.append("tags", BSONObj()); // TODO: implement getBsonTags on ServerDescription
+            builder.append("tags", BSONObj());  // TODO: implement getBsonTags on ServerDescription
         }
 
         hosts.append(builder.obj());
@@ -391,7 +397,26 @@ sdam::TopologyDescriptionPtr ReplicaSetMonitor::_currentTopology() const {
 void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     TopologyDescriptionPtr previousDescription,
-    TopologyDescriptionPtr newDescription) {}
+    TopologyDescriptionPtr newDescription) {
+    auto connectionString = ConnectionString(HostAndPort(this->_uri.toString()));
+    auto primaryResult = newDescription->findServers(primaryPredicate);
+
+    if (primaryResult.size()) {
+        invariant(primaryResult.size() == 1);
+        auto primaryAddress = HostAndPort(primaryResult[0]->getAddress());
+
+        // TODO: remove need for HostAndPort conversion
+        std::set<HostAndPort> secondaries;
+        for (auto secondary : newDescription->findServers(secondaryPredicate)) {
+            secondaries.insert(HostAndPort(secondary->getAddress()));
+        }
+
+        globalRSMonitorManager.getNotifier().onConfirmedSet(
+            connectionString, primaryAddress, secondaries);
+    } else {
+        globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
+    }
+}
 
 void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
                                                         ServerAddress hostAndPort,
