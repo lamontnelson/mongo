@@ -119,7 +119,7 @@ private:
     Mutex _mutex;
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::vector<TopologyListenerPtr> _listeners;
-    void run(OutOfLineExecutor::Task functor);
+    void run(OutOfLineExecutor::Task&& functor);
 };
 using TopologyEventsPublisherPtr = std::shared_ptr<TopologyEventsPublisher>;
 }  // namespace mongo::sdam
