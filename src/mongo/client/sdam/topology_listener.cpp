@@ -29,6 +29,9 @@
 
 #include "mongo/client/sdam/topology_listener.h"
 
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
+#include "mongo/util/log.h"
+
 namespace mongo::sdam {
 void TopologyEventsPublisher::registerListener(TopologyListenerPtr listener) {
     stdx::lock_guard<Mutex> lk(_mutex);
@@ -61,16 +64,28 @@ void TopologyEventsPublisher::onTopologyDescriptionChangedEvent(
     });
 }
 
-//TODO: fix this implementation; since events are launched async we need to order them
+// TODO: fix this implementation; since events are launched async we need to order them
 void TopologyEventsPublisher::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
                                                               ServerAddress hostAndPort,
                                                               const BSONObj reply) {
-    run([=, self = shared_from_this()](auto&&) {
+
+    log() << "schedule onServerHeartbeatSucceededEvent event publish: " << hostAndPort;
+    auto functor = [=, self = shared_from_this()](Status status) {
+        if (!status.isOK()) {
+            log() << "bad status in functor: " << status.toString();
+        }
+        log() << "in onServerHeartbeatSucceededEvent event publish: " << hostAndPort;
         stdx::lock_guard<Mutex> lk(self->_mutex);
+        log() << "publish onServerHeartbeatSucceededEvent to " << self->_listeners.size()
+              << " listeners.";
         for (auto listener : self->_listeners) {
             listener->onServerHeartbeatSucceededEvent(durationMs, hostAndPort, reply);
         }
-    });
+    };
+
+    run(std::move(functor));
+//    functor(Status::OK());
+    //    _executor->schedule(std::move(functor));
 }
 
 void TopologyEventsPublisher::onServerHeartbeatFailureEvent(mongo::Milliseconds durationMs,
@@ -79,6 +94,8 @@ void TopologyEventsPublisher::onServerHeartbeatFailureEvent(mongo::Milliseconds 
                                                             const BSONObj reply) {
     run([=, self = shared_from_this()](auto&&) {
         stdx::lock_guard<Mutex> lk(self->_mutex);
+        log() << "publish onServerHeartbeatFailureEvent to " << self->_listeners.size()
+              << " listeners.";
         for (auto listener : self->_listeners) {
             listener->onServerHeartbeatFailureEvent(durationMs, errorStatus, hostAndPort, reply);
         }
@@ -88,24 +105,26 @@ void TopologyEventsPublisher::onServerHeartbeatFailureEvent(mongo::Milliseconds 
 void TopologyEventsPublisher::onServerPingFailedEvent(const ServerAddress hostAndPort,
                                                       const Status& status) {
     run([=, self = shared_from_this()](auto&&) {
-      stdx::lock_guard<Mutex> lk(self->_mutex);
-      for (auto listener : self->_listeners) {
-          listener->onServerPingFailedEvent(hostAndPort, status);
-      }
+        stdx::lock_guard<Mutex> lk(self->_mutex);
+        for (auto listener : self->_listeners) {
+            listener->onServerPingFailedEvent(hostAndPort, status);
+        }
     });
 }
 
 void TopologyEventsPublisher::onServerPingSucceededEvent(mongo::Milliseconds durationMS,
                                                          ServerAddress hostAndPort) {
     run([=, self = shared_from_this()](auto&&) {
-      stdx::lock_guard<Mutex> lk(self->_mutex);
-      for (auto listener : self->_listeners) {
-          listener->onServerPingSucceededEvent(durationMS, hostAndPort);
-      }
+        stdx::lock_guard<Mutex> lk(self->_mutex);
+        for (auto listener : self->_listeners) {
+            listener->onServerPingSucceededEvent(durationMS, hostAndPort);
+        }
     });
 }
 
-void TopologyEventsPublisher::run(OutOfLineExecutor::Task functor) {
-    _executor->schedule(std::move(functor));
+void TopologyEventsPublisher::run(OutOfLineExecutor::Task&& functor) {
+    stdx::lock_guard<Mutex> lk(_mutex);
+    if (_executor && _listeners.size())
+        _executor->schedule(std::move(functor));
 }
 };  // namespace mongo::sdam

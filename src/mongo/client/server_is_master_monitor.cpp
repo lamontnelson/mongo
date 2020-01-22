@@ -105,6 +105,7 @@ void SingleServerIsMasterMonitor::close() {
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
     LOG(kDebugLevel) << "received isMaster for server " << _host << " (" << latency << ")";
+    LOG(kDebugLevel) << _host << "; " << bson.toString();
     _eventListener->onServerHeartbeatSucceededEvent(
         duration_cast<Milliseconds>(latency), _host, bson);
 }
@@ -114,6 +115,7 @@ void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
     LOG(kDebugLevel) << "received isMaster failure for server " << _host << ": "
                      << status.toString();
+    LOG(kDebugLevel) << _host << "; " << bson.toString();
     _eventListener->onServerHeartbeatFailureEvent(
         duration_cast<Milliseconds>(latency), status, _host, bson);
 }
@@ -139,6 +141,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     sdam::TopologyDescriptionPtr previousDescription,
     sdam::TopologyDescriptionPtr newDescription) {
+
     stdx::lock_guard<Mutex> lk(_mutex);
 
     // remove monitors that are missing from the topology
@@ -147,6 +150,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
         SingleServerIsMasterMonitorPtr& singleMonitor = it->second;
         if (newDescription->findServerByAddress(serverAddress) == boost::none) {
             // not in current topology -- remove the monitor
+            LOG(kLogDebugLevel) << serverAddress << " was removed from the topology.";
             singleMonitor->close();
             it = _singleMonitors.erase(it);
         }
@@ -158,6 +162,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
         bool isMissing =
             _singleMonitors.find(serverDescription->getAddress()) == _singleMonitors.end();
         if (isMissing) {
+            LOG(kLogDebugLevel) << serverAddress << " was added to the topology.";
             _singleMonitors[serverAddress] = std::make_shared<SingleServerIsMasterMonitor>(
                 serverAddress,
                 _sdamConfiguration.getHeartBeatFrequency(),

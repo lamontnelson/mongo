@@ -41,6 +41,7 @@
 #include "mongo/client/sdam/sdam.h"
 #include "mongo/client/server_is_master_monitor.h"
 #include "mongo/executor/task_executor.h"
+#include "mongo/logger/log_component.h"
 #include "mongo/util/concurrency/with_lock.h"
 #include "mongo/util/duration.h"
 #include "mongo/util/net/hostandport.h"
@@ -284,6 +285,8 @@ private:
     boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
     std::shared_ptr<executor::TaskExecutor> _initTaskExecutor(
         std::shared_ptr<executor::TaskExecutor> executor);
+    void _startOutstandingQueryProcessor();
+    logger::LogstreamBuilder _logDebug(int n=-1);
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
@@ -294,6 +297,7 @@ private:
     const MongoURI _uri;
 
     std::shared_ptr<executor::TaskExecutor> _executor;
+    std::thread _queryProcessorThread;
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
     // variables below are protected by the mutex
@@ -302,9 +306,9 @@ private:
     std::vector<HostQueryPtr> _outstandingQueries;
     bool _isClosed = true;
 
-    static inline const auto SERVER_SELECTION_CONFIG =
+    static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
-    void _startOutstandingQueryProcessor();
+    static inline const auto kLogPrefix = "ReplicaSetMonitor ";
 };
 
 }  // namespace mongo
