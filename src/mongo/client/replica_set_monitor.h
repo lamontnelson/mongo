@@ -237,11 +237,13 @@ public:
 
 private:
     enum class HostQueryType { SINGLE, MULTI };
+
     struct HostQuery {
         HostQueryType type;
         Date_t deadline;
+        executor::TaskExecutor::CallbackHandle deadlineHandle;
         ReadPreferenceSetting criteria;
-
+        bool done = false;
         virtual ~HostQuery(){};
     };
     using HostQueryPtr = std::shared_ptr<HostQuery>;
@@ -286,7 +288,7 @@ private:
     std::shared_ptr<executor::TaskExecutor> _initTaskExecutor(
         std::shared_ptr<executor::TaskExecutor> executor);
     void _startOutstandingQueryProcessor();
-    logger::LogstreamBuilder _logDebug(int n=-1);
+    logger::LogstreamBuilder _logDebug(int n = -1);
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
@@ -309,6 +311,11 @@ private:
     static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
     static inline const auto kLogPrefix = "ReplicaSetMonitor ";
+
+    template <typename F>
+    Future<F> _makeOutstandingQuery(HostQueryType type,
+                                    const ReadPreferenceSetting& criteria,
+                                    const Date_t& deadline);
 };
 
 }  // namespace mongo

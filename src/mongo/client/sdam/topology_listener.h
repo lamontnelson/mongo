@@ -115,11 +115,38 @@ public:
     void onServerPingSucceededEvent(mongo::Milliseconds durationMS,
                                     ServerAddress hostAndPort) override;
 
+
 private:
+    enum class EventType {
+        HEARTBEAT_SUCCESS,
+        HEARTBEAT_FAILURE,
+        PING_SUCCESS,
+        PING_FAILURE,
+        TOPOLOGY_DESCRIPTION_CHANGED
+    };
+    struct Event {
+        EventType type;
+        ServerAddress hostAndPort;
+        IsMasterRTT duration;
+        BSONObj reply;
+        TopologyDescriptionPtr previousDescription;
+        TopologyDescriptionPtr newDescription;
+        boost::optional<UUID> topologyId;
+        Status status = Status::OK();
+    };
+    using EventPtr = std::unique_ptr<Event>;
+
+    void _sendEvent(TopologyListenerPtr listener, const TopologyEventsPublisher::Event& event);
+    void nextDelivery();
+    void _scheduleNextDelivery();
+
     Mutex _mutex;
+    bool _isClosed = false;
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::vector<TopologyListenerPtr> _listeners;
-    void run(OutOfLineExecutor::Task&& functor);
+
+    Mutex _eventQueueMutex;
+    std::deque<EventPtr> _eventQueue;
 };
 using TopologyEventsPublisherPtr = std::shared_ptr<TopologyEventsPublisher>;
 }  // namespace mongo::sdam

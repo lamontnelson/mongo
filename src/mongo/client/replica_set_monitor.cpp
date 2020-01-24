@@ -124,6 +124,7 @@ ReplicaSetMonitorPtr ReplicaSetMonitor::make(const MongoURI& uri,
 void ReplicaSetMonitor::init() {
     stdx::lock_guard<Mutex> lock(_mutex);
     LOG(0) << "Starting Replica Set Monitor " << _uri;
+
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
     _topologyManager =
         std::make_unique<TopologyManager>(_sdamConfig, _clockSource, _eventsPublisher);
@@ -144,13 +145,13 @@ void ReplicaSetMonitor::close() {
         stdx::lock_guard<Mutex> lock(_mutex);
         LOG(0) << "Shutting down Replica Set Monitor " << _uri;
         _eventsPublisher->close();
-        _isMasterMonitor = nullptr;
-        _eventsPublisher = nullptr;
-        _executor = nullptr;
         _isClosed = true;
     }
-    log() << "fire onDroppedSet for replica set " << getName();
+
     _outstandingQueriesCV.notify_all();
+    //    _failOutstandingWitStatus(...);
+
+    log() << "fire onDroppedSet for replica set " << getName();
     globalRSMonitorManager.getNotifier().onDroppedSet(getName());
 }
 
@@ -171,21 +172,48 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     }
 
     // otherwise, do async version
-    // TODO: refactor this
+    using future_type = HostAndPort;
     Future<HostAndPort> result;
     {
         mongo::stdx::lock_guard<Mutex> lk(_mutex);
-        auto pf = makePromiseFuture<HostAndPort>();
+        auto pf = makePromiseFuture<future_type>();
         auto query = std::make_shared<SingleHostQuery>();
         query->type = HostQueryType::SINGLE;
         query->deadline = deadline;
         query->criteria = criteria;
         query->promise = std::move(pf.promise);
-        log() << "enqueue host query: " << query->criteria.toString() << "; query - "
-              << (size_t)query.get() << "; rsm - " << (size_t)this;
+
+        auto deadlineCb = [query, self = shared_from_this()](const TaskExecutor::CallbackArgs&) {
+            log() << "in deadlineCb wait for lock.";
+            mongo::stdx::lock_guard<Mutex> lk(self->_mutex);
+            log() << "in deadlineCb done wait for lock.";
+            if (query->done) {
+                return;
+            }
+
+            std::stringstream errMsg;
+            errMsg << "failed to satisfy read preference: timeout reached: "
+                   << query->criteria.toString();
+
+            query->promise.setError(
+                Status(ErrorCodes::FailedToSatisfyReadPreference, errMsg.str()));
+            query->done = true;
+        };
+        auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
+
+        if (!swDeadlineHandle.isOK()) {
+            log() << "error scheduling deadline handler: " << swDeadlineHandle.getStatus();
+            return SemiFuture<future_type>::makeReady(swDeadlineHandle.getStatus());
+        }
+        query->deadlineHandle = swDeadlineHandle.getValue();
+
+        log() << "enqueue host query: " << query->criteria.toString() << "; deadline - "
+              << query->deadline;
+
         _outstandingQueries.emplace_back(query);
         result = std::move(pf.future);
     }
+
     _outstandingQueriesCV.notify_all();
     return std::move(result).semi();
 }
@@ -209,6 +237,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         return {std::move(*immediateResult)};
     }
 
+
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
     if (deadline - _clockSource->now() < Milliseconds(0)) {
@@ -217,18 +246,42 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     }
 
     // otherwise, do async version
-    // TODO: refactor this
-    Future<std::vector<HostAndPort>> result;
+    using future_type = std::vector<HostAndPort>;
+    Future<future_type> result;
     {
         mongo::stdx::lock_guard<Mutex> lk(_mutex);
-        auto pf = makePromiseFuture<std::vector<HostAndPort>>();
+        auto pf = makePromiseFuture<future_type>();
         auto query = std::make_shared<MultiHostQuery>();
-        query->type = HostQueryType::MULTI;
+        query->type = HostQueryType::SINGLE;
         query->deadline = deadline;
         query->criteria = criteria;
         query->promise = std::move(pf.promise);
-        _logDebug() << "enqueue hosts query: " << query->criteria.toString() << "; "
-              << (size_t)query.get() << "; rsm - " << (size_t)this;
+
+        auto deadlineCb = [query, self = shared_from_this()](const TaskExecutor::CallbackArgs&) {
+            mongo::stdx::lock_guard<Mutex> lk(self->_mutex);
+            if (query->done) {
+                log() << "query is already satisfied.";
+                return;
+            }
+
+            std::stringstream errMsg;
+            errMsg << "failed to satisfy read preference: timeout reached: "
+                   << query->criteria.toString();
+            log() << errMsg.str();
+
+            query->promise.setError({ErrorCodes::ExceededTimeLimit, errMsg.str()});
+            query->done = true;
+        };
+        auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
+
+        if (!swDeadlineHandle.isOK()) {
+            log() << "error scheduling deadline handler: " << swDeadlineHandle.getStatus();
+            return SemiFuture<future_type>::makeReady(swDeadlineHandle.getStatus());
+        }
+        query->deadlineHandle = swDeadlineHandle.getValue();
+
+        log() << "enqueue hosts query: " << query->criteria.toString() << "; deadline - "
+              << query->deadline;
 
         _outstandingQueries.emplace_back(query);
         result = std::move(pf.future);
@@ -420,6 +473,8 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     TopologyDescriptionPtr previousDescription,
     TopologyDescriptionPtr newDescription) {
+    log() << "RSM onTopologyDescriptionChangedEvent";
+
     // TODO: remove when HostAndPort conversion is done.
     std::vector<HostAndPort> servers;
     for (const auto server : newDescription->getServers()) {
@@ -452,38 +507,39 @@ void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds dura
                                                         ServerAddress hostAndPort,
                                                         const BSONObj reply) {
     IsMasterOutcome outcome(hostAndPort, reply, durationMs);
-    log() << "server heartbeat success: rsm - " << (size_t)this << "; " << outcome.isSuccess()
+    log() << "RSM onServerHeartbeatSucceededEvent: rsm - " << (size_t)this << "; " << outcome.isSuccess()
           << "; " << outcome.getServer() << "; " << outcome.getRtt();
     _topologyManager->onServerDescription(outcome);
-    {
-        log() << "rsm - " << (size_t)this << "; try to acquire 4";
-        stdx::lock_guard<Mutex> lock(_mutex);
-        log() << "onServerHeartbeatSucceededEvent outstanding " << _outstandingQueries.size();
-    }
     _outstandingQueriesCV.notify_all();
+    log() << "RSM exit onServerHeartbeatSucceededEvent";
 }
 
 void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress hostAndPort,
                                                 const Status& status) {
+    log() << "RSM onServerPingFailedEvent";
     failedHost(HostAndPort(hostAndPort), status);
 }
 
 void ReplicaSetMonitor::onServerPingSucceededEvent(mongo::Milliseconds durationMS,
                                                    ServerAddress hostAndPort) {
+    log() << "RSM onServerPingSucceededEvent";
     _topologyManager->onServerRTTUpdated(hostAndPort, durationMS);
 }
 
 std::shared_ptr<executor::TaskExecutor> ReplicaSetMonitor::_initTaskExecutor(
     std::shared_ptr<executor::TaskExecutor> executor) {
-    if (executor)
+    if (executor) {
+        log() << "using provided executor";
         return executor;
+    }
+
+    log() << "creating new executor instance in-place";
 
     auto hookList = std::make_unique<rpc::EgressMetadataHookList>();
     auto net = executor::makeNetworkInterface(
         "ReplicaSetMonitor-TaskExecutor", nullptr, std::move(hookList));
     auto pool = std::make_unique<executor::NetworkInterfaceThreadPool>(net.get());
-    auto _executor =
-        std::make_shared<executor::ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
+    _executor = std::make_shared<executor::ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
     _executor->startup();
     return _executor;
 }
@@ -523,13 +579,22 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
 //    self->_logDebug() << outstandingQueries.size()
 //                      << " outstanding queries to satisfy: " << topologyDescription->toString();
     for (const auto& query : outstandingQueries) {
+        if (query->done) {
+            toRemove.insert(query);
+            continue;
+        }
+
         if (query->type == HostQueryType::MULTI) {
             auto multiQuery = std::dynamic_pointer_cast<MultiHostQuery>(query);
             auto multiResult = self->_getHosts(multiQuery->criteria);
             if (multiResult) {
-//                self->_logDebug() << "_satisfyOutstandingQueries: " << debug(multiResult) << ". "
-//                                  << "remove: " << multiQuery->criteria.toString() << "; "
-//                                  << (size_t)(query.get());
+                //                self->_logDebug() << "_satisfyOutstandingQueries: " <<
+                //                debug(multiResult) << ". "
+                //                                  << "remove: " << multiQuery->criteria.toString()
+                //                                  << "; "
+                //                                  << (size_t)(query.get());
+                _executor->cancel(multiQuery->deadlineHandle);
+                multiQuery->done = true;
                 multiQuery->promise.emplaceValue(std::move(*multiResult));
                 toRemove.insert(query);
             }
@@ -537,9 +602,13 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
             auto singleQuery = std::dynamic_pointer_cast<SingleHostQuery>(query);
             auto singleResult = self->_getHost(singleQuery->criteria);
             if (singleResult) {
-//                self->_logDebug() << "_satisfyOutstandingQueries: " << debug(singleResult) << ". "
-//                                  << "remove: " << singleQuery->criteria.toString() << "; "
-//                                  << (size_t)(query.get());
+                //                self->_logDebug() << "_satisfyOutstandingQueries: " <<
+                //                debug(singleResult) << ". "
+                //                                  << "remove: " <<
+                //                                  singleQuery->criteria.toString() << "; "
+                //                                  << (size_t)(query.get());
+                _executor->cancel(singleQuery->deadlineHandle);
+                singleQuery->done = true;
                 singleQuery->promise.emplaceValue(std::move(*singleResult));
                 toRemove.insert(query);
             }
@@ -561,11 +630,12 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
 
     auto queryProcessor = [self = shared_from_this()]() {
         while (true) {
-//            self->_logDebug() << "top queryProcessor - " << (size_t)self.get()
-//                              << "; try to acquire 1";
+            //            self->_logDebug() << "top queryProcessor - " << (size_t)self.get()
+            //                              << "; try to acquire 1";
             stdx::unique_lock<Mutex> lock(self->_mutex);
-//            self->_logDebug() << "query satisfier wait (size " << self->_outstandingQueries.size()
-//                              << ") " << (size_t)self.get();
+            //            self->_logDebug() << "query satisfier wait (size " <<
+            //            self->_outstandingQueries.size()
+            //                              << ") " << (size_t)self.get();
 
             self->_outstandingQueriesCV.wait(lock, [self] {
                 auto currentTopology = self->_currentTopology();
@@ -578,12 +648,14 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
                     (outstandingQueries.size() &&
                      (currentTopology->getType() != TopologyType::kUnknown));
 
-//                self->_logDebug() << "in wait predicate: "
-//                                  << "shouldStopWaiting - " << shouldStopWaiting
-//                                  << "; topologyType - "
-//                                  << sdam::toString(currentTopology->getType()) << "; closed - "
-//                                  << self->_isClosed << "; size - " << outstandingQueries.size()
-//                                  << "; rsm - " << (size_t)self.get();
+                //                self->_logDebug() << "in wait predicate: "
+                //                                  << "shouldStopWaiting - " << shouldStopWaiting
+                //                                  << "; topologyType - "
+                //                                  << sdam::toString(currentTopology->getType()) <<
+                //                                  "; closed - "
+                //                                  << self->_isClosed << "; size - " <<
+                //                                  outstandingQueries.size()
+                //                                  << "; rsm - " << (size_t)self.get();
 
                 return shouldStopWaiting;
             });

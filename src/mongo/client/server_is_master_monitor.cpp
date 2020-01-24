@@ -30,10 +30,19 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
 }
 
 void SingleServerIsMasterMonitor::init() {
+    {
+        stdx::lock_guard<Mutex> lk(_mutex);
+        _active = true;
+    }
+
     _scheduleNextIsMaster();
 }
 
 void SingleServerIsMasterMonitor::_scheduleNextIsMaster() {
+    stdx::lock_guard<Mutex> lk(_mutex);
+    if (!_active)
+        return;
+
     Timer timer;
     auto swCbHandle = _executor->scheduleWorkAt(
         _executor->now() + _heartbeatFrequencyMS,
@@ -54,24 +63,26 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
     auto request = executor::RemoteCommandRequest(
         HostAndPort(_host), "admin", IS_MASTER_BSON, nullptr, _timeoutMS);
     // request.sslMode = _set->setUri.getSSLMode();
-    Timer timer;
     stdx::lock_guard<Mutex> lk(_mutex);
     if (!_active)
         return;
 
+    Timer timer;
     auto swCbHandle = _executor->scheduleRemoteCommand(
         std::move(request),
         [self = shared_from_this(),
          timer](const executor::TaskExecutor::RemoteCommandCallbackArgs& result) mutable {
-            stdx::lock_guard<Mutex> lk(self->_mutex);
-            if (!self->_active)
-                return;
+            {
+                stdx::lock_guard<Mutex> lk(self->_mutex);
+                if (!self->_active)
+                    return;
 
-            Microseconds latency(timer.micros());
-            if (result.response.isOK()) {
-                self->_onIsMasterSuccess(latency, result.response.data);
-            } else {
-                self->_onIsMasterFailure(latency, result.response.status, result.response.data);
+                Microseconds latency(timer.micros());
+                if (result.response.isOK()) {
+                    self->_onIsMasterSuccess(latency, result.response.data);
+                } else {
+                    self->_onIsMasterFailure(latency, result.response.status, result.response.data);
+                }
             }
 
             self->_scheduleNextIsMaster();
@@ -141,7 +152,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     sdam::TopologyDescriptionPtr previousDescription,
     sdam::TopologyDescriptionPtr newDescription) {
-
+    log() << "ServerIsMasterMonitor::onTopologyDescriptionChangedEvent";
     stdx::lock_guard<Mutex> lk(_mutex);
 
     // remove monitors that are missing from the topology
