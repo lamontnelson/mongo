@@ -27,6 +27,7 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
       _executor(executor),
       _heartbeatFrequencyMS(heartbeatFrequencyMS) {
     LOG(kDebugLevel) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
+	_heartbeatFrequencyMS = Milliseconds(500);
 }
 
 void SingleServerIsMasterMonitor::init() {
