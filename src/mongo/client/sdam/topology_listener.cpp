@@ -35,96 +35,127 @@
 namespace mongo::sdam {
 void TopologyEventsPublisher::registerListener(TopologyListenerPtr listener) {
     stdx::lock_guard<Mutex> lk(_mutex);
-    std::cout << "register listener" << std::endl;
+    log() << "register listener" << std::endl;
     _listeners.push_back(listener);
 }
 
 void TopologyEventsPublisher::removeListener(TopologyListenerPtr listener) {
     stdx::lock_guard<Mutex> lk(_mutex);
-    std::cout << "de-register listener" << std::endl;
+    log() << "de-register listener" << std::endl;
     _listeners.erase(std::remove(_listeners.begin(), _listeners.end(), listener), _listeners.end());
 }
 
 void TopologyEventsPublisher::close() {
-    stdx::lock_guard<Mutex> lk(_mutex);
-    _listeners.clear();
-    _executor = nullptr;
+    {
+        stdx::lock_guard<Mutex> lk(_mutex);
+        _listeners.clear();
+        _isClosed = true;
+    }
 }
 
 void TopologyEventsPublisher::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     TopologyDescriptionPtr previousDescription,
     TopologyDescriptionPtr newDescription) {
-    run([=, self = shared_from_this()](auto&&) {
-        stdx::lock_guard<Mutex> lk(self->_mutex);
-        for (auto listener : self->_listeners) {
-            listener->onTopologyDescriptionChangedEvent(
-                topologyId, previousDescription, newDescription);
-        }
-    });
+    {
+        stdx::lock_guard<Mutex> lock(_eventQueueMutex);
+        EventPtr event = std::make_unique<Event>();
+        event->type = EventType::TOPOLOGY_DESCRIPTION_CHANGED;
+        event->topologyId = std::move(topologyId);
+        event->previousDescription = previousDescription;
+        event->newDescription = newDescription;
+        _eventQueue.push_back(std::move(event));
+    }
+    _scheduleNextDelivery();
 }
 
-// TODO: fix this implementation; since events are launched async we need to order them
 void TopologyEventsPublisher::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
                                                               ServerAddress hostAndPort,
                                                               const BSONObj reply) {
-
-    log() << "schedule onServerHeartbeatSucceededEvent event publish: " << hostAndPort;
-    auto functor = [=, self = shared_from_this()](Status status) {
-        if (!status.isOK()) {
-            log() << "bad status in functor: " << status.toString();
-        }
-        log() << "in onServerHeartbeatSucceededEvent event publish: " << hostAndPort;
-        stdx::lock_guard<Mutex> lk(self->_mutex);
-        log() << "publish onServerHeartbeatSucceededEvent to " << self->_listeners.size()
-              << " listeners.";
-        for (auto listener : self->_listeners) {
-            listener->onServerHeartbeatSucceededEvent(durationMs, hostAndPort, reply);
-        }
-    };
-
-    run(std::move(functor));
-//    functor(Status::OK());
-    //    _executor->schedule(std::move(functor));
+    {
+        stdx::lock_guard<Mutex> lock(_eventQueueMutex);
+        EventPtr event = std::make_unique<Event>();
+        event->type = EventType::HEARTBEAT_SUCCESS;
+        event->duration = duration_cast<IsMasterRTT>(durationMs);
+        event->hostAndPort = hostAndPort;
+        event->reply = reply;
+        _eventQueue.push_back(std::move(event));
+    }
+    _scheduleNextDelivery();
 }
 
 void TopologyEventsPublisher::onServerHeartbeatFailureEvent(mongo::Milliseconds durationMs,
                                                             Status errorStatus,
                                                             ServerAddress hostAndPort,
                                                             const BSONObj reply) {
-    run([=, self = shared_from_this()](auto&&) {
-        stdx::lock_guard<Mutex> lk(self->_mutex);
-        log() << "publish onServerHeartbeatFailureEvent to " << self->_listeners.size()
-              << " listeners.";
-        for (auto listener : self->_listeners) {
-            listener->onServerHeartbeatFailureEvent(durationMs, errorStatus, hostAndPort, reply);
-        }
-    });
+    {
+        stdx::lock_guard<Mutex> lock(_eventQueueMutex);
+        EventPtr event = std::make_unique<Event>();
+        event->type = EventType::HEARTBEAT_FAILURE;
+        event->duration = duration_cast<IsMasterRTT>(durationMs);
+        event->hostAndPort = hostAndPort;
+        event->reply = reply;
+        event->status = errorStatus;
+        _eventQueue.push_back(std::move(event));
+    }
+    _scheduleNextDelivery();
+}
+
+void TopologyEventsPublisher::_scheduleNextDelivery() {
+    // TODO: need lock here
+    if (_isClosed)
+        return;
+
+    _executor->schedule(
+        [self = shared_from_this()](const Status& status) { self->nextDelivery(); });
 }
 
 void TopologyEventsPublisher::onServerPingFailedEvent(const ServerAddress hostAndPort,
-                                                      const Status& status) {
-    run([=, self = shared_from_this()](auto&&) {
-        stdx::lock_guard<Mutex> lk(self->_mutex);
-        for (auto listener : self->_listeners) {
-            listener->onServerPingFailedEvent(hostAndPort, status);
-        }
-    });
-}
+                                                      const Status& status) {}
 
 void TopologyEventsPublisher::onServerPingSucceededEvent(mongo::Milliseconds durationMS,
-                                                         ServerAddress hostAndPort) {
-    run([=, self = shared_from_this()](auto&&) {
-        stdx::lock_guard<Mutex> lk(self->_mutex);
-        for (auto listener : self->_listeners) {
-            listener->onServerPingSucceededEvent(durationMS, hostAndPort);
+                                                         ServerAddress hostAndPort) {}
+
+void TopologyEventsPublisher::nextDelivery() {
+    EventPtr nextEvent;
+    {
+        stdx::lock_guard<Mutex> lock(_eventQueueMutex);
+        if (!_eventQueue.size()) {
+            return;
         }
-    });
+        nextEvent = std::move(_eventQueue.front());
+        _eventQueue.pop_front();
+    }
+    {
+        stdx::lock_guard<Mutex> lock(_mutex);
+        for (auto listener : _listeners) {
+            _sendEvent(listener, *nextEvent);
+        }
+    }
 }
 
-void TopologyEventsPublisher::run(OutOfLineExecutor::Task&& functor) {
-    stdx::lock_guard<Mutex> lk(_mutex);
-    if (_executor && _listeners.size())
-        _executor->schedule(std::move(functor));
+void TopologyEventsPublisher::_sendEvent(TopologyListenerPtr listener, const Event& event) {
+    switch (event.type) {
+        case EventType::HEARTBEAT_SUCCESS:
+            log() << "sending onServerHeartbeatSucceeded";
+            listener->onServerHeartbeatSucceededEvent(
+                duration_cast<Milliseconds>(event.duration), event.hostAndPort, event.reply);
+            break;
+        case EventType::HEARTBEAT_FAILURE:
+            log() << "sending onServerHeartbeatFailure";
+            listener->onServerHeartbeatFailureEvent(duration_cast<Milliseconds>(event.duration),
+                                                    event.status,
+                                                    event.hostAndPort,
+                                                    event.reply);
+            break;
+        case EventType::TOPOLOGY_DESCRIPTION_CHANGED:
+            log() << "sending onTopologyDescriptionChanged";
+            // TODO: fix uuid or just remove
+            listener->onTopologyDescriptionChangedEvent(
+                UUID::gen(), event.previousDescription, event.newDescription);
+            break;
+        default:
+            MONGO_UNREACHABLE;
+    }
 }
 };  // namespace mongo::sdam

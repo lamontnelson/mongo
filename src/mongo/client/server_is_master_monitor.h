@@ -29,7 +29,7 @@ private:
     static const int kDebugLevel = 0;
 
     Mutex _mutex;
-    bool _active = true;
+    bool _active = false;
     sdam::ServerAddress _host;
     sdam::TopologyEventsPublisherPtr _eventListener;
     std::shared_ptr<executor::TaskExecutor> _executor;
