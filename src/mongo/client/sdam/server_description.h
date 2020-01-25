@@ -98,6 +98,7 @@ public:
     const std::set<ServerAddress>& getArbiters() const;
     const boost::optional<int>& getSetVersion() const;
     const boost::optional<OID>& getElectionId() const;
+    const boost::optional<TopologyDescriptionPtr> getTopologyDescription();
 
     BSONObj toBson() const;
     std::string toString() const;
@@ -185,6 +186,10 @@ private:
     // (=) logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
 
+    // The topology description of that we are a part of
+    boost::optional<std::weak_ptr<TopologyDescription>> _topologyDescription;
+
+    friend class TopologyDescription;
     friend class ServerDescriptionBuilder;
 };
 

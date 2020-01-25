@@ -27,12 +27,14 @@
  *    it in the license file.
  */
 #pragma once
+#include <functional>
 #include <vector>
 
 #include "mongo/client/read_preference.h"
 #include "mongo/client/sdam/sdam_configuration.h"
 #include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/sdam/server_description.h"
+#include "mongo/client/sdam/topology_description.h"
 #include "mongo/platform/random.h"
 
 namespace mongo::sdam {
@@ -52,7 +54,8 @@ public:
         TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) = 0;
 
     /**
-     * Select a single server according to the ReadPreference and latency of the ServerDescription(s)
+     * Select a single server according to the ReadPreference and latency of the
+     * ServerDescription(s)
      */
     virtual boost::optional<ServerDescriptionPtr> selectServer(
         const TopologyDescriptionPtr topologyDescription,
@@ -71,7 +74,8 @@ public:
         const ReadPreferenceSetting& criteria) override;
 
     boost::optional<ServerDescriptionPtr> selectServer(
-        const TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) override;
+        const TopologyDescriptionPtr topologyDescription,
+        const ReadPreferenceSetting& criteria) override;
 
     // remove servers that do not match the TagSet
     void filterTags(std::vector<ServerDescriptionPtr>* servers, const TagSet& tagSet);
@@ -85,37 +89,103 @@ private:
 
     ServerDescriptionPtr _randomSelect(const std::vector<ServerDescriptionPtr>& servers) const;
 
-    static const inline auto recencyFilter = [](const ReadPreferenceSetting& readPref,
-                                                const ServerDescriptionPtr& s) {
-        bool result = true;
+    // staleness for a ServerDescription is defined here:
+    // https://github.com/mongodb/specifications/blob/master/source/server-selection/server-selection.rst#maxstalenessseconds
+    using StalenessCalculator =
+        std::function<Milliseconds(const TopologyDescriptionPtr& topologyDescription,
+                                   const ServerDescriptionPtr& serverDescription)>;
+    const StalenessCalculator calculateStaleness =
+        [this](const TopologyDescriptionPtr& topologyDescription,
+               const ServerDescriptionPtr& serverDescription) {
+            if (serverDescription->getType() != ServerType::kRSSecondary)
+                return Milliseconds(0);
 
-        if (!readPref.minOpTime.isNull()) {
-            result = result && readPref.minOpTime <= s->getOpTime();
-        }
+            const Date_t& lastWriteDate = *serverDescription->getLastWriteDate();
 
-        if (readPref.maxStalenessSeconds.count()) {
-            const Date_t minWriteDate = Date_t::now() - readPref.maxStalenessSeconds;
-            result = result && minWriteDate <= s->getLastWriteDate();
-        }
+            if (topologyDescription->getType() == TopologyType::kReplicaSetWithPrimary) {
+                // (S.lastUpdateTime - S.lastWriteDate) - (P.lastUpdateTime - P.lastWriteDate) +
+                // heartbeatFrequencyMS
+                auto maybePrimaryDescription = topologyDescription->getPrimary();
+                invariant(maybePrimaryDescription);
+                auto& primaryDescription = *maybePrimaryDescription;
 
-        return result;
-    };
+                auto result = (serverDescription->getLastUpdateTime() - lastWriteDate) -
+                    (primaryDescription->getLastUpdateTime() -
+                     *primaryDescription->getLastWriteDate()) +
+                    _config.getHeartBeatFrequencyMs();
+                return duration_cast<Milliseconds>(result);
+            } else if (topologyDescription->getType() == TopologyType::kReplicaSetNoPrimary) {
+                //  SMax.lastWriteDate - S.lastWriteDate + heartbeatFrequencyMS
 
-    static const inline auto secondaryFilter = [](const ReadPreferenceSetting& readPref) {
+                ServerDescriptionPtr* maxServerDescription = nullptr;
+                Date_t maxLastWriteDate = Date_t::min();
+
+                // identify secondary with max last write date.
+                for (auto s : topologyDescription->getServers()) {
+                    if (s->getType() != ServerType::kRSSecondary)
+                        continue;
+                    invariant(s->getLastWriteDate());
+                    if (s->getLastWriteDate() > maxLastWriteDate) {
+                        maxServerDescription = &s;
+                        maxLastWriteDate = *s->getLastWriteDate();
+                    }
+                }
+
+                auto result =
+                    (maxLastWriteDate - lastWriteDate) + _config.getHeartBeatFrequencyMs();
+                return duration_cast<Milliseconds>(result);
+            } else {
+                // Not a replica set
+                return Milliseconds(0);
+            }
+        };
+
+    const std::function<bool(const ReadPreferenceSetting& readPref, const ServerDescriptionPtr& s)>
+        recencyFilter =
+            [this](const ReadPreferenceSetting& readPref, const ServerDescriptionPtr& s) {
+                bool result = true;
+
+                if (!readPref.minOpTime.isNull()) {
+                    result = result && (readPref.minOpTime <= s->getOpTime());
+                }
+
+                if (readPref.maxStalenessSeconds.count()) {
+                    auto topologyDescription = s->getTopologyDescription();
+                    invariant(topologyDescription);
+                    auto staleness = calculateStaleness(*topologyDescription, s);
+                    result = result && (staleness <= readPref.maxStalenessSeconds);
+                }
+
+                return result;
+            };
+
+    using SelectionFilter = std::function<std::function<bool(const ServerDescriptionPtr&)>(
+        const ReadPreferenceSetting&)>;
+
+    const SelectionFilter secondaryFilter = [this](const ReadPreferenceSetting& readPref) {
         return [&](const ServerDescriptionPtr& s) {
-            return s->getType() == ServerType::kRSSecondary && recencyFilter(readPref, s);
+            return (s->getType() == ServerType::kRSSecondary) && recencyFilter(readPref, s);
         };
     };
 
-    static const inline auto primaryFilter = [](const ReadPreferenceSetting& readPref) {
+    const SelectionFilter primaryFilter = [this](const ReadPreferenceSetting& readPref) {
         return [&](const ServerDescriptionPtr& s) {
-            return s->getType() == ServerType::kRSPrimary && recencyFilter(readPref, s);
+            return (s->getType() == ServerType::kRSPrimary) && recencyFilter(readPref, s);
         };
     };
 
-    static const inline auto nearestFilter = [](const ReadPreferenceSetting& readPref) {
+    const SelectionFilter nearestFilter = [this](const ReadPreferenceSetting& readPref) {
         return [&](const ServerDescriptionPtr& s) {
-            return s->getType() != ServerType::kUnknown && recencyFilter(readPref, s);
+            bool resultType = (s->getType() != ServerType::kUnknown);
+            bool resultRecent = recencyFilter(readPref, s);
+
+            std::cout << "nearest filter: resultType - " << resultType << "; resultRecent - "
+                      << resultRecent << "maxStaleness - " << readPref.maxStalenessSeconds.count()
+                      << "minOpTime - " << readPref.minOpTime.toString()
+                      << "minOpTime.isNull - " << readPref.minOpTime.isNull() << " ---> "
+                      << s->toString() << std::endl;
+
+            return resultType && resultRecent;
         };
     };
 

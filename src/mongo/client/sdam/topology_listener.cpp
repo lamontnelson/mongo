@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2020-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -35,13 +35,11 @@
 namespace mongo::sdam {
 void TopologyEventsPublisher::registerListener(TopologyListenerPtr listener) {
     stdx::lock_guard<Mutex> lk(_mutex);
-    log() << "register listener" << std::endl;
     _listeners.push_back(listener);
 }
 
 void TopologyEventsPublisher::removeListener(TopologyListenerPtr listener) {
     stdx::lock_guard<Mutex> lk(_mutex);
-    log() << "de-register listener" << std::endl;
     _listeners.erase(std::remove(_listeners.begin(), _listeners.end(), listener), _listeners.end());
 }
 
@@ -137,19 +135,16 @@ void TopologyEventsPublisher::nextDelivery() {
 void TopologyEventsPublisher::_sendEvent(TopologyListenerPtr listener, const Event& event) {
     switch (event.type) {
         case EventType::HEARTBEAT_SUCCESS:
-            log() << "sending onServerHeartbeatSucceeded";
             listener->onServerHeartbeatSucceededEvent(
                 duration_cast<Milliseconds>(event.duration), event.hostAndPort, event.reply);
             break;
         case EventType::HEARTBEAT_FAILURE:
-            log() << "sending onServerHeartbeatFailure";
             listener->onServerHeartbeatFailureEvent(duration_cast<Milliseconds>(event.duration),
                                                     event.status,
                                                     event.hostAndPort,
                                                     event.reply);
             break;
         case EventType::TOPOLOGY_DESCRIPTION_CHANGED:
-            log() << "sending onTopologyDescriptionChanged";
             // TODO: fix uuid or just remove
             listener->onTopologyDescriptionChangedEvent(
                 UUID::gen(), event.previousDescription, event.newDescription);

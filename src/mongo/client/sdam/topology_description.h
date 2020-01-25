@@ -36,13 +36,13 @@
 
 #include "mongo/bson/oid.h"
 #include "mongo/client/read_preference.h"
+#include "mongo/client/sdam/sdam_configuration.h"
 #include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/platform/basic.h"
-#include "mongo/client/sdam/sdam_configuration.h"
 
 namespace mongo::sdam {
-class TopologyDescription {
+class TopologyDescription : public std::enable_shared_from_this<TopologyDescription> {
 public:
     TopologyDescription() : TopologyDescription(SdamConfiguration()) {}
     TopologyDescription(const TopologyDescription& source) = default;
@@ -71,6 +71,7 @@ public:
     bool containsServerAddress(const ServerAddress& address) const;
     std::vector<ServerDescriptionPtr> findServers(
         std::function<bool(const ServerDescriptionPtr&)> predicate) const;
+    boost::optional<ServerDescriptionPtr> getPrimary();
 
     /**
      * Adds the given ServerDescription or swaps it with an existing one
@@ -85,14 +86,15 @@ public:
 
     BSONObj toBSON();
     std::string toString();
+    bool operator==(const TopologyDescription& rhs);
 
 private:
     /**
      * Checks if all server descriptions are compatible with this server's WireVersion. If an
-     * incompatible description is found, we set the topologyDescription's _compatible flag to false
-     * and store an error message in _compatibleError. A ServerDescription which is not Unknown is
-     * incompatible if:
-     *  minWireVersion > serverMaxWireVersion, or maxWireVersion < serverMinWireVersion
+     * incompatible description is found, we set the topologyDescription's _compatible flag to
+     * false and store an error message in _compatibleError. A ServerDescription which is not
+     * Unknown is incompatible if: minWireVersion > serverMaxWireVersion, or maxWireVersion <
+     * serverMinWireVersion
      */
     void checkWireCompatibilityVersions();
 

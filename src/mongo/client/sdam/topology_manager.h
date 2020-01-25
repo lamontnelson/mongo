@@ -60,7 +60,7 @@ public:
      * IsMasterOutcomes serially, as required by:
      *   https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#process-one-ismaster-outcome-at-a-time
      */
-    void onServerDescription(const IsMasterOutcome& isMasterOutcome);
+    bool onServerDescription(const IsMasterOutcome& isMasterOutcome);
 
 
     /**
