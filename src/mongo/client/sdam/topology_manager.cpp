@@ -34,14 +34,16 @@
 #include "mongo/util/log.h"
 
 namespace mongo::sdam {
-TopologyManager::TopologyManager(SdamConfiguration config, ClockSource* clockSource, TopologyEventsPublisherPtr eventsPublisher)
+TopologyManager::TopologyManager(SdamConfiguration config,
+                                 ClockSource* clockSource,
+                                 TopologyEventsPublisherPtr eventsPublisher)
     : _config(std::move(config)),
       _clockSource(clockSource),
       _topologyDescription(std::make_unique<TopologyDescription>(_config)),
       _topologyStateMachine(std::make_unique<TopologyStateMachine>(_config)),
       _topologyEventsPublisher(eventsPublisher) {}
 
-void TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome) {
+bool TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome) {
     stdx::lock_guard<mongo::Mutex> lock(_mutex);
 
     boost::optional<IsMasterRTT> lastRTT;
@@ -81,9 +83,18 @@ void TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome
 
     auto oldTopologyDescription = _topologyDescription;
     _topologyDescription = std::make_shared<TopologyDescription>(*_topologyDescription);
-    _topologyStateMachine->onServerDescription(*_topologyDescription, newServerDescription);
+
+    // if we are equal to the old description, just install the new description without
+    // performing any actions on the state machine.
+    auto isEqualToOldServerDescription = (lastServerDescription && (*(lastServerDescription.get()) == *newServerDescription));
+    if (isEqualToOldServerDescription) {
+        _topologyDescription->installServerDescription(newServerDescription);
+    } else {
+        _topologyStateMachine->onServerDescription(*_topologyDescription, newServerDescription);
+    }
 
     _publishTopologyDescriptionChanged(oldTopologyDescription, _topologyDescription);
+    return true;
 }
 
 const std::shared_ptr<TopologyDescription> TopologyManager::getTopologyDescription() const {
@@ -114,6 +125,7 @@ void TopologyManager::_publishTopologyDescriptionChanged(
     const TopologyDescriptionPtr& oldTopologyDescription,
     const TopologyDescriptionPtr& newTopologyDescription) const {
     if (_topologyEventsPublisher)
-        _topologyEventsPublisher->onTopologyDescriptionChangedEvent(newTopologyDescription->getId(), oldTopologyDescription, newTopologyDescription);
+        _topologyEventsPublisher->onTopologyDescriptionChangedEvent(
+            newTopologyDescription->getId(), oldTopologyDescription, newTopologyDescription);
 }
 };  // namespace mongo::sdam

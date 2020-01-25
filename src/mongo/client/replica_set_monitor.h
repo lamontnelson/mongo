@@ -243,6 +243,7 @@ private:
         Date_t deadline;
         executor::TaskExecutor::CallbackHandle deadlineHandle;
         ReadPreferenceSetting criteria;
+        Date_t start = Date_t::now();
         bool done = false;
         virtual ~HostQuery(){};
     };
@@ -316,6 +317,7 @@ private:
     Future<F> _makeOutstandingQuery(HostQueryType type,
                                     const ReadPreferenceSetting& criteria,
                                     const Date_t& deadline);
+    void _failOutstandingWitStatus(Status status);
 };
 
 }  // namespace mongo

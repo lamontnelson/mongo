@@ -54,11 +54,10 @@ public:
      * If setName is not null, only TopologyType ReplicaSetNoPrimary and Single, are
      * allowed.
      */
-    SdamConfiguration(
-        boost::optional<std::vector<ServerAddress>> seedList,
-        TopologyType initialType = TopologyType::kUnknown,
-        mongo::Milliseconds heartBeatFrequencyMs = kDefaultHeartbeatFrequencyMs,
-        boost::optional<std::string> setName = boost::none);
+    SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
+                      TopologyType initialType = TopologyType::kUnknown,
+                      mongo::Milliseconds heartBeatFrequencyMs = kDefaultHeartbeatFrequencyMs,
+                      boost::optional<std::string> setName = boost::none);
 
     const boost::optional<std::vector<ServerAddress>>& getSeedList() const;
     TopologyType getInitialType() const;
@@ -83,18 +82,21 @@ public:
 
     Milliseconds getLocalThresholdMs() const;
     Milliseconds getServerSelectionTimeoutMs() const;
+    Milliseconds getHeartBeatFrequencyMs() const;
 
     static inline const mongo::Milliseconds kDefaultLocalThresholdMS = mongo::Milliseconds(15);
     static inline const mongo::Milliseconds kDefaultServerSelectionTimeoutMs =
         mongo::Milliseconds(30000);
 
     static ServerSelectionConfiguration defaultConfiguration() {
-        return ServerSelectionConfiguration{kDefaultLocalThresholdMS, kDefaultServerSelectionTimeoutMs};
+        return ServerSelectionConfiguration{kDefaultLocalThresholdMS,
+                                            kDefaultServerSelectionTimeoutMs};
     }
 
 private:
     ServerSelectionConfiguration(){};
     mongo::Milliseconds _localThresholdMs;
     mongo::Milliseconds _serverSelectionTimeoutMs;
+    mongo::Milliseconds _heartBeatFrequencyMs = SdamConfiguration::kDefaultHeartbeatFrequencyMs;
 };
 }  // namespace mongo::sdam

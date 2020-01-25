@@ -132,6 +132,8 @@ boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescript
         }
     }
 
+    newServerDescription->_topologyDescription = shared_from_this();
+
     checkWireCompatibilityVersions();
     calculateLogicalSessionTimeout();
     return previousDescription;
@@ -269,4 +271,33 @@ BSONObj TopologyDescription::toBSON() {
 std::string TopologyDescription::toString() {
     return toBSON().toString();
 }
+
+bool TopologyDescription::operator==(const TopologyDescription& rhs) {
+    return std::tie(_setName,
+                    _type,
+                    _maxSetVersion,
+                    _maxElectionId,
+                    _servers,
+                    _compatible,
+                    _logicalSessionTimeoutMinutes) ==
+        std::tie(rhs._setName,
+                 rhs._type,
+                 rhs._maxSetVersion,
+                 rhs._maxElectionId,
+                 rhs._servers,
+                 rhs._compatible,
+                 rhs._logicalSessionTimeoutMinutes);
 }
+
+boost::optional<ServerDescriptionPtr> TopologyDescription::getPrimary() {
+    if (getType() != TopologyType::kReplicaSetWithPrimary) {
+        return boost::none;
+    }
+
+    auto foundPrimaries = findServers([](const ServerDescriptionPtr& s) {
+      return s->getType() == ServerType::kRSPrimary;
+    });
+    invariant(foundPrimaries.size() == 1);
+    return foundPrimaries[0];
+}
+}  // namespace mongo::sdam

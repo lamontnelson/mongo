@@ -78,5 +78,9 @@ env.CppUnitTest(
 env.CppUnitTest(
     target='server_selector_test',
     source=['server_selector_test.cpp'],
-    LIBDEPS=['sdam', 'sdam_test'],
+    LIBDEPS=[
+        'sdam',
+        'sdam_test',
+        '$BUILD_DIR/mongo/executor/thread_pool_task_executor',
+     ],
 )

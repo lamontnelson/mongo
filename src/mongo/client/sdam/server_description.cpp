@@ -411,6 +411,10 @@ ServerDescriptionPtr ServerDescription::cloneWithRTT(IsMasterRTT rtt) {
     return newServerDescription;
 }
 
+const boost::optional<TopologyDescriptionPtr> ServerDescription::getTopologyDescription() {
+    return (_topologyDescription) ? boost::optional<TopologyDescriptionPtr>(_topologyDescription->lock()) : boost::none;
+}
+
 
 bool operator==(const mongo::sdam::ServerDescription& a, const mongo::sdam::ServerDescription& b) {
     return a.isEquivalent(b);

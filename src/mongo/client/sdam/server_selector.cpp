@@ -112,6 +112,9 @@ boost::optional<std::vector<ServerDescriptionPtr>> SdamServerSelector::selectSer
         auto latencyWindow = LatencyWindow(*minServer->getRtt(), _config.getLocalThresholdMs());
         latencyWindow.filterServers(&results);
 
+        // latency window should always leave at least one result
+        invariant(results.size());
+
         return results;
     }
     return boost::none;

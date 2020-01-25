@@ -89,4 +89,7 @@ Milliseconds ServerSelectionConfiguration::getLocalThresholdMs() const {
 Milliseconds ServerSelectionConfiguration::getServerSelectionTimeoutMs() const {
     return _serverSelectionTimeoutMs;
 }
+Milliseconds ServerSelectionConfiguration::getHeartBeatFrequencyMs() const {
+    return _heartBeatFrequencyMs;
+}
 };  // namespace mongo::sdam
