@@ -355,15 +355,13 @@ std::string ReplicaSetMonitor::getName() const {
     return _uri.getSetName();
 }
 
+// TODO: this can be cached
 std::string ReplicaSetMonitor::getServerAddress() const {
     const auto topologyDescription = _currentTopology();
-    const auto setName = topologyDescription->getSetName();
     const auto servers = topologyDescription->getServers();
 
     std::stringstream output;
-    if (setName) {
-        output << *setName << "/";
-    }
+    output << _uri.getSetName() << "/";
 
     for (const auto& server : servers) {
         output << server->getAddress();
@@ -570,7 +568,8 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
                 _executor->cancel(multiQuery->deadlineHandle);
                 multiQuery->done = true;
                 multiQuery->promise.emplaceValue(std::move(*multiResult));
-                _logDebug() << "satisfy multi query (" << _executor->now() - multiQuery->start << ")";
+                _logDebug() << "satisfy multi query (" << _executor->now() - multiQuery->start
+                            << ")";
                 toRemove.insert(query);
             }
         } else {
@@ -580,7 +579,8 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
                 _executor->cancel(singleQuery->deadlineHandle);
                 singleQuery->done = true;
                 singleQuery->promise.emplaceValue(std::move(*singleResult));
-                _logDebug() << "satisfy single query (" << _executor->now() - singleQuery->start << ")";
+                _logDebug() << "satisfy single query (" << _executor->now() - singleQuery->start
+                            << ")";
                 toRemove.insert(query);
             }
         }
