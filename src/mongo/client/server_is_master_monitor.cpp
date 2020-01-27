@@ -1,6 +1,7 @@
 #include "mongo/client/server_is_master_monitor.h"
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kDefault
+#include "mongo/client/sdam/sdam.h"
 #include "mongo/executor/network_interface_factory.h"
 #include "mongo/executor/network_interface_thread_pool.h"
 #include "mongo/executor/thread_pool_task_executor.h"
@@ -27,7 +28,7 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
       _executor(executor),
       _heartbeatFrequencyMS(heartbeatFrequencyMS) {
     LOG(kDebugLevel) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
-	_heartbeatFrequencyMS = Milliseconds(500);
+    _heartbeatFrequencyMS = Milliseconds(500);
 }
 
 void SingleServerIsMasterMonitor::init() {
@@ -157,14 +158,16 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     stdx::lock_guard<Mutex> lk(_mutex);
 
     // remove monitors that are missing from the topology
-    for (auto it = _singleMonitors.begin(); it != _singleMonitors.end(); ++it) {
+    auto it = _singleMonitors.begin();
+    while (it != _singleMonitors.end()) {
         const auto& serverAddress = it->first;
-        SingleServerIsMasterMonitorPtr& singleMonitor = it->second;
         if (newDescription->findServerByAddress(serverAddress) == boost::none) {
-            // not in current topology -- remove the monitor
-            LOG(kLogDebugLevel) << serverAddress << " was removed from the topology.";
+            auto& singleMonitor = _singleMonitors[serverAddress];
             singleMonitor->close();
+            LOG(kLogDebugLevel) << serverAddress << " was removed from the topology.";
             it = _singleMonitors.erase(it);
+        } else {
+            ++it;
         }
     }
 
