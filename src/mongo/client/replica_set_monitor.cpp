@@ -474,8 +474,21 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
 
     auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
     auto maybePrimary = newDescription->getPrimary();
+
     if (maybePrimary) {
         auto primaryAddress = HostAndPort((*maybePrimary)->getAddress());
+
+        // TODO: there is a disconnect between "scans" and firing the event
+        // on every ismaster. Filter out some of the events.
+        auto oldPrimary = previousDescription->getPrimary();
+        if (oldPrimary) {
+            auto oldPrimaryAddress = HostAndPort((*oldPrimary)->getAddress());
+            auto matchesOldPrimary = (primaryAddress == oldPrimaryAddress);
+            if (matchesOldPrimary) {
+                LOG(3) << "not firing onConfirmedSet since primary is the same.";
+                return;
+            }
+        }
 
         // TODO: remove need for HostAndPort conversion
         std::set<HostAndPort> secondaries;
@@ -552,6 +565,7 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
     auto topologyDescription = _currentTopology();
 
     std::unordered_set<HostQueryPtr> toRemove;
+    std::vector<ReadPreferenceSetting> prefs;
     auto self = this;
     auto& outstandingQueries = self->_outstandingQueries;
 
@@ -571,6 +585,8 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
                 _logDebug() << "satisfy multi query (" << _executor->now() - multiQuery->start
                             << ")";
                 toRemove.insert(query);
+            } else {
+                prefs.push_back(query->criteria);
             }
         } else {
             auto singleQuery = std::dynamic_pointer_cast<SingleHostQuery>(query);
@@ -582,8 +598,18 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
                 _logDebug() << "satisfy single query (" << _executor->now() - singleQuery->start
                             << ")";
                 toRemove.insert(query);
+            } else {
+                prefs.push_back(query->criteria);
             }
         }
+    }
+
+    if (prefs.size()) {
+        std::stringstream s;
+        for (auto p : prefs) {
+            s << p.toString() << "\n";
+        }
+        _logDebug() << "could not satisfy read prefs this round: " << s.str();
     }
 
     if (toRemove.size()) {
