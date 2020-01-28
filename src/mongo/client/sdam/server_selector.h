@@ -146,7 +146,7 @@ private:
                 bool result = true;
 
                 if (!readPref.minOpTime.isNull()) {
-                    result = result && (readPref.minOpTime <= s->getOpTime());
+                    result = result && (s->getOpTime() >= readPref.minOpTime);
                 }
 
                 if (readPref.maxStalenessSeconds.count()) {
@@ -155,7 +155,6 @@ private:
                     auto staleness = calculateStaleness(*topologyDescription, s);
                     result = result && (staleness <= readPref.maxStalenessSeconds);
                 }
-
                 return result;
             };
 
@@ -179,11 +178,11 @@ private:
             bool resultType = (s->getType() != ServerType::kUnknown);
             bool resultRecent = recencyFilter(readPref, s);
 
-            std::cout << "nearest filter: resultType - " << resultType << "; resultRecent - "
-                      << resultRecent << "maxStaleness - " << readPref.maxStalenessSeconds.count()
-                      << "minOpTime - " << readPref.minOpTime.toString()
-                      << "minOpTime.isNull - " << readPref.minOpTime.isNull() << " ---> "
-                      << s->toString() << std::endl;
+//            std::cout << "nearest filter: resultType - " << resultType << "; resultRecent - "
+//                      << resultRecent << "maxStaleness - " << readPref.maxStalenessSeconds.count()
+//                      << "minOpTime - " << readPref.minOpTime.toString()
+//                      << "minOpTime.isNull - " << readPref.minOpTime.isNull() << " ---> "
+//                      << s->toString() << std::endl;
 
             return resultType && resultRecent;
         };
