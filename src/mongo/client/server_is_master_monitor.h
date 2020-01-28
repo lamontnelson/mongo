@@ -12,12 +12,12 @@ public:
                                 sdam::TopologyEventsPublisherPtr eventListener,
                                 std::shared_ptr<executor::TaskExecutor> executor);
     void init();
+    void close();
 
     virtual ~SingleServerIsMasterMonitor() {
         std::cout << "destroy SingleServerIsMasterMonitor";
     }
 
-    void close();
 
 private:
     void _scheduleNextIsMaster();
@@ -29,7 +29,6 @@ private:
     static const int kDebugLevel = 0;
 
     Mutex _mutex;
-    bool _active = false;
     sdam::ServerAddress _host;
     sdam::TopologyEventsPublisherPtr _eventListener;
     std::shared_ptr<executor::TaskExecutor> _executor;
@@ -38,6 +37,7 @@ private:
 
     executor::TaskExecutor::CallbackHandle _nextIsMasterHandle;
     executor::TaskExecutor::CallbackHandle _remoteCommandHandle;
+    bool _isClosed;
 };
 using SingleServerIsMasterMonitorPtr = std::shared_ptr<SingleServerIsMasterMonitor>;
 
@@ -52,6 +52,8 @@ public:
     virtual ~ServerIsMasterMonitor() {
         std::cout << "destroy ServerIsMasterMonitor";
     }
+
+    void close();
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            sdam::TopologyDescriptionPtr previousDescription,
@@ -70,6 +72,7 @@ private:
     sdam::TopologyEventsPublisherPtr _eventPublisher;
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::unordered_map<sdam::ServerAddress, SingleServerIsMasterMonitorPtr> _singleMonitors;
+    bool _isClosed;
 };
 using ServerIsMasterMonitorPtr = std::shared_ptr<ServerIsMasterMonitor>;
 }  // namespace mongo

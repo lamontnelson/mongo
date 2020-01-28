@@ -92,6 +92,15 @@ static auto maxWireCompare = [](const ServerDescriptionPtr& a, const ServerDescr
 static auto secondaryPredicate = [](const ServerDescriptionPtr& server) {
     return server->getType() == ServerType::kRSPrimary;
 };
+
+std::string debugReadPref(const ReadPreferenceSetting& readPref) {
+    std::stringstream s;
+    s << readPref.toString();
+    if (!readPref.minOpTime.isNull()) {
+        s << "; minOpTime - " << readPref.minOpTime;
+    }
+    return s.str();
+}
 }  // namespace
 
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskExecutor> executor)
@@ -137,7 +146,8 @@ void ReplicaSetMonitor::init() {
 void ReplicaSetMonitor::close() {
     {
         stdx::lock_guard<Mutex> lock(_mutex);
-        LOG(0) << "Shutting down Replica Set Monitor " << _uri;
+        LOG(0) << "Closing Replica Set Monitor " << _uri;
+        _isMasterMonitor->close();
         _eventsPublisher->close();
         _isClosed = true;
         _failOutstandingWitStatus(
@@ -146,11 +156,13 @@ void ReplicaSetMonitor::close() {
 
     _outstandingQueriesCV.notify_all();
     globalRSMonitorManager.getNotifier().onDroppedSet(getName());
+    LOG(3) << "Done closing Replica Set Monitor " << _uri;
 }
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
-    const auto deadline = _clockSource->now() + maxWait;
+    log() << "ReplicaSetMonitor::getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - "
+          << maxWait;
 
     // try to satisfy query immediately
     const auto& immediateResult = _getHost(criteria);
@@ -159,6 +171,7 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     }
 
     // fail fast on timeout
+    const auto deadline = _clockSource->now() + maxWait;
     if (deadline - _clockSource->now() < Milliseconds(0)) {
         return SemiFuture<HostAndPort>(
             Status(ErrorCodes::FailedToSatisfyReadPreference, "failed to satisfy read preference"));
@@ -176,14 +189,21 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
         query->criteria = criteria;
         query->promise = std::move(pf.promise);
 
-        auto deadlineCb = [query, self = shared_from_this()](const TaskExecutor::CallbackArgs&) {
+        auto deadlineCb = [query,
+                           self = shared_from_this()](const TaskExecutor::CallbackArgs& args) {
             mongo::stdx::lock_guard<Mutex> lk(self->_mutex);
+            if (!args.status.isOK()) {
+                return;
+            }
+
             if (query->done) {
                 return;
             }
 
             std::stringstream errMsg;
-            errMsg << "failed to satisfy read preference: timeout: " << query->criteria.toString();
+            errMsg << "failed to satisfy read preference: timeout reached: "
+                   << debugReadPref(query->criteria);
+            log() << errMsg.str();
 
             query->promise.setError(
                 Status(ErrorCodes::FailedToSatisfyReadPreference, errMsg.str()));
@@ -221,6 +241,8 @@ std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
 
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
+    log() << "ReplicaSetMonitor::getHostsOrRefresh: " << debugReadPref(criteria) << "; maxWait - "
+          << maxWait;
     // try to satisfy query immediately
     const auto& immediateResult = _getHosts(criteria);
     if (immediateResult) {
@@ -247,8 +269,13 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         query->criteria = criteria;
         query->promise = std::move(pf.promise);
 
-        auto deadlineCb = [query, self = shared_from_this()](const TaskExecutor::CallbackArgs&) {
+        auto deadlineCb = [query,
+                           self = shared_from_this()](const TaskExecutor::CallbackArgs& args) {
             mongo::stdx::lock_guard<Mutex> lk(self->_mutex);
+            if (!args.status.isOK()) {
+                return;
+            }
+
             if (query->done) {
                 log() << "query is already satisfied.";
                 return;
@@ -256,7 +283,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
 
             std::stringstream errMsg;
             errMsg << "failed to satisfy read preference: timeout reached: "
-                   << query->criteria.toString();
+                   << debugReadPref(query->criteria);
             log() << errMsg.str();
 
             query->promise.setError({ErrorCodes::ExceededTimeLimit, errMsg.str()});
@@ -269,9 +296,6 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
             return SemiFuture<future_type>::makeReady(swDeadlineHandle.getStatus());
         }
         query->deadlineHandle = swDeadlineHandle.getValue();
-
-        //        log() << getName() << " enqueue hosts query " << (size_t)query.get() << " : "
-        //              << query->criteria.toString() << "; deadline - " << query->deadline;
 
         _outstandingQueries.emplace_back(query);
         result = std::move(pf.future);
@@ -288,7 +312,7 @@ boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
         for (auto serverDescription : *result) {
             buf << serverDescription->getAddress() << ", ";
         }
-        log() << getName() << " getHosts; " << criteria.toString() << "; result - "
+        log() << getName() << " getHosts; " << debugReadPref(criteria) << "; result - "
               << ((result) ? buf.str() : "");
         return _extractHosts(*result);
     }
@@ -298,7 +322,7 @@ boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
 boost::optional<HostAndPort> ReplicaSetMonitor::_getHost(const ReadPreferenceSetting& criteria) {
     auto currentTopology = _currentTopology();
     auto result = _serverSelector->selectServer(currentTopology, criteria);
-    log() << getName() << " getHost; " << criteria.toString() << "; result - "
+    log() << getName() << " getHost; " << debugReadPref(criteria) << "; result - "
           << ((result) ? (*result)->getAddress() : "");
     return result ? boost::optional<HostAndPort>((*result)->getAddress()) : boost::none;
 }
@@ -576,7 +600,7 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
         }
 
         if (query->type == HostQueryType::MULTI) {
-            auto multiQuery = std::dynamic_pointer_cast<MultiHostQuery>(query);
+            auto multiQuery = std::static_pointer_cast<MultiHostQuery>(query);
             auto multiResult = self->_getHosts(multiQuery->criteria);
             if (multiResult) {
                 _executor->cancel(multiQuery->deadlineHandle);
@@ -589,7 +613,7 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
                 prefs.push_back(query->criteria);
             }
         } else {
-            auto singleQuery = std::dynamic_pointer_cast<SingleHostQuery>(query);
+            auto singleQuery = std::static_pointer_cast<SingleHostQuery>(query);
             auto singleResult = self->_getHost(singleQuery->criteria);
             if (singleResult) {
                 _executor->cancel(singleQuery->deadlineHandle);
@@ -607,7 +631,7 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
     if (prefs.size()) {
         std::stringstream s;
         for (auto p : prefs) {
-            s << p.toString() << "\n";
+            s << debugReadPref(p) << "; ";
         }
         _logDebug() << "could not satisfy read prefs this round: " << s.str();
     }
@@ -665,12 +689,12 @@ void ReplicaSetMonitor::_failOutstandingWitStatus(Status status) {
 
         switch (query->type) {
             case HostQueryType::SINGLE: {
-                auto singleQuery = std::dynamic_pointer_cast<SingleHostQuery>(query);
+                auto singleQuery = std::static_pointer_cast<SingleHostQuery>(query);
                 singleQuery->promise.setError(status);
                 break;
             }
             case HostQueryType::MULTI: {
-                auto multiQuery = std::dynamic_pointer_cast<MultiHostQuery>(query);
+                auto multiQuery = std::static_pointer_cast<MultiHostQuery>(query);
                 multiQuery->promise.setError(status);
                 break;
             }

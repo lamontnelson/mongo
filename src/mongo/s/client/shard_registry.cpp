@@ -288,6 +288,7 @@ bool ShardRegistry::isUp() const {
 
 bool ShardRegistry::reload(OperationContext* opCtx) {
     stdx::unique_lock<Latch> reloadLock(_reloadMutex);
+    log() << "start reloading shard registry";
 
     if (_reloadState == ReloadState::Reloading) {
         // Another thread is already in the process of reloading so no need to do duplicate work.
@@ -336,6 +337,7 @@ bool ShardRegistry::reload(OperationContext* opCtx) {
         invariant(shard);
 
         auto name = shard->getConnString().getSetName();
+        log() << "call ReplicaSetMonitor::remove " << name;
         ReplicaSetMonitor::remove(name);
         for (auto& callback : _shardRemovalHooks) {
             // Run callbacks asynchronously.
@@ -347,6 +349,7 @@ bool ShardRegistry::reload(OperationContext* opCtx) {
     nextReloadState = ReloadState::Idle;
     // first successful reload means that registry is up
     _isUp = true;
+    log() << "done reloading shard registry";
     return true;
 }
 
