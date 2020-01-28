@@ -26,7 +26,8 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
     : _host(host),
       _eventListener(eventListener),
       _executor(executor),
-      _heartbeatFrequencyMS(heartbeatFrequencyMS) {
+      _heartbeatFrequencyMS(heartbeatFrequencyMS),
+      _isClosed(true) {
     LOG(kDebugLevel) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
     _heartbeatFrequencyMS = Milliseconds(500);
 }
@@ -34,7 +35,7 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
 void SingleServerIsMasterMonitor::init() {
     {
         stdx::lock_guard<Mutex> lk(_mutex);
-        _active = true;
+        _isClosed = false;
     }
 
     _scheduleNextIsMaster();
@@ -42,13 +43,16 @@ void SingleServerIsMasterMonitor::init() {
 
 void SingleServerIsMasterMonitor::_scheduleNextIsMaster() {
     stdx::lock_guard<Mutex> lk(_mutex);
-    if (!_active)
+    if (_isClosed)
         return;
 
     Timer timer;
     auto swCbHandle = _executor->scheduleWorkAt(
         _executor->now() + _heartbeatFrequencyMS,
         [self = shared_from_this()](const executor::TaskExecutor::CallbackArgs& cbData) {
+            if (!cbData.status.isOK()) {
+                return;
+            }
             self->_doRemoteCommand();
         });
 
@@ -66,7 +70,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
         HostAndPort(_host), "admin", IS_MASTER_BSON, nullptr, _timeoutMS);
     // request.sslMode = _set->setUri.getSSLMode();
     stdx::lock_guard<Mutex> lk(_mutex);
-    if (!_active)
+    if (_isClosed)
         return;
 
     Timer timer;
@@ -76,7 +80,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
          timer](const executor::TaskExecutor::RemoteCommandCallbackArgs& result) mutable {
             {
                 stdx::lock_guard<Mutex> lk(self->_mutex);
-                if (!self->_active)
+                if (self->_isClosed)
                     return;
 
                 Microseconds latency(timer.micros());
@@ -140,21 +144,35 @@ ServerIsMasterMonitor::ServerIsMasterMonitor(
     std::shared_ptr<executor::TaskExecutor> executor)
     : _sdamConfiguration(sdamConfiguration),
       _eventPublisher(eventsPublisher),
-      _executor(_setupExecutor(executor)) {
+      _executor(_setupExecutor(executor)),
+      _isClosed(false) {
     LOG(kLogDebugLevel) << "Starting Replica Set IsMaster monitor with "
                         << initialTopologyDescription->getServers().size() << " members.";
     onTopologyDescriptionChangedEvent(
         initialTopologyDescription->getId(), nullptr, initialTopologyDescription);
 }
 
+void ServerIsMasterMonitor::close() {
+    stdx::lock_guard<Mutex> lk(_mutex);
+    if (_isClosed)
+        return;
+
+    log() << "closing ServerIsMasterMonitor";
+    _isClosed = true;
+    for (auto singleMonitor : _singleMonitors) {
+        singleMonitor.second->close();
+    }
+    log() << "done closing ServerIsMasterMonitor";
+}
+
 // TODO: measure if this is a bottleneck. if so, implement using
-// ServerOpeningEvent/ServerClosingEvent
 void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     sdam::TopologyDescriptionPtr previousDescription,
     sdam::TopologyDescriptionPtr newDescription) {
-    log() << "ServerIsMasterMonitor::onTopologyDescriptionChangedEvent";
     stdx::lock_guard<Mutex> lk(_mutex);
+    if (_isClosed)
+        return;
 
     // remove monitors that are missing from the topology
     auto it = _singleMonitors.begin();

@@ -45,16 +45,16 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
     switch (criteria.pref) {
         case ReadPreference::Nearest:
             *result = topologyDescription->findServers(nearestFilter(criteria));
-            return;
+            break;
 
         case ReadPreference::SecondaryOnly:
             *result = topologyDescription->findServers(secondaryFilter(criteria));
-            return;
+            break;
 
         case ReadPreference::PrimaryOnly: {
             const auto primaryCriteria = ReadPreferenceSetting(criteria.pref);
             *result = topologyDescription->findServers(primaryFilter(primaryCriteria));
-            return;
+            break;
         }
 
         case ReadPreference::PrimaryPreferred: {
@@ -63,6 +63,7 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
             if (result->size())
                 return;
             *result = topologyDescription->findServers(secondaryFilter(criteria));
+            break;
         }
 
         case ReadPreference::SecondaryPreferred: {
@@ -72,6 +73,7 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
             if (result->size())
                 return;
             *result = topologyDescription->findServers(primaryFilter(criteria));
+            break;
         }
 
         default:
