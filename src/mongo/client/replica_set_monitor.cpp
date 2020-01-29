@@ -322,8 +322,9 @@ boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
 boost::optional<HostAndPort> ReplicaSetMonitor::_getHost(const ReadPreferenceSetting& criteria) {
     auto currentTopology = _currentTopology();
     auto result = _serverSelector->selectServer(currentTopology, criteria);
-    log() << getName() << " getHost; " << debugReadPref(criteria) << "; result - "
-          << ((result) ? (*result)->getAddress() : "");
+    if (result)
+        log() << getName() << " getHost; " << debugReadPref(criteria) << "; result - "
+              << ((result) ? (*result)->getAddress() : "");
     return result ? boost::optional<HostAndPort>((*result)->getAddress()) : boost::none;
 }
 
@@ -498,6 +499,7 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
             servers.push_back(HostAndPort(server->getAddress()));
         }
 
+        auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
         auto maybePrimary = newDescription->getPrimary();
         if (maybePrimary) {
             // TODO: remove need for HostAndPort conversion
@@ -507,11 +509,9 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
             }
 
             auto primaryAddress = HostAndPort((*maybePrimary)->getAddress());
-            auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
             globalRSMonitorManager.getNotifier().onConfirmedSet(
                 connectionString, primaryAddress, secondaries);
         } else {
-            auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
             globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
         }
     } else {
@@ -621,13 +621,13 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
         }
     }
 
-    if (prefs.size()) {
-        std::stringstream s;
-        for (auto p : prefs) {
-            s << debugReadPref(p) << "; ";
-        }
-        _logDebug() << "could not satisfy read prefs this round: " << s.str();
-    }
+    //    if (prefs.size()) {
+    //        std::stringstream s;
+    //        for (auto p : prefs) {
+    //            s << debugReadPref(p) << "; ";
+    //        }
+    //        _logDebug() << "could not satisfy read prefs this round: " << s.str();
+    //    }
 
     if (toRemove.size()) {
         _logDebug() << toRemove.size() << " queries satisfied.";
