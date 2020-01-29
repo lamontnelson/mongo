@@ -318,6 +318,8 @@ private:
                                     const ReadPreferenceSetting& criteria,
                                     const Date_t& deadline);
     void _failOutstandingWitStatus(Status status);
+    bool _hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
+                              sdam::TopologyDescriptionPtr newDescription);
 };
 
 }  // namespace mongo
