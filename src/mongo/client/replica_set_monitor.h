@@ -306,7 +306,7 @@ private:
     // variables below are protected by the mutex
     ClockSource* _clockSource;
     stdx::condition_variable _outstandingQueriesCV;
-    std::vector<HostQueryPtr> _outstandingQueries;
+    std::list<HostQueryPtr> _outstandingQueries;
     bool _isClosed = true;
 
     static inline const auto kServerSelectionConfig =
@@ -320,6 +320,7 @@ private:
     void _failOutstandingWitStatus(Status status);
     bool _hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
                               sdam::TopologyDescriptionPtr newDescription);
+    Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
 };
 
 }  // namespace mongo

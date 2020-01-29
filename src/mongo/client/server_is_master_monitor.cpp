@@ -124,8 +124,8 @@ void SingleServerIsMasterMonitor::close() {
 
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
-    // LOG(kDebugLevel) << "received isMaster for server " << _host << " (" << latency << ")"
-    //                 << "; " << bson.toString();
+    //    LOG(kDebugLevel) << "received isMaster for server " << _host << " (" << latency << ")"
+    //                     << "; " << bson.toString();
     _eventListener->onServerHeartbeatSucceededEvent(
         duration_cast<Milliseconds>(latency), _host, bson);
 }
@@ -133,7 +133,8 @@ void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
 void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
                                                      const Status& status,
                                                      const BSONObj bson) {
-    LOG(kDebugLevel) << "received isMaster for server " << _host << " (" << latency << ")"
+    LOG(kDebugLevel) << "received failed isMaster for server " << _host << ": " << status.toString()
+                     << " (" << latency << ")"
                      << "; " << bson.toString();
     _eventListener->onServerHeartbeatFailureEvent(
         duration_cast<Milliseconds>(latency), status, _host, bson);
@@ -168,7 +169,7 @@ void ServerIsMasterMonitor::close() {
     log() << "done closing ServerIsMasterMonitor";
 }
 
-// TODO: measure if this is a bottleneck. if so, implement using
+// TODO: measure if this is a bottleneck. if so, implement using ServerDescription events.
 void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     sdam::TopologyDescriptionPtr previousDescription,
