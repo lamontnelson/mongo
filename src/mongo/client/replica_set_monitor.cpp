@@ -161,8 +161,7 @@ void ReplicaSetMonitor::close() {
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
-    log() << "ReplicaSetMonitor::getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - "
-          << maxWait;
+    _logDebug() << "getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait;
 
     // try to satisfy query immediately
     const auto& immediateResult = _getHost(criteria);
@@ -173,8 +172,7 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
     if (deadline - _clockSource->now() < Milliseconds(0)) {
-        return SemiFuture<HostAndPort>(
-            Status(ErrorCodes::FailedToSatisfyReadPreference, "failed to satisfy read preference"));
+        return SemiFuture<HostAndPort>(_makeUnsatisfiedReadPrefError(criteria));
     }
 
     // otherwise, do async version
@@ -190,35 +188,31 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
         query->promise = std::move(pf.promise);
 
         auto deadlineCb = [query,
-                           self = shared_from_this()](const TaskExecutor::CallbackArgs& args) {
+                           self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
             mongo::stdx::lock_guard<Mutex> lk(self->_mutex);
-            if (!args.status.isOK()) {
-                return;
-            }
-
             if (query->done) {
                 return;
             }
 
-            std::stringstream errMsg;
-            errMsg << "failed to satisfy read preference: timeout reached: "
-                   << debugReadPref(query->criteria);
-            log() << errMsg.str();
+            const auto cbStatus = cbArgs.status;
+            if (!cbStatus.isOK()) {
+                query->promise.setError(cbStatus);
+                query->done = true;
+                return;
+            }
 
-            query->promise.setError(
-                Status(ErrorCodes::FailedToSatisfyReadPreference, errMsg.str()));
+            const auto errorStatus = self->_makeUnsatisfiedReadPrefError(query->criteria);
+            query->promise.setError(errorStatus);
             query->done = true;
+            self->_logDebug() << "timeout: " << errorStatus.toString();
         };
         auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
 
         if (!swDeadlineHandle.isOK()) {
-            log() << "error scheduling deadline handler: " << swDeadlineHandle.getStatus();
+            _logDebug() << "error scheduling deadline handler: " << swDeadlineHandle.getStatus();
             return SemiFuture<future_type>::makeReady(swDeadlineHandle.getStatus());
         }
         query->deadlineHandle = swDeadlineHandle.getValue();
-
-        //        log() << getName() << "; enqueue host query " << (size_t)query.get() << " : "
-        //              << query->criteria.toString() << "; deadline - " << query->deadline;
 
         _outstandingQueries.emplace_back(query);
         result = std::move(pf.future);
@@ -241,20 +235,18 @@ std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
 
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
-    log() << "ReplicaSetMonitor::getHostsOrRefresh: " << debugReadPref(criteria) << "; maxWait - "
-          << maxWait;
+    _logDebug() << "getHostsOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait;
+
     // try to satisfy query immediately
     const auto& immediateResult = _getHosts(criteria);
     if (immediateResult) {
         return {std::move(*immediateResult)};
     }
 
-
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
     if (deadline - _clockSource->now() < Milliseconds(0)) {
-        return SemiFuture<std::vector<HostAndPort>>(
-            Status(ErrorCodes::FailedToSatisfyReadPreference, "failed to satisfy read preference"));
+        return SemiFuture<std::vector<HostAndPort>>(_makeUnsatisfiedReadPrefError(criteria));
     }
 
     // otherwise, do async version
@@ -270,24 +262,23 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         query->promise = std::move(pf.promise);
 
         auto deadlineCb = [query,
-                           self = shared_from_this()](const TaskExecutor::CallbackArgs& args) {
+                           self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
             mongo::stdx::lock_guard<Mutex> lk(self->_mutex);
-            if (!args.status.isOK()) {
-                return;
-            }
-
             if (query->done) {
-                log() << "query is already satisfied.";
                 return;
             }
 
-            std::stringstream errMsg;
-            errMsg << "failed to satisfy read preference: timeout reached: "
-                   << debugReadPref(query->criteria);
-            log() << errMsg.str();
+            const auto cbStatus = cbArgs.status;
+            if (!cbStatus.isOK()) {
+                query->promise.setError(cbStatus);
+                query->done = true;
+                return;
+            }
 
-            query->promise.setError({ErrorCodes::ExceededTimeLimit, errMsg.str()});
+            const auto errorStatus = self->_makeUnsatisfiedReadPrefError(query->criteria);
+            query->promise.setError(errorStatus);
             query->done = true;
+            self->_logDebug() << "timeout: " << errorStatus.toString();
         };
         auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
 
@@ -300,6 +291,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         _outstandingQueries.emplace_back(query);
         result = std::move(pf.future);
     }
+
     _outstandingQueriesCV.notify_all();
     return std::move(result).semi();
 }
@@ -515,8 +507,9 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
             globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
         }
     } else {
-        log() << "No membership change for:\nprevious - " << previousDescription->toString()
-              << "\nnew -" << newDescription->toString();
+        //        _logDebug() << "No membership change for:\nprevious - " <<
+        //        previousDescription->toString()
+        //              << "\nnew -" << newDescription->toString();
     }
 }  // namespace mongo
 
@@ -575,74 +568,72 @@ std::string debug(boost::optional<HostAndPort> x) {
     return s.str();
 }
 
-// Satisfy outstanding queries. This function should be called with mutex held.
+// This function attempts to satisfy outstanding queries when we have new information.
+// It also will remove any queries that have already passed the deadline.
+//
+// It should be called with the mutex held.
+//
 // TODO: refactor so that we don't call _getHost(s) for every outstanding query
 // since some might be duplicates. but we do still want the randomization for multiple hosts.
 void ReplicaSetMonitor::_satisfyOutstandingQueries() {
     auto topologyDescription = _currentTopology();
+    auto& outstandingQueries = _outstandingQueries;
+    //    size_t totalQueries = _outstandingQueries.size();
+    size_t numSatisfied = 0;
 
-    std::unordered_set<HostQueryPtr> toRemove;
-    std::vector<ReadPreferenceSetting> prefs;
-    auto self = this;
-    auto& outstandingQueries = self->_outstandingQueries;
+    auto it = outstandingQueries.begin();
+    while (it != outstandingQueries.end()) {
+        auto query = *it;
+        bool shouldRemove = false;
 
-    for (const auto& query : outstandingQueries) {
         if (query->done) {
-            toRemove.insert(query);
-            continue;
-        }
-
-        if (query->type == HostQueryType::MULTI) {
-            auto multiQuery = std::static_pointer_cast<MultiHostQuery>(query);
-            auto multiResult = self->_getHosts(multiQuery->criteria);
-            if (multiResult) {
-                _executor->cancel(multiQuery->deadlineHandle);
-                multiQuery->done = true;
-                multiQuery->promise.emplaceValue(std::move(*multiResult));
-                _logDebug() << "satisfy multi query (" << _executor->now() - multiQuery->start
-                            << ")";
-                toRemove.insert(query);
-            } else {
-                prefs.push_back(query->criteria);
-            }
+            shouldRemove = true;
         } else {
-            auto singleQuery = std::static_pointer_cast<SingleHostQuery>(query);
-            auto singleResult = self->_getHost(singleQuery->criteria);
-            if (singleResult) {
-                _executor->cancel(singleQuery->deadlineHandle);
-                singleQuery->done = true;
-                singleQuery->promise.emplaceValue(std::move(*singleResult));
-                _logDebug() << "satisfy single query (" << _executor->now() - singleQuery->start
-                            << ")";
-                toRemove.insert(query);
+            if (query->type == HostQueryType::MULTI) {
+                auto multiQuery = std::static_pointer_cast<MultiHostQuery>(query);
+                auto multiResult = _getHosts(multiQuery->criteria);
+                if (multiResult) {
+                    _executor->cancel(multiQuery->deadlineHandle);
+
+                    multiQuery->done = true;
+                    multiQuery->promise.emplaceValue(std::move(*multiResult));
+                    _logDebug() << "satisfy multi query: " << multiQuery->criteria.toString()
+                                << " (" << _executor->now() - multiQuery->start << ")";
+                    shouldRemove = true;
+                    ++numSatisfied;
+                }
             } else {
-                prefs.push_back(query->criteria);
+                invariant(query->type == HostQueryType::SINGLE);
+                auto singleQuery = std::static_pointer_cast<SingleHostQuery>(query);
+                auto singleResult = _getHost(singleQuery->criteria);
+                if (singleResult) {
+                    _executor->cancel(singleQuery->deadlineHandle);
+
+                    singleQuery->done = true;
+                    singleQuery->promise.emplaceValue(std::move(*singleResult));
+                    _logDebug() << "satisfy single query: " << singleQuery->criteria.toString()
+                                << " (" << _executor->now() - singleQuery->start << ")";
+                    shouldRemove = true;
+                    ++numSatisfied;
+                }
             }
+        }  // end if
+
+        if (shouldRemove) {
+            it = outstandingQueries.erase(it);
+        } else {
+            ++it;
         }
-    }
+    }  // end while
 
-    //    if (prefs.size()) {
-    //        std::stringstream s;
-    //        for (auto p : prefs) {
-    //            s << debugReadPref(p) << "; ";
-    //        }
-    //        _logDebug() << "could not satisfy read prefs this round: " << s.str();
-    //    }
-
-    if (toRemove.size()) {
-        _logDebug() << toRemove.size() << " queries satisfied.";
-        outstandingQueries.erase(
-            std::remove_if(outstandingQueries.begin(),
-                           outstandingQueries.end(),
-                           [&toRemove](const HostQueryPtr& q) { return toRemove.count(q) > 0; }),
-            outstandingQueries.end());
-    }
+    //    _logDebug() << numSatisfied << " of " << totalQueries << " queries satisfied.";
 }
 
 void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
     auto queryProcessor = [self = shared_from_this()]() {
         while (true) {
             stdx::unique_lock<Mutex> lock(self->_mutex);
+            auto timer = Timer();
             self->_outstandingQueriesCV.wait(lock, [self] {
                 auto currentTopology = self->_currentTopology();
                 const auto& outstandingQueries = self->_outstandingQueries;
@@ -650,12 +641,14 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
 
                 // only wake up if we are closed or we have an outstanding query that we can
                 // satisfy.
-                bool shouldStopWaiting = isClosed ||
-                    (outstandingQueries.size() &&
-                     (currentTopology->getType() != TopologyType::kUnknown));
-
-                return shouldStopWaiting;
+                bool isPossibleToSatisfy = outstandingQueries.size() > 0 &&
+                    (currentTopology->getType() != TopologyType::kUnknown);
+                return isClosed || isPossibleToSatisfy;
             });
+
+            self->_logDebug() << "waited for " << timer.elapsed() << ". "
+                              << toString(self->_currentTopology()->getType());
+
 
             // mutex is reacquired after wait
             if (self->_isClosed) {
@@ -728,5 +721,12 @@ bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDes
     }
 
     return false;
+}
+
+Status ReplicaSetMonitor::_makeUnsatisfiedReadPrefError(
+    const ReadPreferenceSetting& criteria) const {
+    return Status(ErrorCodes::FailedToSatisfyReadPreference,
+                  str::stream() << "Could not find host matching read preference "
+                                << criteria.toString() << " for set " << getName());
 }
 }  // namespace mongo
