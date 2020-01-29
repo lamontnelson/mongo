@@ -154,10 +154,11 @@ void ReplicaSetMonitor::close() {
             Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
     }
 
+    globalRSMonitorManager.getNotifier().onDroppedSet(getName());
+
     _outstandingQueriesCV.notify_all();
     _queryProcessorThread.join();
 
-    globalRSMonitorManager.getNotifier().onDroppedSet(getName());
     _logDebug() << "Done closing Replica Set Monitor " << getName();
 }
 
@@ -171,7 +172,8 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
         stdx::lock_guard<Mutex> lock(_mutex);
         if (_isClosed) {
             return SemiFuture<future_type>(Status(ErrorCodes::ReplicaSetMonitorRemoved,
-                      str::stream() << "ReplicaSetMonitor for set " << getName() << " is removed"));
+                                                  str::stream() << "ReplicaSetMonitor for set "
+                                                                << getName() << " is removed"));
         }
     }
 
@@ -254,7 +256,8 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         stdx::lock_guard<Mutex> lock(_mutex);
         if (_isClosed) {
             return SemiFuture<future_type>(Status(ErrorCodes::ReplicaSetMonitorRemoved,
-                                                  str::stream() << "ReplicaSetMonitor for set " << getName() << " is removed"));
+                                                  str::stream() << "ReplicaSetMonitor for set "
+                                                                << getName() << " is removed"));
         }
     }
 
@@ -283,7 +286,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
 
         auto deadlineCb = [query,
                            self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
-            mongo::stdx::lock_guard<Mutex> lk(self->_mutex);
+            mongo::stdx::lock_guard<Mutex> lock(self->_mutex);
             if (query->done) {
                 return;
             }
@@ -694,6 +697,7 @@ void ReplicaSetMonitor::_failOutstandingWitStatus(Status status) {
         if (query->done)
             continue;
 
+        query->done = true;
         _executor->cancel(query->deadlineHandle);
 
         switch (query->type) {
