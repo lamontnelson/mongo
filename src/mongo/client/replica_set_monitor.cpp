@@ -146,17 +146,18 @@ void ReplicaSetMonitor::init() {
 void ReplicaSetMonitor::close() {
     {
         stdx::lock_guard<Mutex> lock(_mutex);
-        LOG(0) << "Closing Replica Set Monitor " << _uri;
+        _logDebug() << "Closing Replica Set Monitor " << _uri;
+        _isClosed = true;
         _isMasterMonitor->close();
         _eventsPublisher->close();
-        _isClosed = true;
         _failOutstandingWitStatus(
             Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
     }
 
     _outstandingQueriesCV.notify_all();
+    _queryProcessorThread.join();
     globalRSMonitorManager.getNotifier().onDroppedSet(getName());
-    LOG(3) << "Done closing Replica Set Monitor " << _uri;
+    _logDebug() << "Done closing Replica Set Monitor " << _uri;
 }
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
@@ -649,7 +650,6 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
             self->_logDebug() << "waited for " << timer.elapsed() << ". "
                               << toString(self->_currentTopology()->getType());
 
-
             // mutex is reacquired after wait
             if (self->_isClosed) {
                 LOG(3) << "RSM " << self->getName() << " is closed -- exiting query processor loop";
@@ -661,7 +661,7 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
     };
 
     _queryProcessorThread = std::thread(queryProcessor);
-    _queryProcessorThread.detach();
+    //    _queryProcessorThread.detach();
 }
 
 logger::LogstreamBuilder ReplicaSetMonitor::_logDebug(int n) {
