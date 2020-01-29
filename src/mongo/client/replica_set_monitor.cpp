@@ -490,42 +490,35 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     TopologyDescriptionPtr previousDescription,
     TopologyDescriptionPtr newDescription) {
-    // TODO: remove when HostAndPort conversion is done.
-    std::vector<HostAndPort> servers;
-    for (const auto server : newDescription->getServers()) {
-        servers.push_back(HostAndPort(server->getAddress()));
-    }
 
-    auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
-    auto maybePrimary = newDescription->getPrimary();
+    if (_hasMembershipChange(previousDescription, newDescription)) {
+        // TODO: remove when HostAndPort conversion is done.
+        std::vector<HostAndPort> servers;
+        for (const auto server : newDescription->getServers()) {
+            servers.push_back(HostAndPort(server->getAddress()));
+        }
 
-    if (maybePrimary) {
-        auto primaryAddress = HostAndPort((*maybePrimary)->getAddress());
-
-        // TODO: there is a disconnect between "scans" and firing the event
-        // on every ismaster. Filter out some of the events.
-        auto oldPrimary = previousDescription->getPrimary();
-        if (oldPrimary) {
-            auto oldPrimaryAddress = HostAndPort((*oldPrimary)->getAddress());
-            auto matchesOldPrimary = (primaryAddress == oldPrimaryAddress);
-            if (matchesOldPrimary) {
-                LOG(3) << "not firing onConfirmedSet since primary is the same.";
-                return;
+        auto maybePrimary = newDescription->getPrimary();
+        if (maybePrimary) {
+            // TODO: remove need for HostAndPort conversion
+            std::set<HostAndPort> secondaries;
+            for (auto secondary : newDescription->findServers(secondaryPredicate)) {
+                secondaries.insert(HostAndPort(secondary->getAddress()));
             }
-        }
 
-        // TODO: remove need for HostAndPort conversion
-        std::set<HostAndPort> secondaries;
-        for (auto secondary : newDescription->findServers(secondaryPredicate)) {
-            secondaries.insert(HostAndPort(secondary->getAddress()));
+            auto primaryAddress = HostAndPort((*maybePrimary)->getAddress());
+            auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
+            globalRSMonitorManager.getNotifier().onConfirmedSet(
+                connectionString, primaryAddress, secondaries);
+        } else {
+            auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
+            globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
         }
-
-        globalRSMonitorManager.getNotifier().onConfirmedSet(
-            connectionString, primaryAddress, secondaries);
     } else {
-        globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
+        log() << "No membership change for:\nprevious - " << previousDescription->toString()
+              << "\nnew -" << newDescription->toString();
     }
-}
+}  // namespace mongo
 
 void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
                                                         ServerAddress hostAndPort,
@@ -701,5 +694,39 @@ void ReplicaSetMonitor::_failOutstandingWitStatus(Status status) {
         }
     }
     _outstandingQueries.clear();
+}
+
+bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
+                                             sdam::TopologyDescriptionPtr newDescription) {
+
+    // check if primaries differ
+    auto maybeOldPrimary = oldDescription->getPrimary();
+    auto maybeNewPrimary = newDescription->getPrimary();
+    if (maybeNewPrimary && maybeOldPrimary) {
+        bool addressesDoNotMatch =
+            (*maybeOldPrimary)->getAddress() != (*maybeNewPrimary)->getAddress();
+        if (addressesDoNotMatch)
+            return true;
+    } else {
+        // if old or new has a value, then there has been a change.
+        bool oneExists = (maybeOldPrimary || maybeNewPrimary);
+        if (oneExists)
+            return true;
+    }
+
+    // check if secondaries differ
+    auto oldSecondaries = oldDescription->findServers(secondaryPredicate);
+    auto newSecondaries = newDescription->findServers(secondaryPredicate);
+    std::unordered_map<ServerAddress, bool> oldMembership;
+    for (auto oldSecondary : oldSecondaries) {
+        oldMembership.insert({oldSecondary->getAddress(), true});
+    }
+    for (auto newSecondary : newSecondaries) {
+        if (oldMembership.find(newSecondary->getAddress()) == oldMembership.end()) {
+            return true;
+        }
+    }
+
+    return false;
 }
 }  // namespace mongo

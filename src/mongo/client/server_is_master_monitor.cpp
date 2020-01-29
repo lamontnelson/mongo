@@ -106,23 +106,26 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 void SingleServerIsMasterMonitor::close() {
     stdx::lock_guard<Mutex> lk(_mutex);
     LOG(kDebugLevel) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
-    _active = false;
+    _isClosed = true;
 
     if (_nextIsMasterHandle.isValid()) {
         _executor->cancel(_nextIsMasterHandle);
+        _executor->wait(_nextIsMasterHandle);
     }
 
     if (_remoteCommandHandle.isValid()) {
         _executor->cancel(_remoteCommandHandle);
+        _executor->wait(_remoteCommandHandle);
     }
 
     _executor = nullptr;
+    LOG(kDebugLevel) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
 }
 
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
-    LOG(kDebugLevel) << "received isMaster for server " << _host << " (" << latency << ")"
-                     << "; " << bson.toString();
+    // LOG(kDebugLevel) << "received isMaster for server " << _host << " (" << latency << ")"
+    //                 << "; " << bson.toString();
     _eventListener->onServerHeartbeatSucceededEvent(
         duration_cast<Milliseconds>(latency), _host, bson);
 }
