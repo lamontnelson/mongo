@@ -672,8 +672,8 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
             });
             // mutex is reacquired after wait
 
-            self->_logDebug() << "waited for " << timer.elapsed() << ". "
-                              << toString(self->_currentTopology()->getType());
+//            self->_logDebug() << "waited for " << timer.elapsed() << ". "
+//                              << toString(self->_currentTopology()->getType());
 
             if (self->_isClosed) {
                 self->_logDebug() << "exiting query processor loop";
