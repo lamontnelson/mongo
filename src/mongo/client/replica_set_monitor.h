@@ -306,7 +306,7 @@ private:
     // variables below are protected by the mutex
     ClockSource* _clockSource;
     stdx::condition_variable _outstandingQueriesCV;
-    std::list<HostQueryPtr> _outstandingQueries;
+    std::vector<HostQueryPtr> _outstandingQueries;
     bool _isClosed = true;
 
     static inline const auto kServerSelectionConfig =

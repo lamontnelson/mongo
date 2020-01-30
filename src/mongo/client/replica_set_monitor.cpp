@@ -279,7 +279,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         mongo::stdx::lock_guard<Mutex> lk(_mutex);
         auto pf = makePromiseFuture<future_type>();
         auto query = std::make_shared<MultiHostQuery>();
-        query->type = HostQueryType::SINGLE;
+        query->type = HostQueryType::MULTI;
         query->deadline = deadline;
         query->criteria = criteria;
         query->promise = std::move(pf.promise);
@@ -604,10 +604,11 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
     //    size_t totalQueries = _outstandingQueries.size();
     size_t numSatisfied = 0;
 
+    bool shouldRemove;
     auto it = outstandingQueries.begin();
     while (it != outstandingQueries.end()) {
-        auto query = *it;
-        bool shouldRemove = false;
+        auto& query = *it;
+        shouldRemove = false;
 
         if (query->done) {
             shouldRemove = true;
@@ -627,7 +628,8 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
                 }
             } else {
                 invariant(query->type == HostQueryType::SINGLE);
-                auto singleQuery = std::static_pointer_cast<SingleHostQuery>(query);
+                auto singleQuery = std::dynamic_pointer_cast<SingleHostQuery>(query);
+                invariant(singleQuery);
                 auto singleResult = _getHost(singleQuery->criteria);
                 if (singleResult) {
                     _executor->cancel(singleQuery->deadlineHandle);
@@ -639,8 +641,8 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
                     shouldRemove = true;
                     ++numSatisfied;
                 }
-            }
-        }  // end if
+            }  // end if
+        }      // end if
 
         if (shouldRemove) {
             it = outstandingQueries.erase(it);
@@ -672,8 +674,8 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
             });
             // mutex is reacquired after wait
 
-//            self->_logDebug() << "waited for " << timer.elapsed() << ". "
-//                              << toString(self->_currentTopology()->getType());
+            //            self->_logDebug() << "waited for " << timer.elapsed() << ". "
+            //                              << toString(self->_currentTopology()->getType());
 
             if (self->_isClosed) {
                 self->_logDebug() << "exiting query processor loop";
