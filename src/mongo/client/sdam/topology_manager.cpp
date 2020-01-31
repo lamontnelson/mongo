@@ -32,8 +32,27 @@
 
 #include "mongo/client/sdam/topology_state_machine.h"
 #include "mongo/util/log.h"
+#include "mongo/rpc/topology_version_gen.h"
 
 namespace mongo::sdam {
+
+namespace {
+
+// Compare topologyVersions. If the isMaster response has topologyVersion < lastServerDescription's
+// toplogyVersion, we will ignore this reply because the lastServerDescription is fresher.
+bool isStaleTopologyVersion(boost::optional<TopologyVersion> lastTopologyVersion,
+                            boost::optional<TopologyVersion> newTopologyVersion) {
+    if (lastTopologyVersion && newTopologyVersion &&
+        (lastTopologyVersion.get() > newTopologyVersion.get())) {
+        return true;
+    }
+
+    return false;
+}
+
+}  // namespace
+
+
 TopologyManager::TopologyManager(SdamConfiguration config,
                                  ClockSource* clockSource,
                                  TopologyEventsPublisherPtr eventsPublisher)
@@ -66,7 +85,7 @@ bool TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome
                   << lastTopologyVersion->toBSON()
                   << "is fresher than the provided topologyVersion: "
                   << newTopologyVersion->toBSON();
-            return;
+            return false;
         }
 
         // Maintain the poolResetCounter.

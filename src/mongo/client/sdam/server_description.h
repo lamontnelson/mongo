@@ -103,6 +103,7 @@ public:
     const std::set<ServerAddress>& getArbiters() const;
     const boost::optional<int>& getSetVersion() const;
     const boost::optional<OID>& getElectionId() const;
+    const boost::optional<TopologyVersion>& getTopologyVersion() const;
     const boost::optional<TopologyDescriptionPtr> getTopologyDescription();
 
     BSONObj toBson() const;
@@ -195,6 +196,13 @@ private:
 
     // (=) logicalSessionTimeoutMinutes: integer or null. Default null.
     boost::optional<int> _logicalSessionTimeoutMinutes;
+
+    // (=) streamable: whether this server can stream isMaster responses. Default false.
+    bool _streamable = false;
+
+    // (=) poolResetCounter: integer, default 0. Initialized when client first creates connection
+    // pool for server. Incremented on network error or timeout.
+    int _poolResetCounter = 0;
 
     // The topology description of that we are a part of
     boost::optional<std::weak_ptr<TopologyDescription>> _topologyDescription;

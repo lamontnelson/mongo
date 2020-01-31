@@ -348,7 +348,12 @@ HostAndPort ReplicaSetMonitor::getMasterOrUassert() {
 }
 
 void ReplicaSetMonitor::failedHost(const HostAndPort& host, const Status& status) {
-    IsMasterOutcome outcome(host.toString(), status.toString());
+    IsMasterOutcome outcome(host.toString(), BSONObj(), status.toString());
+    _topologyManager->onServerDescription(outcome);
+}
+
+void ReplicaSetMonitor::failedHost(const HostAndPort& host, BSONObj bson, const Status& status) {
+    IsMasterOutcome outcome(host.toString(), bson, status.toString());
     _topologyManager->onServerDescription(outcome);
 }
 

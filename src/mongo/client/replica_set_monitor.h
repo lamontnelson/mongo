@@ -139,6 +139,7 @@ public:
      * should be considered down.
      */
     void failedHost(const HostAndPort& host, const Status& status);
+    void failedHost(const HostAndPort& host, BSONObj bson, const Status& status);
 
     /**
      * Returns true if this node is the master based ONLY on local data. Be careful, return may
