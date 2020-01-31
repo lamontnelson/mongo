@@ -38,17 +38,17 @@ void SingleServerIsMasterMonitor::init() {
         _isClosed = false;
     }
 
-    _scheduleNextIsMaster();
+    _scheduleNextIsMaster(Milliseconds(0));
 }
 
-void SingleServerIsMasterMonitor::_scheduleNextIsMaster() {
+void SingleServerIsMasterMonitor::_scheduleNextIsMaster(Milliseconds delay) {
     stdx::lock_guard<Mutex> lk(_mutex);
     if (_isClosed)
         return;
 
     Timer timer;
     auto swCbHandle = _executor->scheduleWorkAt(
-        _executor->now() + _heartbeatFrequencyMS,
+        _executor->now() + delay,
         [self = shared_from_this()](const executor::TaskExecutor::CallbackArgs& cbData) {
             if (!cbData.status.isOK()) {
                 return;
@@ -91,7 +91,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
                 }
             }
 
-            self->_scheduleNextIsMaster();
+            self->_scheduleNextIsMaster(self->_heartbeatFrequencyMS);
         });
 
     if (!swCbHandle.isOK()) {

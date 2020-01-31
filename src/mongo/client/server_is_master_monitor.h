@@ -20,7 +20,7 @@ public:
 
 
 private:
-    void _scheduleNextIsMaster();
+    void _scheduleNextIsMaster(Milliseconds delay);
     void _doRemoteCommand();
 
     void _onIsMasterSuccess(sdam::IsMasterRTT latency, const BSONObj bson);
