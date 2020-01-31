@@ -511,8 +511,12 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     TopologyDescriptionPtr previousDescription,
     TopologyDescriptionPtr newDescription) {
-
+    
+    // notify external components, if there are memvbership
+    // changes in the topology.
     if (_hasMembershipChange(previousDescription, newDescription)) {
+        _logDebug() << "Topology Description Change: " << newDescription->toString();
+
         // TODO: remove when HostAndPort conversion is done.
         std::vector<HostAndPort> servers;
         for (const auto server : newDescription->getServers()) {
@@ -534,11 +538,7 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
         } else {
             globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
         }
-    } else {
-        //        _logDebug() << "No membership change for:\nprevious - " <<
-        //        previousDescription->toString()
-        //              << "\nnew -" << newDescription->toString();
-    }
+    } 
 }  // namespace mongo
 
 void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
