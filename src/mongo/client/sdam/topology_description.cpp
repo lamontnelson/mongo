@@ -108,6 +108,8 @@ const boost::optional<ServerDescriptionPtr> TopologyDescription::findServerByAdd
 
 boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescription(
     const ServerDescriptionPtr& newServerDescription) {
+    LOG(1) << "(" << getSetName() << ") install ServerDescription " << newServerDescription->toString();
+
     boost::optional<ServerDescriptionPtr> previousDescription;
     if (getType() == TopologyType::kSingle) {
         // For Single, there is always one ServerDescription in TopologyDescription.servers;

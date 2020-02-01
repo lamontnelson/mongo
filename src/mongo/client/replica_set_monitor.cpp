@@ -453,11 +453,11 @@ ReplicaSetChangeNotifier& ReplicaSetMonitor::getNotifier() {
 }
 
 int32_t pingTimeMillis(const ServerDescriptionPtr& serverDescription) {
-    static const Milliseconds::rep maxLatency = numeric_limits<int32_t>::max();
+    static const Milliseconds maxLatency = Milliseconds::max();
+
     auto latencyMillis =
-        duration_cast<Milliseconds>(serverDescription->getRtt().value_or(Milliseconds(maxLatency)))
-            .count();
-    return std::min(latencyMillis, maxLatency);
+        duration_cast<Milliseconds>(serverDescription->getRtt().value_or(maxLatency));
+    return std::min(latencyMillis, maxLatency).count();
 }
 
 void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC) const {
@@ -477,13 +477,15 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
     for (auto serverDescription : topologyDescription->getServers()) {
         bool isUp = serverDescription->getType() != ServerType::kUnknown;
         bool isMaster = serverDescription->getPrimary() == serverDescription->getAddress();
+        bool isSecondary = serverDescription->getType() == ServerType::kRSSecondary;
+        bool isHidden = serverDescription->getType() == ServerType::kRSGhost;
 
         BSONObjBuilder builder;
         builder.append("addr", serverDescription->getAddress());
         builder.append("ok", isUp);            // TODO: check what defines up
         builder.append("ismaster", isMaster);  // intentionally not camelCase
-        builder.append("hidden", false);       // we don't keep hidden nodes in the
-        builder.append("secondary", isUp && isMaster);
+        builder.append("hidden", isHidden);
+        builder.append("secondary", isSecondary);
         builder.append("pingTimeMillis", pingTimeMillis(serverDescription));
 
         auto tags = serverDescription->getTags();
@@ -511,8 +513,8 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     TopologyDescriptionPtr previousDescription,
     TopologyDescriptionPtr newDescription) {
-    
-    // notify external components, if there are memvbership
+
+    // notify external components, if there are membership
     // changes in the topology.
     if (_hasMembershipChange(previousDescription, newDescription)) {
         _logDebug() << "Topology Description Change: " << newDescription->toString();
@@ -538,7 +540,7 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
         } else {
             globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
         }
-    } 
+    }
 }  // namespace mongo
 
 void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
