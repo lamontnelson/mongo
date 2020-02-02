@@ -730,35 +730,23 @@ void ReplicaSetMonitor::_failOutstandingWitStatus(Status status) {
 bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
                                              sdam::TopologyDescriptionPtr newDescription) {
 
-    // check if primaries differ
-    auto maybeOldPrimary = oldDescription->getPrimary();
-    auto maybeNewPrimary = newDescription->getPrimary();
-    if (maybeNewPrimary && maybeOldPrimary) {
-        bool addressesDoNotMatch =
-            (*maybeOldPrimary)->getAddress() != (*maybeNewPrimary)->getAddress();
-        if (addressesDoNotMatch)
-            return true;
-    } else {
-        // if old or new has a value, then there has been a change.
-        bool oneExists = (maybeOldPrimary || maybeNewPrimary);
-        if (oneExists)
-            return true;
-    }
+	if (oldDescription) {
+		if (oldDescription->getServers().size() != newDescription->getServers().size()) return true;
+		for (const auto& server : oldDescription->getServers()) {
+			const auto newServer = newDescription->findServerByAddress(server->getAddress());
+			if (!newServer) return true;
+			const ServerDescription& s = *server;
+			const ServerDescription& ns = **newServer;
+			if (!(s == ns)) return true;
+		}
+	}
 
-    // check if secondaries differ
-    auto oldSecondaries = oldDescription->findServers(secondaryPredicate);
-    auto newSecondaries = newDescription->findServers(secondaryPredicate);
-    std::unordered_map<ServerAddress, bool> oldMembership;
-    for (auto oldSecondary : oldSecondaries) {
-        oldMembership.insert({oldSecondary->getAddress(), true});
-    }
-    for (auto newSecondary : newSecondaries) {
-        if (oldMembership.find(newSecondary->getAddress()) == oldMembership.end()) {
-            return true;
-        }
-    }
+	for (const auto& server : newDescription->getServers()) {
+		auto oldServer = oldDescription->findServerByAddress(server->getAddress());
+		if (!oldServer) return true;
+	}
 
-    return false;
+	return false;
 }
 
 Status ReplicaSetMonitor::_makeUnsatisfiedReadPrefError(
