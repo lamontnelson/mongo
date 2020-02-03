@@ -140,13 +140,15 @@ private:
     void nextDelivery();
     void _scheduleNextDelivery();
 
+    // Lock acquisition order to avoid deadlock is _eventQueueMutex -> _mutex
+    Mutex _eventQueueMutex;
+    std::deque<EventPtr> _eventQueue;
+
     Mutex _mutex;
     bool _isClosed = false;
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::vector<TopologyListenerPtr> _listeners;
 
-    Mutex _eventQueueMutex;
-    std::deque<EventPtr> _eventQueue;
 };
 using TopologyEventsPublisherPtr = std::shared_ptr<TopologyEventsPublisher>;
 }  // namespace mongo::sdam

@@ -154,6 +154,7 @@ void ReplicaSetMonitor::close() {
             Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
     }
 
+    _logDebug() << "Notify onDroppedSet";
     globalRSMonitorManager.getNotifier().onDroppedSet(getName());
 
     _outstandingQueriesCV.notify_all();

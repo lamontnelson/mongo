@@ -110,12 +110,10 @@ void SingleServerIsMasterMonitor::close() {
 
     if (_nextIsMasterHandle.isValid()) {
         _executor->cancel(_nextIsMasterHandle);
-        _executor->wait(_nextIsMasterHandle);
     }
 
     if (_remoteCommandHandle.isValid()) {
         _executor->cancel(_remoteCommandHandle);
-        _executor->wait(_remoteCommandHandle);
     }
 
     _executor = nullptr;
