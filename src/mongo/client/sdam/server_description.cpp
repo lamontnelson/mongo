@@ -137,6 +137,14 @@ void ServerDescription::saveTags(BSONObj tagsObj) {
     }
 }
 
+void ServerDescription::getBsonTags(BSONObjBuilder& builder) const {
+    for (const auto& pair : _tags) {
+        const auto& key = pair.first;
+        const auto& value = pair.second;
+        builder.append(key, value);
+    }
+}
+
 void ServerDescription::saveElectionId(BSONElement electionId) {
     if (electionId.type() == jstOID) {
         _electionId = electionId.OID();
@@ -390,6 +398,10 @@ BSONObj ServerDescription::toBson() const {
     bson.append("arbiters", _arbiters);
     bson.append("passives", _passives);
 
+    BSONObjBuilder tagsBuilder;
+    getBsonTags(tagsBuilder);
+    bson.append("tags", tagsBuilder.obj());
+
     return bson.obj();
 }
 
@@ -412,7 +424,9 @@ ServerDescriptionPtr ServerDescription::cloneWithRTT(IsMasterRTT rtt) {
 }
 
 const boost::optional<TopologyDescriptionPtr> ServerDescription::getTopologyDescription() {
-    return (_topologyDescription) ? boost::optional<TopologyDescriptionPtr>(_topologyDescription->lock()) : boost::none;
+    return (_topologyDescription)
+        ? boost::optional<TopologyDescriptionPtr>(_topologyDescription->lock())
+        : boost::none;
 }
 
 

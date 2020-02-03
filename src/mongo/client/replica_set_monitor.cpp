@@ -491,10 +491,9 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
         builder.append("secondary", isSecondary);
         builder.append("pingTimeMillis", pingTimeMillis(serverDescription));
 
-        auto tags = serverDescription->getTags();
-        if (tags.size() > 0) {
-            builder.append("tags", BSONObj());  // TODO: implement getBsonTags on ServerDescription
-        }
+        BSONObjBuilder tagsBuilder;
+        serverDescription->getBsonTags(tagsBuilder);
+        builder.append("tags", tagsBuilder.obj());
 
         hosts.append(builder.obj());
     }

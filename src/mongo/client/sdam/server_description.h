@@ -78,6 +78,7 @@ public:
     const boost::optional<ServerAddress>& getMe() const;
     const boost::optional<std::string>& getSetName() const;
     const std::map<std::string, std::string>& getTags() const;
+    void getBsonTags(BSONObjBuilder& builder) const;
 
     // network attributes
     const boost::optional<std::string>& getError() const;
