@@ -148,7 +148,6 @@ private:
     bool _isClosed = false;
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::vector<TopologyListenerPtr> _listeners;
-
 };
 using TopologyEventsPublisherPtr = std::shared_ptr<TopologyEventsPublisher>;
 }  // namespace mongo::sdam

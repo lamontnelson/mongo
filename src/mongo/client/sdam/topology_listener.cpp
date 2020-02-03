@@ -119,6 +119,7 @@ void TopologyEventsPublisher::onServerPingFailedEvent(const ServerAddress hostAn
 void TopologyEventsPublisher::onServerPingSucceededEvent(mongo::Milliseconds durationMS,
                                                          ServerAddress hostAndPort) {}
 
+// TODO: this could be done in batches if this is a bottleneck.
 void TopologyEventsPublisher::nextDelivery() {
     // get the next event to send
     EventPtr nextEvent;

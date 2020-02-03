@@ -108,7 +108,8 @@ const boost::optional<ServerDescriptionPtr> TopologyDescription::findServerByAdd
 
 boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescription(
     const ServerDescriptionPtr& newServerDescription) {
-    LOG(1) << "(" << getSetName() << ") install ServerDescription " << newServerDescription->toString();
+    LOG(1) << "(" << getSetName() << ") install ServerDescription "
+           << newServerDescription->toString();
 
     boost::optional<ServerDescriptionPtr> previousDescription;
     if (getType() == TopologyType::kSingle) {
@@ -296,9 +297,8 @@ boost::optional<ServerDescriptionPtr> TopologyDescription::getPrimary() {
         return boost::none;
     }
 
-    auto foundPrimaries = findServers([](const ServerDescriptionPtr& s) {
-      return s->getType() == ServerType::kRSPrimary;
-    });
+    auto foundPrimaries = findServers(
+        [](const ServerDescriptionPtr& s) { return s->getType() == ServerType::kRSPrimary; });
     invariant(foundPrimaries.size() == 1);
     return foundPrimaries[0];
 }
