@@ -367,14 +367,16 @@ bool ReplicaSetMonitor::isPrimary(const HostAndPort& host) const {
 }
 
 bool ReplicaSetMonitor::isHostUp(const HostAndPort& host) const {
+    auto currentTopology = _currentTopology();
     const boost::optional<ServerDescriptionPtr>& serverDescription =
-        _currentTopology()->findServerByAddress(host.toString());
+        currentTopology->findServerByAddress(host.toString());
     return serverDescription != boost::none &&
         (*serverDescription)->getType() != ServerType::kUnknown;
 }
 
 int ReplicaSetMonitor::getMinWireVersion() const {
-    const std::vector<ServerDescriptionPtr>& servers = _currentTopology()->getServers();
+    auto currentTopology = _currentTopology();
+    const std::vector<ServerDescriptionPtr>& servers = currentTopology->getServers();
     if (servers.size() > 0) {
         const auto serverDescription =
             *std::min_element(servers.begin(), servers.end(), minWireCompare);
@@ -385,8 +387,8 @@ int ReplicaSetMonitor::getMinWireVersion() const {
 }
 
 int ReplicaSetMonitor::getMaxWireVersion() const {
-    const std::vector<ServerDescriptionPtr>& servers =
-        _topologyManager->getTopologyDescription()->getServers();
+    auto currentTopology = _currentTopology();
+    const std::vector<ServerDescriptionPtr>& servers = currentTopology->getServers();
     if (servers.size() > 0) {
         const auto serverDescription =
             *std::max_element(servers.begin(), servers.end(), maxWireCompare);
