@@ -730,23 +730,26 @@ void ReplicaSetMonitor::_failOutstandingWitStatus(Status status) {
 bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
                                              sdam::TopologyDescriptionPtr newDescription) {
 
-	if (oldDescription) {
-		if (oldDescription->getServers().size() != newDescription->getServers().size()) return true;
-		for (const auto& server : oldDescription->getServers()) {
-			const auto newServer = newDescription->findServerByAddress(server->getAddress());
-			if (!newServer) return true;
-			const ServerDescription& s = *server;
-			const ServerDescription& ns = **newServer;
-			if (!(s == ns)) return true;
-		}
-	}
+    if (oldDescription->getServers().size() != newDescription->getServers().size())
+        return true;
 
-	for (const auto& server : newDescription->getServers()) {
-		auto oldServer = oldDescription->findServerByAddress(server->getAddress());
-		if (!oldServer) return true;
-	}
+    for (const auto& server : oldDescription->getServers()) {
+        const auto newServer = newDescription->findServerByAddress(server->getAddress());
+        if (!newServer)
+            return true;
+        const ServerDescription& s = *server;
+        const ServerDescription& ns = **newServer;
+        if (!(s == ns))
+            return true;
+    }
 
-	return false;
+    for (const auto& server : newDescription->getServers()) {
+        auto oldServer = oldDescription->findServerByAddress(server->getAddress());
+        if (!oldServer)
+            return true;
+    }
+
+    return false;
 }
 
 Status ReplicaSetMonitor::_makeUnsatisfiedReadPrefError(
