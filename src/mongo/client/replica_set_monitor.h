@@ -90,6 +90,7 @@ public:
      * Should be called exactly once.
      */
     void close();
+    inline bool isClosed() const;
 
     /**
      * Create a Replica Set monitor instance and fully initialize it.
@@ -302,13 +303,13 @@ private:
 
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::thread _queryProcessorThread;
+    std::atomic_bool _isClosed = true;
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
     // variables below are protected by the mutex
     ClockSource* _clockSource;
     stdx::condition_variable _outstandingQueriesCV;
     std::vector<HostQueryPtr> _outstandingQueries;
-    bool _isClosed = true;
 
     static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
@@ -321,7 +322,9 @@ private:
     void _failOutstandingWitStatus(Status status);
     bool _hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
                               sdam::TopologyDescriptionPtr newDescription);
+
     Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
+    Status _makeReplicaSetMonitorRemovedError() const;
 };
 
 }  // namespace mongo

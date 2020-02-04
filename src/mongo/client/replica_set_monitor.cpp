@@ -146,21 +146,25 @@ void ReplicaSetMonitor::init() {
 void ReplicaSetMonitor::close() {
     {
         stdx::lock_guard<Mutex> lock(_mutex);
-        _logDebug() << "Closing Replica Set Monitor " << getName();
         _isClosed = true;
+        _logDebug() << "Closing Replica Set Monitor " << getName();
         _eventsPublisher->close();
         _isMasterMonitor->close();
         _failOutstandingWitStatus(
             Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
-    }
 
-    _logDebug() << "Notify onDroppedSet";
-    globalRSMonitorManager.getNotifier().onDroppedSet(getName());
+        _logDebug() << "Notify onDroppedSet";
+        globalRSMonitorManager.getNotifier().onDroppedSet(getName());
+    }
 
     _outstandingQueriesCV.notify_all();
     _queryProcessorThread.join();
 
     _logDebug() << "Done closing Replica Set Monitor " << getName();
+}
+
+bool ReplicaSetMonitor::isClosed() const {
+    return _isClosed.load();
 }
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
@@ -169,14 +173,9 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     _logDebug() << "getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait
                 << "; tags " << criteria.tags.getTagBSON().toString();
 
-    {
-        // TODO: remove this mutex acquisition
-        stdx::lock_guard<Mutex> lock(_mutex);
-        if (_isClosed) {
-            return SemiFuture<future_type>(Status(ErrorCodes::ReplicaSetMonitorRemoved,
-                                                  str::stream() << "ReplicaSetMonitor for set "
-                                                                << getName() << " is removed"));
-        }
+    // In the fast case (stable topology), no need for the mutex acquisition.
+    if (isClosed()) {
+        return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
     }
 
     // try to satisfy query immediately
@@ -195,6 +194,13 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     Future<future_type> result;
     {
         mongo::stdx::lock_guard<Mutex> lk(_mutex);
+
+        // We check if we are closed here since someone could have called
+        // close() concurrently with the call above.
+        if (isClosed()) {
+            return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
+        }
+
         auto pf = makePromiseFuture<future_type>();
         auto query = std::make_shared<SingleHostQuery>();
         query->type = HostQueryType::SINGLE;
@@ -253,14 +259,9 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     using future_type = std::vector<HostAndPort>;
     _logDebug() << "getHostsOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait;
 
-    {
-        // TODO: remove this mutex acquisition
-        stdx::lock_guard<Mutex> lock(_mutex);
-        if (_isClosed) {
-            return SemiFuture<future_type>(Status(ErrorCodes::ReplicaSetMonitorRemoved,
-                                                  str::stream() << "ReplicaSetMonitor for set "
-                                                                << getName() << " is removed"));
-        }
+    // In the fast case (stable topology), no need for the mutex acquisition.
+    if (isClosed()) {
+        return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
     }
 
     // try to satisfy query immediately
@@ -279,6 +280,13 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     Future<future_type> result;
     {
         mongo::stdx::lock_guard<Mutex> lk(_mutex);
+
+        // We check if we are closed here since someone could have called
+        // close() concurrently with the call above.
+        if (isClosed()) {
+            return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
+        }
+
         auto pf = makePromiseFuture<future_type>();
         auto query = std::make_shared<MultiHostQuery>();
         query->type = HostQueryType::MULTI;
@@ -675,7 +683,7 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
             self->_outstandingQueriesCV.wait(lock, [self] {
                 auto currentTopology = self->_currentTopology();
                 const auto& outstandingQueries = self->_outstandingQueries;
-                const auto isClosed = self->_isClosed;
+                const auto isClosed = self->_isClosed.load();
 
                 // only wake up if we are closed or we have an outstanding query that we can
                 // satisfy.
@@ -761,5 +769,10 @@ Status ReplicaSetMonitor::_makeUnsatisfiedReadPrefError(
     return Status(ErrorCodes::FailedToSatisfyReadPreference,
                   str::stream() << "Could not find host matching read preference "
                                 << criteria.toString() << " for set " << getName());
+}
+
+Status ReplicaSetMonitor::_makeReplicaSetMonitorRemovedError() const {
+    return Status(ErrorCodes::ReplicaSetMonitorRemoved,
+                  str::stream() << "ReplicaSetMonitor for set " << getName() << " is removed");
 }
 }  // namespace mongo
