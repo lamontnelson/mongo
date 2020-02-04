@@ -84,12 +84,12 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
                     return;
             }
 
-                Microseconds latency(timer.micros());
-                if (result.response.isOK()) {
-                    self->_onIsMasterSuccess(latency, result.response.data);
-                } else {
-                    self->_onIsMasterFailure(latency, result.response.status, result.response.data);
-                }
+            Microseconds latency(timer.micros());
+            if (result.response.isOK()) {
+                self->_onIsMasterSuccess(latency, result.response.data);
+            } else {
+                self->_onIsMasterFailure(latency, result.response.status, result.response.data);
+            }
 
             self->_scheduleNextIsMaster(self->_heartbeatFrequencyMS);
         });
