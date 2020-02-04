@@ -82,6 +82,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
                 stdx::lock_guard<Mutex> lk(self->_mutex);
                 if (self->_isClosed)
                     return;
+            }
 
                 Microseconds latency(timer.micros());
                 if (result.response.isOK()) {
@@ -89,7 +90,6 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
                 } else {
                     self->_onIsMasterFailure(latency, result.response.status, result.response.data);
                 }
-            }
 
             self->_scheduleNextIsMaster(self->_heartbeatFrequencyMS);
         });
