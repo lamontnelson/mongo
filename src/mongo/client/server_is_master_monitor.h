@@ -1,3 +1,4 @@
+#include "mongo/client/mongo_uri.h"
 #include "mongo/client/sdam/sdam.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/stdx/unordered_map.h"
@@ -7,17 +8,15 @@ namespace mongo {
 class SingleServerIsMasterMonitor
     : public std::enable_shared_from_this<SingleServerIsMasterMonitor> {
 public:
-    SingleServerIsMasterMonitor(const sdam::ServerAddress& host,
+    SingleServerIsMasterMonitor(const MongoURI& setUri,
+                                const sdam::ServerAddress& host,
                                 Milliseconds heartbeatFrequencyMS,
                                 sdam::TopologyEventsPublisherPtr eventListener,
                                 std::shared_ptr<executor::TaskExecutor> executor);
+    virtual ~SingleServerIsMasterMonitor() {}
+
     void init();
     void close();
-
-    virtual ~SingleServerIsMasterMonitor() {
-        std::cout << "destroy SingleServerIsMasterMonitor";
-    }
-
 
 private:
     void _scheduleNextIsMaster(Milliseconds delay);
@@ -38,21 +37,20 @@ private:
     executor::TaskExecutor::CallbackHandle _nextIsMasterHandle;
     executor::TaskExecutor::CallbackHandle _remoteCommandHandle;
     bool _isClosed;
+    MongoURI _setUri;
 };
 using SingleServerIsMasterMonitorPtr = std::shared_ptr<SingleServerIsMasterMonitor>;
 
 
 class ServerIsMasterMonitor : public sdam::TopologyListener {
 public:
-    ServerIsMasterMonitor(const sdam::SdamConfiguration& sdamConfiguration,
+    ServerIsMasterMonitor(const MongoURI& setUri,
+                          const sdam::SdamConfiguration& sdamConfiguration,
                           sdam::TopologyEventsPublisherPtr eventsPublisher,
                           sdam::TopologyDescriptionPtr initialTopologyDescription,
                           std::shared_ptr<executor::TaskExecutor> executor = nullptr);
 
-    virtual ~ServerIsMasterMonitor() {
-        std::cout << "destroy ServerIsMasterMonitor";
-    }
-
+    virtual ~ServerIsMasterMonitor() {}
     void close();
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
@@ -73,6 +71,7 @@ private:
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::unordered_map<sdam::ServerAddress, SingleServerIsMasterMonitorPtr> _singleMonitors;
     bool _isClosed;
+    MongoURI _setUri;
 };
 using ServerIsMasterMonitorPtr = std::shared_ptr<ServerIsMasterMonitor>;
 }  // namespace mongo

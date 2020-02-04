@@ -34,18 +34,18 @@
 
 namespace mongo::sdam {
 void TopologyEventsPublisher::registerListener(TopologyListenerPtr listener) {
-    stdx::lock_guard<Mutex> lk(_mutex);
+    stdx::lock_guard<Mutex> lock(_mutex);
     _listeners.push_back(listener);
 }
 
 void TopologyEventsPublisher::removeListener(TopologyListenerPtr listener) {
-    stdx::lock_guard<Mutex> lk(_mutex);
+    stdx::lock_guard<Mutex> lock(_mutex);
     _listeners.erase(std::remove(_listeners.begin(), _listeners.end(), listener), _listeners.end());
 }
 
 void TopologyEventsPublisher::close() {
     {
-        stdx::lock_guard<Mutex> lk(_mutex);
+        stdx::lock_guard<Mutex> lock(_mutex);
         _listeners.clear();
         _isClosed = true;
     }

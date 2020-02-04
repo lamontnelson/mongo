@@ -19,6 +19,7 @@ using executor::ThreadPoolTaskExecutor;
 }  // namespace
 
 SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
+    const MongoURI& setUri,
     const sdam::ServerAddress& host,
     Milliseconds heartbeatFrequencyMS,
     sdam::TopologyEventsPublisherPtr eventListener,
@@ -27,7 +28,8 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
       _eventListener(eventListener),
       _executor(executor),
       _heartbeatFrequencyMS(heartbeatFrequencyMS),
-      _isClosed(true) {
+      _isClosed(true),
+      _setUri(setUri) {
     LOG(kDebugLevel) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
     _heartbeatFrequencyMS = Milliseconds(500);
 }
@@ -68,8 +70,9 @@ void SingleServerIsMasterMonitor::_scheduleNextIsMaster(Milliseconds delay) {
 void SingleServerIsMasterMonitor::_doRemoteCommand() {
     auto request = executor::RemoteCommandRequest(
         HostAndPort(_host), "admin", IS_MASTER_BSON, nullptr, _timeoutMS);
-    // request.sslMode = _set->setUri.getSSLMode();
-    stdx::lock_guard<Mutex> lk(_mutex);
+    request.sslMode = _setUri.getSSLMode();
+
+    stdx::lock_guard<Mutex> lock(_mutex);
     if (_isClosed)
         return;
 
@@ -140,6 +143,7 @@ void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
 
 
 ServerIsMasterMonitor::ServerIsMasterMonitor(
+    const MongoURI& setUri,
     const sdam::SdamConfiguration& sdamConfiguration,
     sdam::TopologyEventsPublisherPtr eventsPublisher,
     sdam::TopologyDescriptionPtr initialTopologyDescription,
@@ -147,7 +151,8 @@ ServerIsMasterMonitor::ServerIsMasterMonitor(
     : _sdamConfiguration(sdamConfiguration),
       _eventPublisher(eventsPublisher),
       _executor(_setupExecutor(executor)),
-      _isClosed(false) {
+      _isClosed(false),
+      _setUri(setUri) {
     LOG(kLogDebugLevel) << "Starting Replica Set IsMaster monitor with "
                         << initialTopologyDescription->getServers().size() << " members.";
     onTopologyDescriptionChangedEvent(
@@ -172,7 +177,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     sdam::TopologyDescriptionPtr previousDescription,
     sdam::TopologyDescriptionPtr newDescription) {
-    stdx::lock_guard<Mutex> lk(_mutex);
+    stdx::lock_guard<Mutex> lock(_mutex);
     if (_isClosed)
         return;
 
@@ -198,6 +203,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
         if (isMissing) {
             LOG(kLogDebugLevel) << serverAddress << " was added to the topology.";
             _singleMonitors[serverAddress] = std::make_shared<SingleServerIsMasterMonitor>(
+                _setUri,
                 serverAddress,
                 _sdamConfiguration.getHeartBeatFrequency(),
                 _eventPublisher,

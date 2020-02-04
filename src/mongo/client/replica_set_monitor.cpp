@@ -133,7 +133,7 @@ void ReplicaSetMonitor::init() {
     _topologyManager =
         std::make_unique<TopologyManager>(_sdamConfig, _clockSource, _eventsPublisher);
     _isMasterMonitor = std::make_unique<ServerIsMasterMonitor>(
-        _sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription());
+        _uri, _sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription());
 
     _eventsPublisher->registerListener(shared_from_this());
     _eventsPublisher->registerListener(_isMasterMonitor);
