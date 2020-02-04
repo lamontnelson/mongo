@@ -148,8 +148,8 @@ void ReplicaSetMonitor::close() {
         stdx::lock_guard<Mutex> lock(_mutex);
         _logDebug() << "Closing Replica Set Monitor " << getName();
         _isClosed = true;
-        _isMasterMonitor->close();
         _eventsPublisher->close();
+        _isMasterMonitor->close();
         _failOutstandingWitStatus(
             Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
     }
@@ -166,7 +166,7 @@ void ReplicaSetMonitor::close() {
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
     using future_type = HostAndPort;
-    _logDebug() << "getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait;
+    _logDebug() << "getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait << "; tags " << criteria.tags.getTagBSON().toString();
 
     {
         // TODO: remove this mutex acquisition
@@ -485,7 +485,7 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
 
         BSONObjBuilder builder;
         builder.append("addr", serverDescription->getAddress());
-        builder.append("ok", isUp);            // TODO: check what defines up
+        builder.append("ok", isUp);
         builder.append("ismaster", isMaster);  // intentionally not camelCase
         builder.append("hidden", isHidden);
         builder.append("secondary", isSecondary);
