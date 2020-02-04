@@ -166,7 +166,8 @@ void ReplicaSetMonitor::close() {
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
     using future_type = HostAndPort;
-    _logDebug() << "getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait << "; tags " << criteria.tags.getTagBSON().toString();
+    _logDebug() << "getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait
+                << "; tags " << criteria.tags.getTagBSON().toString();
 
     {
         // TODO: remove this mutex acquisition
@@ -478,7 +479,8 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
     // NOTE: the format here must be consistent for backwards compatibility
     BSONArrayBuilder hosts(monitorInfo.subarrayStart("hosts"));
     for (auto serverDescription : topologyDescription->getServers()) {
-        bool isUp = serverDescription->getType() != ServerType::kUnknown;
+        bool isUp = serverDescription->getType() == ServerType::kRSSecondary ||
+            serverDescription->getType() == ServerType::kRSPrimary;
         bool isMaster = serverDescription->getPrimary() == serverDescription->getAddress();
         bool isSecondary = serverDescription->getType() == ServerType::kRSSecondary;
         bool isHidden = serverDescription->getType() == ServerType::kRSGhost;
