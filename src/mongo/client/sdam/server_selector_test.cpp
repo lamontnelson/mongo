@@ -75,6 +75,11 @@ public:
         static inline const auto integration = BSON("usage"
                                                     << "integration");
 
+        static inline const auto primary = BSON("tag"
+                                                << "primary");
+        static inline const auto secondary = BSON("tag"
+                                                  << "secondary");
+
         static inline const auto emptySet = TagSet{BSONArray(BSONObj())};
         static inline const auto eastOrWestProductionSet =
             TagSet(BSON_ARRAY(eastProduction << westProduction));
@@ -83,6 +88,9 @@ public:
         static inline const auto testSet = TagSet(BSON_ARRAY(test));
         static inline const auto integrationOrTestSet = TagSet(BSON_ARRAY(integration << test));
         static inline const auto integrationSet = TagSet(BSON_ARRAY(integration));
+
+        static inline const auto primarySet = TagSet(BSON_ARRAY(primary));
+        static inline const auto secondarySet = TagSet(BSON_ARRAY(secondary));
     };
 
     static ServerDescriptionPtr make_with_latency(IsMasterRTT latency,
@@ -289,6 +297,52 @@ TEST_F(ServerSelectorTestFixture, ShouldFilterByLastWriteTime) {
     ASSERT(frequencyInfo["s0"]);
     ASSERT(frequencyInfo["s1"]);
     ASSERT_FALSE(frequencyInfo["s2"]);
+}
+
+TEST_F(ServerSelectorTestFixture, ShouldSelectSecondaryByTagWithPrimaryPreferred) {
+    TopologyStateMachine stateMachine(sdamConfiguration);
+    auto topologyDescription = std::make_shared<TopologyDescription>(sdamConfiguration);
+
+    const int MAX_STALENESS = 60;
+    const auto sixtySeconds = Seconds(MAX_STALENESS);
+    const auto now = Date_t::now();
+
+
+    const auto d0 = now - Milliseconds(1000);
+    const auto s0 = ServerDescriptionBuilder()
+                        .withAddress("s0")
+                        .withType(ServerType::kRSPrimary)
+                        .withRtt(selectionConfig.getLocalThresholdMs())
+                        .withSetName("set")
+                        .withHost("s0")
+                        .withHost("s1")
+                        .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
+                        .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                        .withLastWriteDate(d0)
+                        .withTag("tag", "primary")
+                        .instance();
+    stateMachine.onServerDescription(*topologyDescription, s0);
+
+    const auto s1 = ServerDescriptionBuilder()
+                        .withAddress("s1")
+                        .withType(ServerType::kRSSecondary)
+                        .withRtt(selectionConfig.getLocalThresholdMs())
+                        .withSetName("set")
+                        .withHost("s0")
+                        .withHost("s1")
+                        .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
+                        .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                        .withLastWriteDate(d0)
+                        .withTag("tag", "secondary")
+                        .instance();
+    stateMachine.onServerDescription(*topologyDescription, s1);
+
+    const auto readPref =
+        ReadPreferenceSetting(ReadPreference::PrimaryPreferred, TagSets::secondarySet);
+
+    auto server = selector.selectServer(topologyDescription, readPref);
+    ASSERT(server != boost::none);
+    ASSERT_EQ("s1", (*server)->getAddress());
 }
 
 TEST_F(ServerSelectorTestFixture, ShouldFilterByTags) {
