@@ -466,9 +466,8 @@ ReplicaSetChangeNotifier& ReplicaSetMonitor::getNotifier() {
 
 int32_t pingTimeMillis(const ServerDescriptionPtr& serverDescription) {
     static const Milliseconds maxLatency = Milliseconds::max();
-
-    auto latencyMillis =
-        duration_cast<Milliseconds>(serverDescription->getRtt().value_or(maxLatency));
+    auto serverRtt = serverDescription->getRtt();
+    auto latencyMillis = (serverRtt) ? duration_cast<Milliseconds>(*serverRtt) : maxLatency;
     return std::min(latencyMillis, maxLatency).count();
 }
 
