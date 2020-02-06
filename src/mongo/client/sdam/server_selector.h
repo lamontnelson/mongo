@@ -116,7 +116,6 @@ private:
                 return duration_cast<Milliseconds>(result);
             } else if (topologyDescription->getType() == TopologyType::kReplicaSetNoPrimary) {
                 //  SMax.lastWriteDate - S.lastWriteDate + heartbeatFrequencyMS
-
                 ServerDescriptionPtr* maxServerDescription = nullptr;
                 Date_t maxLastWriteDate = Date_t::min();
 
@@ -155,9 +154,13 @@ private:
                     auto staleness = calculateStaleness(*topologyDescription, s);
                     result = result && (staleness <= readPref.maxStalenessSeconds);
                 }
+
                 return result;
             };
 
+    // A SelectionFilter is a higher order function used to filter out servers from the current
+    // Topology. Its return value is a function that takes a ServerDescriptionPtr and returns a bool
+    // indicating whether to filter this server or not.
     using SelectionFilter = std::function<std::function<bool(const ServerDescriptionPtr&)>(
         const ReadPreferenceSetting&)>;
 
@@ -177,16 +180,6 @@ private:
         return [&](const ServerDescriptionPtr& s) {
             bool resultType = (s->getType() != ServerType::kUnknown);
             bool resultRecent = recencyFilter(readPref, s);
-
-            //            std::cout << "nearest filter: resultType - " << resultType << ";
-            //            resultRecent - "
-            //                      << resultRecent << "maxStaleness - " <<
-            //                      readPref.maxStalenessSeconds.count()
-            //                      << "minOpTime - " << readPref.minOpTime.toString()
-            //                      << "minOpTime.isNull - " << readPref.minOpTime.isNull() << "
-            //                      ---> "
-            //                      << s->toString() << std::endl;
-
             return resultType && resultRecent;
         };
     };

@@ -42,6 +42,9 @@ SdamServerSelector::SdamServerSelector(const ServerSelectionConfiguration& confi
 void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>* result,
                                               const TopologyDescriptionPtr topologyDescription,
                                               const mongo::ReadPreferenceSetting& criteria) {
+    // when querying the primary we don't need to consider tags
+    bool shouldTagFilter = true;
+
     switch (criteria.pref) {
         case ReadPreference::Nearest:
             *result = topologyDescription->findServers(nearestFilter(criteria));
@@ -54,30 +57,48 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
         case ReadPreference::PrimaryOnly: {
             const auto primaryCriteria = ReadPreferenceSetting(criteria.pref);
             *result = topologyDescription->findServers(primaryFilter(primaryCriteria));
+            shouldTagFilter = false;
             break;
         }
 
         case ReadPreference::PrimaryPreferred: {
+            // ignore tags and max staleness for primary query
             auto primaryCriteria = ReadPreferenceSetting(ReadPreference::PrimaryOnly);
             _getCandidateServers(result, topologyDescription, primaryCriteria);
-            if (result->size())
-                return;
-            *result = topologyDescription->findServers(secondaryFilter(criteria));
+            if (result->size()) {
+                shouldTagFilter = false;
+                break;
+            }
+
+            // keep tags and maxStaleness for secondary query
+            auto secondaryCriteria = criteria;
+            secondaryCriteria.pref = ReadPreference::SecondaryOnly;
+            _getCandidateServers(result, topologyDescription, secondaryCriteria);
             break;
         }
 
         case ReadPreference::SecondaryPreferred: {
+            // keep tags and maxStaleness for secondary query
             auto secondaryCriteria = criteria;
             secondaryCriteria.pref = ReadPreference::SecondaryOnly;
             _getCandidateServers(result, topologyDescription, secondaryCriteria);
-            if (result->size())
-                return;
-            *result = topologyDescription->findServers(primaryFilter(criteria));
+            if (result->size()) {
+                break;
+            }
+
+            // ignore tags and maxStaleness for primary query
+            shouldTagFilter = false;
+            auto primaryCriteria = ReadPreferenceSetting(ReadPreference::PrimaryOnly);
+            _getCandidateServers(result, topologyDescription, primaryCriteria);
             break;
         }
 
         default:
             MONGO_UNREACHABLE
+    }
+
+    if (shouldTagFilter) {
+        filterTags(result, criteria.tags);
     }
 }
 
@@ -104,7 +125,6 @@ boost::optional<std::vector<ServerDescriptionPtr>> SdamServerSelector::selectSer
 
     std::vector<ServerDescriptionPtr> results;
     _getCandidateServers(&results, topologyDescription, criteria);
-    filterTags(&results, criteria.tags);
 
     if (results.size()) {
         ServerDescriptionPtr minServer =
@@ -119,6 +139,7 @@ boost::optional<std::vector<ServerDescriptionPtr>> SdamServerSelector::selectSer
 
         return results;
     }
+
     return boost::none;
 }
 

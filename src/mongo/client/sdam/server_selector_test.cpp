@@ -299,7 +299,7 @@ TEST_F(ServerSelectorTestFixture, ShouldFilterByLastWriteTime) {
     ASSERT_FALSE(frequencyInfo["s2"]);
 }
 
-TEST_F(ServerSelectorTestFixture, ShouldSelectSecondaryByTagWithPrimaryPreferred) {
+TEST_F(ServerSelectorTestFixture, ShouldSelectPreferredIfAvailable) {
     TopologyStateMachine stateMachine(sdamConfiguration);
     auto topologyDescription = std::make_shared<TopologyDescription>(sdamConfiguration);
 
@@ -337,12 +337,91 @@ TEST_F(ServerSelectorTestFixture, ShouldSelectSecondaryByTagWithPrimaryPreferred
                         .instance();
     stateMachine.onServerDescription(*topologyDescription, s1);
 
-    const auto readPref =
+    const auto primaryPreferredTagSecondary =
         ReadPreferenceSetting(ReadPreference::PrimaryPreferred, TagSets::secondarySet);
+    auto result1 = selector.selectServer(topologyDescription, primaryPreferredTagSecondary);
+    ASSERT(result1 != boost::none);
+    ASSERT_EQ("s0", (*result1)->getAddress());
 
-    auto server = selector.selectServer(topologyDescription, readPref);
-    ASSERT(server != boost::none);
-    ASSERT_EQ("s1", (*server)->getAddress());
+    const auto secondaryPreferredWithTag =
+        ReadPreferenceSetting(ReadPreference::SecondaryPreferred, TagSets::secondarySet);
+    auto result2 = selector.selectServer(topologyDescription, secondaryPreferredWithTag);
+    ASSERT(result2 != boost::none);
+    ASSERT_EQ("s1", (*result2)->getAddress());
+
+    const auto secondaryPreferredNoTag = ReadPreferenceSetting(ReadPreference::SecondaryPreferred);
+    auto result3 = selector.selectServer(topologyDescription, secondaryPreferredNoTag);
+    ASSERT(result3 != boost::none);
+    ASSERT_EQ("s1", (*result2)->getAddress());
+}
+
+TEST_F(ServerSelectorTestFixture, ShouldSelectTaggedSecondaryIfPreferredPrimaryNotAvailable) {
+    TopologyStateMachine stateMachine(sdamConfiguration);
+    auto topologyDescription = std::make_shared<TopologyDescription>(sdamConfiguration);
+
+    const int MAX_STALENESS = 60;
+    const auto sixtySeconds = Seconds(MAX_STALENESS);
+    const auto now = Date_t::now();
+
+    const auto d0 = now - Milliseconds(1000);
+
+    const auto s0 = ServerDescriptionBuilder()
+        .withAddress("s0")
+        .withType(ServerType::kRSPrimary)
+        .withRtt(selectionConfig.getLocalThresholdMs())
+        .withSetName("set")
+        .withHost("s0")
+        .withHost("s1")
+        .withHost("s2")
+        .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
+        .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+        .withLastWriteDate(d0)
+        .withTag("tag", "primary")
+        .instance();
+    stateMachine.onServerDescription(*topologyDescription, s0);
+
+    // old primary unavailable
+    const auto s0_failed = ServerDescriptionBuilder()
+        .withAddress("s0")
+        .withType(ServerType::kUnknown)
+                        .withSetName("set")
+                        .instance();
+    stateMachine.onServerDescription(*topologyDescription, s0_failed);
+
+    const auto s1 = ServerDescriptionBuilder()
+                        .withAddress("s1")
+                        .withType(ServerType::kRSSecondary)
+                        .withRtt(selectionConfig.getLocalThresholdMs())
+                        .withSetName("set")
+                        .withHost("s0")
+                        .withHost("s1")
+                        .withHost("s2")
+                        .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
+                        .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                        .withLastWriteDate(d0)
+                        .withTag("tag", "secondary")
+                        .instance();
+    stateMachine.onServerDescription(*topologyDescription, s1);
+
+    const auto s2 = ServerDescriptionBuilder()
+                        .withAddress("s2")
+                        .withType(ServerType::kRSSecondary)
+                        .withRtt(selectionConfig.getLocalThresholdMs())
+                        .withSetName("set")
+                        .withHost("s0")
+                        .withHost("s1")
+                        .withHost("s2")
+                        .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
+                        .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                        .withLastWriteDate(d0)
+                        .instance();
+    stateMachine.onServerDescription(*topologyDescription, s2);
+
+    const auto primaryPreferredTagSecondary =
+        ReadPreferenceSetting(ReadPreference::PrimaryPreferred, TagSets::secondarySet);
+    auto result1 = selector.selectServer(topologyDescription, primaryPreferredTagSecondary);
+    ASSERT(result1 != boost::none);
+    ASSERT_EQ("s1", (*result1)->getAddress());
 }
 
 TEST_F(ServerSelectorTestFixture, ShouldFilterByTags) {
