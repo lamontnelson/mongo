@@ -555,21 +555,21 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     }
 }  // namespace mongo
 
-void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
-                                                        ServerAddress hostAndPort,
+void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durationMs,
+                                                        const ServerAddress& hostAndPort,
                                                         const BSONObj reply) {
     IsMasterOutcome outcome(hostAndPort, reply, durationMs);
     _topologyManager->onServerDescription(outcome);
     _outstandingQueriesCV.notify_all();
 }
 
-void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress hostAndPort,
+void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress& hostAndPort,
                                                 const Status& status) {
     failedHost(HostAndPort(hostAndPort), status);
 }
 
-void ReplicaSetMonitor::onServerPingSucceededEvent(mongo::Milliseconds durationMS,
-                                                   ServerAddress hostAndPort) {
+void ReplicaSetMonitor::onServerPingSucceededEvent(sdam::IsMasterRTT durationMS,
+                                                   const ServerAddress& hostAndPort) {
     _topologyManager->onServerRTTUpdated(hostAndPort, durationMS);
 }
 

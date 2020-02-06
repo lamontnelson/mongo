@@ -32,56 +32,47 @@
 #include "mongo/util/uuid.h"
 
 namespace mongo::sdam {
+
+/**
+ * An interface for handling topology related events.
+ */
 class TopologyListener {
 public:
     virtual ~TopologyListener() {}
+
     /**
-     * Published when topology description changes.
+     * Called when a TopologyDescriptionChangedEvent is published - The TopologyDescription changed
+     * and the new TopologyDescription does not match the old.
      */
-    virtual void onTopologyDescriptionChangedEvent(
-        /**
-         * Returns a unique identifier for the topology.
-         */
-        UUID topologyId,
+    virtual void onTopologyDescriptionChangedEvent(UUID topologyId,
+                                                   TopologyDescriptionPtr previousDescription,
+                                                   TopologyDescriptionPtr newDescription){};
 
-        /**
-         * Returns the old topology description.
-         */
-        TopologyDescriptionPtr previousDescription,
-
-        /**
-         * Returns the new topology description.
-         */
-        TopologyDescriptionPtr newDescription){};
-
-    virtual void onServerHeartbeatSucceededEvent(
-        /**
-         * Returns the execution time of the event in the highest possible resolution for the
-         * platform. The calculated value MUST be the time to send the message and receive the reply
-         * from the server, including BSON serialization and deserialization. The name can imply the
-         * units in which the value is returned, i.e. durationMS, durationNanos. The time
-         * measurement used MUST be the same measurement used for the RTT calculation.
-         */
-        mongo::Milliseconds durationMs,
-
-        /**
-         * Returns the connection id for the command. For languages that do not have this,
-         * this MUST return the driver equivalent which MUST include the server address and port.
-         * The name of this field is flexible to match the object that is returned from the driver.
-         */
-        ServerAddress hostAndPort,
-
-        const BSONObj reply){};
-
-    virtual void onServerHeartbeatFailureEvent(mongo::Milliseconds durationMs,
+    virtual void onServerHeartbeatFailureEvent(IsMasterRTT durationMs,
                                                Status errorStatus,
-                                               ServerAddress hostAndPort,
+                                               const ServerAddress& hostAndPort,
                                                const BSONObj reply){};
+    /**
+     * Called when a ServerHeartBeatSucceededEvent is published - A heartbeat sent to the server at
+     * hostAndPort succeeded. durationMS is the execution time of the event, including the time it
+     * took to send the message and recieve the reply from the server.
+     */
+    virtual void onServerHeartbeatSucceededEvent(IsMasterRTT durationMs,
+                                                 const ServerAddress& hostAndPort,
+                                                 const BSONObj reply){};
 
-    virtual void onServerPingFailedEvent(const ServerAddress hostAndPort, const Status& status){};
+    /*
+     * Called when a ServerPingFailedEvent is published - A monitoring ping to the server at
+     * hostAndPort was not successful.
+     */
+    virtual void onServerPingFailedEvent(const ServerAddress& hostAndPort, const Status& status){};
 
-    virtual void onServerPingSucceededEvent(mongo::Milliseconds durationMS,
-                                            ServerAddress hostAndPort){};
+    /**
+     * Called when a ServerPingSucceededEvent is published - A monitoring ping to the server at
+     * hostAndPort was successful. durationMS is the measured RTT (Round Trip Time).
+     */
+    virtual void onServerPingSucceededEvent(IsMasterRTT durationMS,
+                                            const ServerAddress& hostAndPort){};
 };
 
 /**
@@ -104,16 +95,16 @@ public:
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            TopologyDescriptionPtr previousDescription,
                                            TopologyDescriptionPtr newDescription) override;
-    void onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
-                                         ServerAddress hostAndPort,
+    void onServerHeartbeatSucceededEvent(IsMasterRTT durationMs,
+                                         const ServerAddress& hostAndPort,
                                          const BSONObj reply) override;
-    void onServerHeartbeatFailureEvent(mongo::Milliseconds durationMs,
+    void onServerHeartbeatFailureEvent(IsMasterRTT durationMs,
                                        Status errorStatus,
-                                       ServerAddress hostAndPort,
+                                       const ServerAddress& hostAndPort,
                                        const BSONObj reply) override;
-    void onServerPingFailedEvent(const ServerAddress hostAndPort, const Status& status) override;
-    void onServerPingSucceededEvent(mongo::Milliseconds durationMS,
-                                    ServerAddress hostAndPort) override;
+    void onServerPingFailedEvent(const ServerAddress& hostAndPort, const Status& status) override;
+    void onServerPingSucceededEvent(IsMasterRTT durationMS,
+                                    const ServerAddress& hostAndPort) override;
 
 
 private:

@@ -31,8 +31,8 @@
 #include "mongo/client/sdam/topology_manager.h"
 
 #include "mongo/client/sdam/topology_state_machine.h"
-#include "mongo/util/log.h"
 #include "mongo/rpc/topology_version_gen.h"
+#include "mongo/util/log.h"
 
 namespace mongo::sdam {
 
@@ -105,7 +105,8 @@ bool TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome
 
     // if we are equal to the old description, just install the new description without
     // performing any actions on the state machine.
-    auto isEqualToOldServerDescription = (lastServerDescription && (*(lastServerDescription.get()) == *newServerDescription));
+    auto isEqualToOldServerDescription =
+        (lastServerDescription && (*(lastServerDescription.get()) == *newServerDescription));
     if (isEqualToOldServerDescription) {
         _topologyDescription->installServerDescription(newServerDescription);
     } else {

@@ -39,6 +39,7 @@
 #include "mongo/client/mongo_uri.h"
 #include "mongo/client/replica_set_change_notifier.h"
 #include "mongo/client/sdam/sdam.h"
+#include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/server_is_master_monitor.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/logger/log_component.h"
@@ -268,15 +269,15 @@ private:
                                            sdam::TopologyDescriptionPtr previousDescription,
                                            sdam::TopologyDescriptionPtr newDescription) override;
 
-    void onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
-                                         sdam::ServerAddress hostAndPort,
+    void onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durationMs,
+                                         const sdam::ServerAddress& hostAndPort,
                                          const BSONObj reply) override;
 
-    void onServerPingFailedEvent(const sdam::ServerAddress hostAndPort,
+    void onServerPingFailedEvent(const sdam::ServerAddress& hostAndPort,
                                  const Status& status) override;
 
-    void onServerPingSucceededEvent(mongo::Milliseconds durationMS,
-                                    sdam::ServerAddress hostAndPort) override;
+    void onServerPingSucceededEvent(sdam::IsMasterRTT durationMS,
+                                    const sdam::ServerAddress& hostAndPort) override;
 
     // Get a pointer to the current primary's ServerDescription
     // To ensure a consistent view of the Topology either _currentPrimary or _currentTopology should

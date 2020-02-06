@@ -49,8 +49,8 @@ SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>>
         ErrorCodes::InvalidTopologyType,
         "Only ToplogyTypes ReplicaSetNoPrimary and Single are allowed when a setName is provided.",
         !_setName ||
-        (_initialType == TopologyType::kReplicaSetNoPrimary ||
-         _initialType == TopologyType::kSingle));
+            (_initialType == TopologyType::kReplicaSetNoPrimary ||
+             _initialType == TopologyType::kSingle));
 
     uassert(ErrorCodes::TopologySetNameRequired,
             "setName is required for ReplicaSetNoPrimary",

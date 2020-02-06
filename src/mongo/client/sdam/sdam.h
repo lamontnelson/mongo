@@ -33,5 +33,5 @@
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/client/sdam/server_selector.h"
 #include "mongo/client/sdam/topology_description.h"
-#include "mongo/client/sdam/topology_manager.h"
 #include "mongo/client/sdam/topology_listener.h"
+#include "mongo/client/sdam/topology_manager.h"

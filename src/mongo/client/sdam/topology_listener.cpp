@@ -67,8 +67,8 @@ void TopologyEventsPublisher::onTopologyDescriptionChangedEvent(
     _scheduleNextDelivery();
 }
 
-void TopologyEventsPublisher::onServerHeartbeatSucceededEvent(mongo::Milliseconds durationMs,
-                                                              ServerAddress hostAndPort,
+void TopologyEventsPublisher::onServerHeartbeatSucceededEvent(IsMasterRTT durationMs,
+                                                              const ServerAddress& hostAndPort,
                                                               const BSONObj reply) {
     {
         stdx::lock_guard<Mutex> lock(_eventQueueMutex);
@@ -82,9 +82,9 @@ void TopologyEventsPublisher::onServerHeartbeatSucceededEvent(mongo::Millisecond
     _scheduleNextDelivery();
 }
 
-void TopologyEventsPublisher::onServerHeartbeatFailureEvent(mongo::Milliseconds durationMs,
+void TopologyEventsPublisher::onServerHeartbeatFailureEvent(IsMasterRTT durationMs,
                                                             Status errorStatus,
-                                                            ServerAddress hostAndPort,
+                                                            const ServerAddress& hostAndPort,
                                                             const BSONObj reply) {
     {
         stdx::lock_guard<Mutex> lock(_eventQueueMutex);
@@ -113,11 +113,11 @@ void TopologyEventsPublisher::_scheduleNextDelivery() {
         [self = shared_from_this()](const Status& status) { self->nextDelivery(); });
 }
 
-void TopologyEventsPublisher::onServerPingFailedEvent(const ServerAddress hostAndPort,
+void TopologyEventsPublisher::onServerPingFailedEvent(const ServerAddress& hostAndPort,
                                                       const Status& status) {}
 
-void TopologyEventsPublisher::onServerPingSucceededEvent(mongo::Milliseconds durationMS,
-                                                         ServerAddress hostAndPort) {}
+void TopologyEventsPublisher::onServerPingSucceededEvent(IsMasterRTT durationMS,
+                                                         const ServerAddress& hostAndPort) {}
 
 // TODO: this could be done in batches if this is a bottleneck.
 void TopologyEventsPublisher::nextDelivery() {
@@ -153,10 +153,10 @@ void TopologyEventsPublisher::_sendEvent(TopologyListenerPtr listener, const Eve
     switch (event.type) {
         case EventType::HEARTBEAT_SUCCESS:
             listener->onServerHeartbeatSucceededEvent(
-                duration_cast<Milliseconds>(event.duration), event.hostAndPort, event.reply);
+                duration_cast<IsMasterRTT>(event.duration), event.hostAndPort, event.reply);
             break;
         case EventType::HEARTBEAT_FAILURE:
-            listener->onServerHeartbeatFailureEvent(duration_cast<Milliseconds>(event.duration),
+            listener->onServerHeartbeatFailureEvent(duration_cast<IsMasterRTT>(event.duration),
                                                     event.status,
                                                     event.hostAndPort,
                                                     event.reply);

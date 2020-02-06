@@ -178,11 +178,14 @@ private:
             bool resultType = (s->getType() != ServerType::kUnknown);
             bool resultRecent = recencyFilter(readPref, s);
 
-//            std::cout << "nearest filter: resultType - " << resultType << "; resultRecent - "
-//                      << resultRecent << "maxStaleness - " << readPref.maxStalenessSeconds.count()
-//                      << "minOpTime - " << readPref.minOpTime.toString()
-//                      << "minOpTime.isNull - " << readPref.minOpTime.isNull() << " ---> "
-//                      << s->toString() << std::endl;
+            //            std::cout << "nearest filter: resultType - " << resultType << ";
+            //            resultRecent - "
+            //                      << resultRecent << "maxStaleness - " <<
+            //                      readPref.maxStalenessSeconds.count()
+            //                      << "minOpTime - " << readPref.minOpTime.toString()
+            //                      << "minOpTime.isNull - " << readPref.minOpTime.isNull() << "
+            //                      ---> "
+            //                      << s->toString() << std::endl;
 
             return resultType && resultRecent;
         };
