@@ -41,9 +41,6 @@ namespace mongo::sdam {
 /**
  * This is the interface that allows one to select a server to satisfy a DB operation given a
  * TopologyDescription and a ReadPreferenceSetting.
- *
- * This is exposed as an interface so that tests can feel free to use their own version of the
- * server selection algorithm if necessary.
  */
 class ServerSelector {
 public:
@@ -55,7 +52,7 @@ public:
 
     /**
      * Select a single server according to the ReadPreference and latency of the
-     * ServerDescription(s)
+     * ServerDescription(s). The server is selected randomly from those that match the criteria.
      */
     virtual boost::optional<ServerDescriptionPtr> selectServer(
         const TopologyDescriptionPtr topologyDescription,
@@ -94,6 +91,7 @@ private:
     using StalenessCalculator =
         std::function<Milliseconds(const TopologyDescriptionPtr& topologyDescription,
                                    const ServerDescriptionPtr& serverDescription)>;
+
     const StalenessCalculator calculateStaleness =
         [this](const TopologyDescriptionPtr& topologyDescription,
                const ServerDescriptionPtr& serverDescription) {
@@ -159,8 +157,9 @@ private:
             };
 
     // A SelectionFilter is a higher order function used to filter out servers from the current
-    // Topology. Its return value is a function that takes a ServerDescriptionPtr and returns a bool
-    // indicating whether to filter this server or not.
+    // Topology. It's return value is used as input to the TopologyDescription::findServers
+    // function, and is a function that takes a ServerDescriptionPtr and returns a bool indicating
+    // whether to keep this server or not.
     using SelectionFilter = std::function<std::function<bool(const ServerDescriptionPtr&)>(
         const ReadPreferenceSetting&)>;
 
@@ -178,9 +177,9 @@ private:
 
     const SelectionFilter nearestFilter = [this](const ReadPreferenceSetting& readPref) {
         return [&](const ServerDescriptionPtr& s) {
-            bool resultType = (s->getType() != ServerType::kUnknown);
-            bool resultRecent = recencyFilter(readPref, s);
-            return resultType && resultRecent;
+            return (s->getType() == ServerType::kRSPrimary ||
+                    s->getType() == ServerType::kRSSecondary) &&
+                recencyFilter(readPref, s);
         };
     };
 
@@ -188,6 +187,7 @@ private:
     mutable PseudoRandom _random;
 };
 
+// This is used to filter out servers based on their current latency measurements.
 struct LatencyWindow {
     IsMasterRTT lower;
     IsMasterRTT upper;
