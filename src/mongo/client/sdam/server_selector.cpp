@@ -30,8 +30,10 @@
 
 #include <algorithm>
 
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/client/sdam/topology_description.h"
 #include "mongo/platform/random.h"
+#include "mongo/util/log.h"
 
 namespace mongo::sdam {
 ServerSelector::~ServerSelector() {}
@@ -177,12 +179,19 @@ void SdamServerSelector::filterTags(std::vector<ServerDescriptionPtr>* servers,
     const auto predicate = [&](const ServerDescriptionPtr& s) {
         auto it = checkTags.begin();
         while (it != checkTags.end()) {
-            if (_containsAllTags(s, it->Obj())) {
-                // found a match -- don't remove the server
-                return false;
+            if (it->isABSONObj()) {
+                const BSONObj& tags = it->Obj();
+                if (_containsAllTags(s, tags)) {
+                    // found a match -- don't remove the server
+                    return false;
+                }
+            } else {
+                log() << "invalid tags specified for server selection; tags should be specified as a bson Obj: " << it->toString();
             }
             ++it;
         }
+
+        // remove the server
         return true;
     };
 

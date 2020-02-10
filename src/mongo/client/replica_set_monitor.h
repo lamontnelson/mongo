@@ -233,9 +233,9 @@ public:
     static void shutdown();
 
     /**
--     * The default timeout, which will be used for finding a replica set host if the caller does
--     * not explicitly specify it.
--     */
+     * The default timeout, which will be used for finding a replica set host if the caller does
+     * not explicitly specify it.
+     */
     static inline const Seconds kDefaultFindHostTimeout{15};
 
 private:
