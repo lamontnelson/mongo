@@ -180,6 +180,7 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     if (immediateResult) {
         return {std::move(*immediateResult)};
     }
+    _isMasterMonitor->requestImmediateCheck();
 
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
@@ -266,6 +267,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     if (immediateResult) {
         return {std::move(*immediateResult)};
     }
+    _isMasterMonitor->requestImmediateCheck();
 
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;

@@ -18,6 +18,8 @@ using executor::NetworkInterface;
 using executor::NetworkInterfaceThreadPool;
 using executor::TaskExecutor;
 using executor::ThreadPoolTaskExecutor;
+
+const Milliseconds kZeroMs = Milliseconds{0};
 }  // namespace
 
 SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
@@ -42,6 +44,29 @@ void SingleServerIsMasterMonitor::init() {
     }
 
     _scheduleNextIsMaster(Milliseconds(0));
+}
+
+void SingleServerIsMasterMonitor::requestImmediateCheck() {
+    mongo::Milliseconds delayUntilNextCheck;
+    {
+        stdx::lock_guard<Mutex> lk(_mutex);
+        _cancelOutstandingRequest(lk);
+
+        mongo::Milliseconds deltaSinceLastCheck;
+
+        if (_lastIsMasterAt) {
+            deltaSinceLastCheck = _executor->now() - (*_lastIsMasterAt);
+            delayUntilNextCheck =
+                (deltaSinceLastCheck < sdam::SdamConfiguration::kMinHeartbeatFrequencyMS)
+                ? sdam::SdamConfiguration::kMinHeartbeatFrequencyMS - deltaSinceLastCheck
+                : kZeroMs;
+        } else {
+            delayUntilNextCheck = kZeroMs;
+        }
+        LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] Rescheduling next isMaster check for "
+                         << this->_host << " in " << delayUntilNextCheck;
+    }
+    _scheduleNextIsMaster(delayUntilNextCheck);
 }
 
 void SingleServerIsMasterMonitor::_scheduleNextIsMaster(Milliseconds delay) {
@@ -84,8 +109,10 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
          timer](const executor::TaskExecutor::RemoteCommandCallbackArgs& result) mutable {
             {
                 stdx::lock_guard<Mutex> lk(self->_mutex);
-                if (self->_isClosed)
+                if (self->_isClosed || ErrorCodes::isCancelationError(result.response.status))
                     return;
+
+                self->_lastIsMasterAt = self->_executor->now();
             }
 
             Microseconds latency(timer.micros());
@@ -112,6 +139,13 @@ void SingleServerIsMasterMonitor::close() {
     LOG(kDebugLevel) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
     _isClosed = true;
 
+    _cancelOutstandingRequest(lk);
+
+    _executor = nullptr;
+    LOG(kDebugLevel) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+}
+
+void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
     if (_nextIsMasterHandle.isValid()) {
         _executor->cancel(_nextIsMasterHandle);
     }
@@ -119,9 +153,6 @@ void SingleServerIsMasterMonitor::close() {
     if (_remoteCommandHandle.isValid()) {
         _executor->cancel(_remoteCommandHandle);
     }
-
-    _executor = nullptr;
-    LOG(kDebugLevel) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
 }
 
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
@@ -143,14 +174,14 @@ void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
 }
 
 Milliseconds SingleServerIsMasterMonitor::_overrideRefreshPeriod(Milliseconds original) {
-	Milliseconds r = original;
-	static constexpr auto kPeriodField = "period"_sd;
-	modifyReplicaSetMonitorDefaultRefreshPeriod.executeIf(
-		[&r](const BSONObj& data) { 
-			r = duration_cast<Milliseconds>(Seconds{data.getIntField(kPeriodField)}); 
-			},
-		[](const BSONObj& data) { return data.hasField(kPeriodField); });
-	return r;
+    Milliseconds r = original;
+    static constexpr auto kPeriodField = "period"_sd;
+    modifyReplicaSetMonitorDefaultRefreshPeriod.executeIf(
+        [&r](const BSONObj& data) {
+            r = duration_cast<Milliseconds>(Seconds{data.getIntField(kPeriodField)});
+        },
+        [](const BSONObj& data) { return data.hasField(kPeriodField); });
+    return r;
 }
 
 ServerIsMasterMonitor::ServerIsMasterMonitor(
@@ -237,5 +268,12 @@ std::shared_ptr<executor::TaskExecutor> ServerIsMasterMonitor::_setupExecutor(
     auto result = std::make_shared<ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
     result->startup();
     return result;
+}
+
+void ServerIsMasterMonitor::requestImmediateCheck() {
+    stdx::lock_guard<Mutex> lock(_mutex);
+    for (auto& addressAndMonitor : _singleMonitors) {
+        addressAndMonitor.second->requestImmediateCheck();
+    }
 }
 }  // namespace mongo
