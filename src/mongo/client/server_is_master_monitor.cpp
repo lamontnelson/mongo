@@ -1,4 +1,5 @@
 #include "mongo/client/server_is_master_monitor.h"
+#include <mongo/client/sdam/sdam_datatypes.h>
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kDefault
 #include "mongo/client/sdam/sdam.h"
@@ -18,6 +19,8 @@ using executor::NetworkInterface;
 using executor::NetworkInterfaceThreadPool;
 using executor::TaskExecutor;
 using executor::ThreadPoolTaskExecutor;
+
+const Milliseconds kZeroMs = Milliseconds{0};
 }  // namespace
 
 SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
@@ -36,18 +39,58 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
 }
 
 void SingleServerIsMasterMonitor::init() {
-    {
-        stdx::lock_guard<Mutex> lk(_mutex);
-        _isClosed = false;
-    }
-
-    _scheduleNextIsMaster(Milliseconds(0));
+    stdx::lock_guard<Mutex> lock(_mutex);
+    _isClosed = false;
+    _scheduleNextIsMaster(lock, Milliseconds(0));
 }
 
-void SingleServerIsMasterMonitor::_scheduleNextIsMaster(Milliseconds delay) {
-    stdx::lock_guard<Mutex> lk(_mutex);
+void SingleServerIsMasterMonitor::requestImmediateCheck() {
+    Milliseconds delayUntilNextCheck;
+    stdx::lock_guard<Mutex> lock(_mutex);
+
+    // remain in expedited mode until the replica set recovers
+    if (!_isExpedited) {
+        // save some log lines.
+        LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] Monitoring " << _host
+                         << " in expedited mode until we detect a primary.";
+        _isExpedited = true;
+    }
+
+    // .. but continue with rescheduling the next request.
+
+    if (_isMasterOutstanding) {
+        LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] immediate isMaster check requested, but "
+                            "there is already an "
+                            "outstanding request.";
+        return;
+    }
+
+    const Milliseconds timeSinceLastCheck =
+        (_lastIsMasterAt) ? _executor->now() - *_lastIsMasterAt : Milliseconds::max();
+
+    delayUntilNextCheck = (_lastIsMasterAt && timeSinceLastCheck < _heartbeatFrequencyMS)
+        ? _heartbeatFrequencyMS - timeSinceLastCheck
+        : kZeroMs;
+
+    // if our calculated delay is less than the next scheduled call, then run the check sooner.
+    // Otherwise, do nothing.
+    if (delayUntilNextCheck < (_currentRefreshPeriod(lock) - timeSinceLastCheck) ||
+        timeSinceLastCheck == Milliseconds::max()) {
+        _cancelOutstandingRequest(lock);
+    } else {
+        return;
+    }
+
+    LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] Rescheduling next isMaster check for "
+                     << this->_host << " in " << delayUntilNextCheck;
+    _scheduleNextIsMaster(lock, delayUntilNextCheck);
+}
+
+void SingleServerIsMasterMonitor::_scheduleNextIsMaster(WithLock, Milliseconds delay) {
     if (_isClosed)
         return;
+
+    invariant(!_isMasterOutstanding);
 
     Timer timer;
     auto swCbHandle = _executor->scheduleWorkAt(
@@ -82,10 +125,20 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
         std::move(request),
         [self = shared_from_this(),
          timer](const executor::TaskExecutor::RemoteCommandCallbackArgs& result) mutable {
+            Milliseconds nextRefreshPeriod;
             {
                 stdx::lock_guard<Mutex> lk(self->_mutex);
-                if (self->_isClosed)
+                self->_isMasterOutstanding = false;
+
+                if (self->_isClosed || ErrorCodes::isCancelationError(result.response.status)) {
+                    LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] not processing response: "
+                                     << result.response.status;
                     return;
+                }
+
+                self->_lastIsMasterAt = self->_executor->now();
+                nextRefreshPeriod = self->_currentRefreshPeriod(lk);
+                self->_scheduleNextIsMaster(lk, nextRefreshPeriod);
             }
 
             Microseconds latency(timer.micros());
@@ -94,24 +147,30 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
             } else {
                 self->_onIsMasterFailure(latency, result.response.status, result.response.data);
             }
-
-            self->_scheduleNextIsMaster(self->_heartbeatFrequencyMS);
         });
 
     if (!swCbHandle.isOK()) {
         mongo::Microseconds latency(timer.micros());
         _onIsMasterFailure(latency, swCbHandle.getStatus(), BSONObj());
-        return;
+        fassertFailedWithStatus(31448, swCbHandle.getStatus());
     }
 
+    _isMasterOutstanding = true;
     _remoteCommandHandle = swCbHandle.getValue();
 }
 
 void SingleServerIsMasterMonitor::close() {
-    stdx::lock_guard<Mutex> lk(_mutex);
+    stdx::lock_guard<Mutex> lock(_mutex);
     LOG(kDebugLevel) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
     _isClosed = true;
 
+    _cancelOutstandingRequest(lock);
+
+    _executor = nullptr;
+    LOG(kDebugLevel) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+}
+
+void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
     if (_nextIsMasterHandle.isValid()) {
         _executor->cancel(_nextIsMasterHandle);
     }
@@ -120,14 +179,11 @@ void SingleServerIsMasterMonitor::close() {
         _executor->cancel(_remoteCommandHandle);
     }
 
-    _executor = nullptr;
-    LOG(kDebugLevel) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+    _isMasterOutstanding = false;
 }
 
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
-    //    LOG(kDebugLevel) << "received isMaster for server " << _host << " (" << latency << ")"
-    //                     << "; " << bson.toString();
     _eventListener->onServerHeartbeatSucceededEvent(
         duration_cast<Milliseconds>(latency), _host, bson);
 }
@@ -143,15 +199,27 @@ void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
 }
 
 Milliseconds SingleServerIsMasterMonitor::_overrideRefreshPeriod(Milliseconds original) {
-	Milliseconds r = Milliseconds{500};//original;
-	static constexpr auto kPeriodField = "period"_sd;
-	modifyReplicaSetMonitorDefaultRefreshPeriod.executeIf(
-		[&r](const BSONObj& data) { 
-			r = duration_cast<Milliseconds>(Seconds{data.getIntField(kPeriodField)}); 
-			},
-		[](const BSONObj& data) { return data.hasField(kPeriodField); });
-	return r;
+    Milliseconds r = original;
+    static constexpr auto kPeriodField = "period"_sd;
+    modifyReplicaSetMonitorDefaultRefreshPeriod.executeIf(
+        [&r](const BSONObj& data) {
+            r = duration_cast<Milliseconds>(Seconds{data.getIntField(kPeriodField)});
+        },
+        [](const BSONObj& data) { return data.hasField(kPeriodField); });
+    return r;
 }
+
+Milliseconds SingleServerIsMasterMonitor::_currentRefreshPeriod(WithLock) {
+    return (_isExpedited) ? sdam::SdamConfiguration::kMinHeartbeatFrequencyMS
+                          : _heartbeatFrequencyMS;
+}
+
+void SingleServerIsMasterMonitor::disableExpeditedChecking() {
+    stdx::lock_guard<Mutex> lock(_mutex);
+    //LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] Disable expedited mode for " << _host;
+    _isExpedited = false;
+}
+
 
 ServerIsMasterMonitor::ServerIsMasterMonitor(
     const MongoURI& setUri,
@@ -171,19 +239,16 @@ ServerIsMasterMonitor::ServerIsMasterMonitor(
 }
 
 void ServerIsMasterMonitor::close() {
-    stdx::lock_guard<Mutex> lk(_mutex);
+    stdx::lock_guard<Mutex> lock(_mutex);
     if (_isClosed)
         return;
 
-    log() << "closing ServerIsMasterMonitor";
     _isClosed = true;
     for (auto singleMonitor : _singleMonitors) {
         singleMonitor.second->close();
     }
-    log() << "done closing ServerIsMasterMonitor";
 }
 
-// TODO: measure if this is a bottleneck. if so, implement using ServerDescription events.
 void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     sdam::TopologyDescriptionPtr previousDescription,
@@ -191,6 +256,14 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     stdx::lock_guard<Mutex> lock(_mutex);
     if (_isClosed)
         return;
+
+    const auto newType = newDescription->getType();
+    using sdam::TopologyType;
+
+    if (newType == TopologyType::kSingle || newType == TopologyType::kReplicaSetWithPrimary ||
+        newType == TopologyType::kSharded) {
+        _disableExpeditedChecking(lock);
+    }
 
     // remove monitors that are missing from the topology
     auto it = _singleMonitors.begin();
@@ -237,5 +310,18 @@ std::shared_ptr<executor::TaskExecutor> ServerIsMasterMonitor::_setupExecutor(
     auto result = std::make_shared<ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
     result->startup();
     return result;
+}
+
+void ServerIsMasterMonitor::requestImmediateCheck() {
+    stdx::lock_guard<Mutex> lock(_mutex);
+    for (auto& addressAndMonitor : _singleMonitors) {
+        addressAndMonitor.second->requestImmediateCheck();
+    }
+}
+
+void ServerIsMasterMonitor::_disableExpeditedChecking(WithLock) {
+    for (auto& addressAndMonitor : _singleMonitors) {
+        addressAndMonitor.second->disableExpeditedChecking();
+    }
 }
 }  // namespace mongo

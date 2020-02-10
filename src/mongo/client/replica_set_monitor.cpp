@@ -179,6 +179,7 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
     if (immediateResult) {
         return {std::move(*immediateResult)};
     }
+    _isMasterMonitor->requestImmediateCheck();
 
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
@@ -265,6 +266,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     if (immediateResult) {
         return {std::move(*immediateResult)};
     }
+    _isMasterMonitor->requestImmediateCheck();
 
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
@@ -619,6 +621,7 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
 
     bool shouldRemove;
     auto it = outstandingQueries.begin();
+
     while (it != outstandingQueries.end()) {
         auto& query = *it;
         shouldRemove = false;
@@ -662,9 +665,11 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
         } else {
             ++it;
         }
-    }  // end while
+    }
 
-    //    _logDebug() << numSatisfied << " of " << totalQueries << " queries satisfied.";
+    if (outstandingQueries.size()) {
+        _isMasterMonitor->requestImmediateCheck();
+    }
 }
 
 void ReplicaSetMonitor::_startOutstandingQueryProcessor() {

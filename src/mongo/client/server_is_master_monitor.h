@@ -15,17 +15,28 @@ public:
                                 std::shared_ptr<executor::TaskExecutor> executor);
     virtual ~SingleServerIsMasterMonitor() {}
 
+    /**
+     * Request an immediate check. The server will be checked immediately if we haven't completed
+     * an isMaster less than sdam::SdamConfiguration::kMinHeartbeatFrequencyMS ago. Otherwise,
+     * we schedule a check that runs after sdam::SdamConfiguration::kMinHeartbeatFrequencyMS since
+     * the last isMaster.
+     */
+    void requestImmediateCheck();
+    void disableExpeditedChecking();
+
     void init();
     void close();
 
 private:
-    void _scheduleNextIsMaster(Milliseconds delay);
+    void _scheduleNextIsMaster(WithLock, Milliseconds delay);
     void _doRemoteCommand();
 
     void _onIsMasterSuccess(sdam::IsMasterRTT latency, const BSONObj bson);
     void _onIsMasterFailure(sdam::IsMasterRTT latency, const Status& status, const BSONObj bson);
 
-	Milliseconds _overrideRefreshPeriod(Milliseconds original);
+    Milliseconds _overrideRefreshPeriod(Milliseconds original);
+    Milliseconds _currentRefreshPeriod(WithLock);
+    void _cancelOutstandingRequest(WithLock);
 
     static const int kDebugLevel = 0;
 
@@ -36,8 +47,12 @@ private:
     Milliseconds _heartbeatFrequencyMS;
     Milliseconds _timeoutMS = Milliseconds{10};
 
+    boost::optional<Date_t> _lastIsMasterAt;
+    bool _isMasterOutstanding = false;
+    bool _isExpedited = false;
     executor::TaskExecutor::CallbackHandle _nextIsMasterHandle;
     executor::TaskExecutor::CallbackHandle _remoteCommandHandle;
+
     bool _isClosed;
     MongoURI _setUri;
 };
@@ -53,6 +68,12 @@ public:
                           std::shared_ptr<executor::TaskExecutor> executor = nullptr);
 
     virtual ~ServerIsMasterMonitor() {}
+
+    /**
+     * Request an immediate check of each member in the replica set.
+     */
+    void requestImmediateCheck();
+
     void close();
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
@@ -65,6 +86,8 @@ private:
      */
     std::shared_ptr<executor::TaskExecutor> _setupExecutor(
         const std::shared_ptr<executor::TaskExecutor>& executor);
+    void _disableExpeditedChecking(WithLock);
+
     static const int kLogDebugLevel = 0;
 
     Mutex _mutex;
