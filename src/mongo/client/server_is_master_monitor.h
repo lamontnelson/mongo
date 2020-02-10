@@ -25,6 +25,8 @@ private:
     void _onIsMasterSuccess(sdam::IsMasterRTT latency, const BSONObj bson);
     void _onIsMasterFailure(sdam::IsMasterRTT latency, const Status& status, const BSONObj bson);
 
+	Milliseconds _overrideRefreshPeriod(Milliseconds original);
+
     static const int kDebugLevel = 0;
 
     Mutex _mutex;
@@ -32,7 +34,7 @@ private:
     sdam::TopologyEventsPublisherPtr _eventListener;
     std::shared_ptr<executor::TaskExecutor> _executor;
     Milliseconds _heartbeatFrequencyMS;
-    Milliseconds _timeoutMS = Milliseconds(static_cast<int64_t>(10));
+    Milliseconds _timeoutMS = Milliseconds{10};
 
     executor::TaskExecutor::CallbackHandle _nextIsMasterHandle;
     executor::TaskExecutor::CallbackHandle _remoteCommandHandle;

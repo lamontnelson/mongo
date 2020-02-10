@@ -10,6 +10,8 @@
 
 namespace mongo {
 namespace {
+MONGO_FAIL_POINT_DEFINE(modifyReplicaSetMonitorDefaultRefreshPeriod);
+
 const BSONObj IS_MASTER_BSON = BSON("isMaster" << 1);
 
 using executor::NetworkInterface;
@@ -27,11 +29,10 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
     : _host(host),
       _eventListener(eventListener),
       _executor(executor),
-      _heartbeatFrequencyMS(heartbeatFrequencyMS),
+      _heartbeatFrequencyMS(_overrideRefreshPeriod(heartbeatFrequencyMS)),
       _isClosed(true),
       _setUri(setUri) {
     LOG(kDebugLevel) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
-    _heartbeatFrequencyMS = Milliseconds(500);
 }
 
 void SingleServerIsMasterMonitor::init() {
@@ -141,6 +142,16 @@ void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
         duration_cast<Milliseconds>(latency), status, _host, bson);
 }
 
+Milliseconds SingleServerIsMasterMonitor::_overrideRefreshPeriod(Milliseconds original) {
+	Milliseconds r = original;
+	static constexpr auto kPeriodField = "period"_sd;
+	modifyReplicaSetMonitorDefaultRefreshPeriod.executeIf(
+		[&r](const BSONObj& data) { 
+			r = duration_cast<Milliseconds>(Seconds{data.getIntField(kPeriodField)}); 
+			},
+		[](const BSONObj& data) { return data.hasField(kPeriodField); });
+	return r;
+}
 
 ServerIsMasterMonitor::ServerIsMasterMonitor(
     const MongoURI& setUri,

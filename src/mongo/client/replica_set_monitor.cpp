@@ -69,9 +69,6 @@ using std::shared_ptr;
 using std::string;
 using std::vector;
 
-// Failpoint for changing the default refresh period
-MONGO_FAIL_POINT_DEFINE(modifyReplicaSetMonitorDefaultRefreshPeriod);
-
 namespace {
 // Pull nested types to top-level scope
 using executor::TaskExecutor;
