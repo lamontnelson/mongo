@@ -159,7 +159,8 @@ private:
     // A SelectionFilter is a higher order function used to filter out servers from the current
     // Topology. It's return value is used as input to the TopologyDescription::findServers
     // function, and is a function that takes a ServerDescriptionPtr and returns a bool indicating
-    // whether to keep this server or not.
+    // whether to keep this server or not based on the ReadPreference, server type, and recency
+    // metrics of the server.
     using SelectionFilter = std::function<std::function<bool(const ServerDescriptionPtr&)>(
         const ReadPreferenceSetting&)>;
 
