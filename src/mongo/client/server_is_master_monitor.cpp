@@ -143,7 +143,7 @@ void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
 }
 
 Milliseconds SingleServerIsMasterMonitor::_overrideRefreshPeriod(Milliseconds original) {
-	Milliseconds r = original;
+	Milliseconds r = Milliseconds{500};//original;
 	static constexpr auto kPeriodField = "period"_sd;
 	modifyReplicaSetMonitorDefaultRefreshPeriod.executeIf(
 		[&r](const BSONObj& data) { 
