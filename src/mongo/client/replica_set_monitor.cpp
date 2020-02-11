@@ -124,7 +124,7 @@ ReplicaSetMonitorPtr ReplicaSetMonitor::make(const MongoURI& uri,
 
 void ReplicaSetMonitor::init() {
     stdx::lock_guard<Mutex> lock(_mutex);
-    LOG(0) << "Starting Replica Set Monitor " << _uri;
+    _logDebug() << "Starting Replica Set Monitor " << _uri;
 
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
     _topologyManager =
@@ -150,7 +150,6 @@ void ReplicaSetMonitor::close() {
         _failOutstandingWitStatus(
             Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
 
-        _logDebug() << "Notify onDroppedSet";
         globalRSMonitorManager.getNotifier().onDroppedSet(getName());
     }
 
@@ -409,7 +408,6 @@ std::string ReplicaSetMonitor::getName() const {
     return _uri.getSetName();
 }
 
-// TODO: this can be cached
 std::string ReplicaSetMonitor::getServerAddress() const {
     const auto topologyDescription = _currentTopology();
     const auto servers = topologyDescription->getServers();
@@ -684,13 +682,13 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
                 // only wake up if we are closed or we have an outstanding query that we can
                 // satisfy.
                 bool isPossibleToSatisfy = outstandingQueries.size() > 0 &&
-                    (currentTopology->getType() != TopologyType::kUnknown);
+                    (currentTopology->getType() == TopologyType::kReplicaSetWithPrimary ||
+                     currentTopology->getType() == TopologyType::kReplicaSetNoPrimary ||
+                     currentTopology->getType() == TopologyType::kSingle);
+
                 return isClosed || isPossibleToSatisfy;
             });
             // mutex is reacquired after wait
-
-            //            self->_logDebug() << "waited for " << timer.elapsed() << ". "
-            //                              << toString(self->_currentTopology()->getType());
 
             if (self->_isClosed) {
                 self->_logDebug() << "exiting query processor loop";
@@ -702,7 +700,6 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
     };
 
     _queryProcessorThread = std::thread(queryProcessor);
-    //    _queryProcessorThread.detach();
 }
 
 logger::LogstreamBuilder ReplicaSetMonitor::_logDebug(int n) {
