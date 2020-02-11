@@ -43,7 +43,7 @@ void SingleServerIsMasterMonitor::init() {
         _isClosed = false;
     }
 
-    _scheduleNextIsMaster(Milliseconds(0));
+    _scheduleNextIsMaster(kZeroMs);
 }
 
 void SingleServerIsMasterMonitor::requestImmediateCheck() {
