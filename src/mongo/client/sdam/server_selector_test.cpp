@@ -366,26 +366,26 @@ TEST_F(ServerSelectorTestFixture, ShouldSelectTaggedSecondaryIfPreferredPrimaryN
     const auto d0 = now - Milliseconds(1000);
 
     const auto s0 = ServerDescriptionBuilder()
-        .withAddress("s0")
-        .withType(ServerType::kRSPrimary)
-        .withRtt(selectionConfig.getLocalThresholdMs())
-        .withSetName("set")
-        .withHost("s0")
-        .withHost("s1")
-        .withHost("s2")
-        .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
-        .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
-        .withLastWriteDate(d0)
-        .withTag("tag", "primary")
-        .instance();
+                        .withAddress("s0")
+                        .withType(ServerType::kRSPrimary)
+                        .withRtt(selectionConfig.getLocalThresholdMs())
+                        .withSetName("set")
+                        .withHost("s0")
+                        .withHost("s1")
+                        .withHost("s2")
+                        .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
+                        .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                        .withLastWriteDate(d0)
+                        .withTag("tag", "primary")
+                        .instance();
     stateMachine.onServerDescription(*topologyDescription, s0);
 
     // old primary unavailable
     const auto s0_failed = ServerDescriptionBuilder()
-        .withAddress("s0")
-        .withType(ServerType::kUnknown)
-                        .withSetName("set")
-                        .instance();
+                               .withAddress("s0")
+                               .withType(ServerType::kUnknown)
+                               .withSetName("set")
+                               .instance();
     stateMachine.onServerDescription(*topologyDescription, s0_failed);
 
     const auto s1 = ServerDescriptionBuilder()

@@ -216,7 +216,6 @@ Milliseconds SingleServerIsMasterMonitor::_currentRefreshPeriod(WithLock) {
 
 void SingleServerIsMasterMonitor::disableExpeditedChecking() {
     stdx::lock_guard<Mutex> lock(_mutex);
-    //LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] Disable expedited mode for " << _host;
     _isExpedited = false;
 }
 

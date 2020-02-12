@@ -148,8 +148,8 @@ void ReplicaSetMonitor::close() {
         _logger() << "Closing Replica Set Monitor " << getName();
         _eventsPublisher->close();
         _isMasterMonitor->close();
-        _failOutstandingWitStatus(lock,
-            Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
+        _failOutstandingWitStatus(
+            lock, Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
 
         globalRSMonitorManager.getNotifier().onDroppedSet(getName());
     }
@@ -168,7 +168,7 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
                                                             Milliseconds maxWait) {
     return getHostsOrRefresh(criteria, maxWait)
         .thenRunOn(_executor)
-        .then([self=shared_from_this()](const std::vector<HostAndPort>& result) {
+        .then([self = shared_from_this()](const std::vector<HostAndPort>& result) {
             invariant(result.size());
             return result[self->_random.nextInt64(result.size())];
         })
@@ -555,7 +555,7 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries(WithLock) {
                 query->done = true;
                 query->promise.emplaceValue(std::move(*result));
                 _logger() << "satisfy query: " << query->criteria.toString() << " ("
-                            << _executor->now() - query->start << ")";
+                          << _executor->now() - query->start << ")";
                 shouldRemove = true;
                 ++numSatisfied;
             }

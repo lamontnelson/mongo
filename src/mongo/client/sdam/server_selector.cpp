@@ -49,26 +49,30 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
 
     // TODO: the old version of the RSM does this, and many of
     // the tests seem to rely on this behavior for correctness.
-	if (!criteria.minOpTime.isNull()) {
-		auto eligibleServers = topologyDescription->findServers([](const ServerDescriptionPtr& s) {
-				return (s->getType() == ServerType::kRSPrimary ||
-						s->getType() == ServerType::kRSSecondary);
-		});
+    if (!criteria.minOpTime.isNull()) {
+        auto eligibleServers = topologyDescription->findServers([](const ServerDescriptionPtr& s) {
+            return (s->getType() == ServerType::kRSPrimary ||
+                    s->getType() == ServerType::kRSSecondary);
+        });
 
-		auto beginIt = eligibleServers.begin();
-		auto endIt = eligibleServers.end(); 
-		auto maxIt = std::max_element(beginIt, endIt, [topologyDescription](const ServerDescriptionPtr& left, const ServerDescriptionPtr& right) {
-			return left->getOpTime() < right->getOpTime();
-		});
-		if (maxIt != endIt) {
-			auto maxOpTime = (*maxIt)->getOpTime();
-			if (maxOpTime && maxOpTime < criteria.minOpTime) {
-				// ignore minOpTime
-				const_cast<mongo::ReadPreferenceSetting&>(criteria) = ReadPreferenceSetting(criteria.pref);
-				log() << "ignoring minOpTime for " << criteria.toString();
-			}
-		}
-	}
+        auto beginIt = eligibleServers.begin();
+        auto endIt = eligibleServers.end();
+        auto maxIt = std::max_element(beginIt,
+                                      endIt,
+                                      [topologyDescription](const ServerDescriptionPtr& left,
+                                                            const ServerDescriptionPtr& right) {
+                                          return left->getOpTime() < right->getOpTime();
+                                      });
+        if (maxIt != endIt) {
+            auto maxOpTime = (*maxIt)->getOpTime();
+            if (maxOpTime && maxOpTime < criteria.minOpTime) {
+                // ignore minOpTime
+                const_cast<mongo::ReadPreferenceSetting&>(criteria) =
+                    ReadPreferenceSetting(criteria.pref);
+                log() << "ignoring minOpTime for " << criteria.toString();
+            }
+        }
+    }
 
     switch (criteria.pref) {
         case ReadPreference::Nearest:
@@ -209,7 +213,9 @@ void SdamServerSelector::filterTags(std::vector<ServerDescriptionPtr>* servers,
                     return false;
                 }
             } else {
-                log() << "invalid tags specified for server selection; tags should be specified as a bson Obj: " << it->toString();
+                log() << "invalid tags specified for server selection; tags should be specified as "
+                         "a bson Obj: "
+                      << it->toString();
             }
             ++it;
         }
