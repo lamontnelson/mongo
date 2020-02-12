@@ -103,7 +103,8 @@ std::string debugReadPref(const ReadPreferenceSetting& readPref) {
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskExecutor> executor)
     : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
       _uri(uri),
-      _executor(_initTaskExecutor(executor)) {
+      _executor(_initTaskExecutor(executor)),
+      _random(PseudoRandom(Date_t::now().asInt64())) {
 
     // TODO: sdam should use the HostAndPort type for ServerAddress
     std::vector<ServerAddress> seeds;
@@ -124,7 +125,7 @@ ReplicaSetMonitorPtr ReplicaSetMonitor::make(const MongoURI& uri,
 
 void ReplicaSetMonitor::init() {
     stdx::lock_guard<Mutex> lock(_mutex);
-    _logDebug() << "Starting Replica Set Monitor " << _uri;
+    _logger() << "Starting Replica Set Monitor " << _uri;
 
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
     _topologyManager =
@@ -144,10 +145,10 @@ void ReplicaSetMonitor::close() {
     {
         stdx::lock_guard<Mutex> lock(_mutex);
         _isClosed = true;
-        _logDebug() << "Closing Replica Set Monitor " << getName();
+        _logger() << "Closing Replica Set Monitor " << getName();
         _eventsPublisher->close();
         _isMasterMonitor->close();
-        _failOutstandingWitStatus(
+        _failOutstandingWitStatus(lock,
             Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
 
         globalRSMonitorManager.getNotifier().onDroppedSet(getName());
@@ -156,7 +157,7 @@ void ReplicaSetMonitor::close() {
     _outstandingQueriesCV.notify_all();
     _queryProcessorThread.join();
 
-    _logDebug() << "Done closing Replica Set Monitor " << getName();
+    _logger() << "Done closing Replica Set Monitor " << getName();
 }
 
 bool ReplicaSetMonitor::isClosed() const {
@@ -165,81 +166,14 @@ bool ReplicaSetMonitor::isClosed() const {
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
                                                             Milliseconds maxWait) {
-    using future_type = HostAndPort;
-    _logDebug() << "getHostOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait
-                << "; tags " << criteria.tags.getTagBSON().toString();
-
-    // In the fast case (stable topology), no need for the mutex acquisition.
-    if (isClosed()) {
-        return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
-    }
-
-    // try to satisfy query immediately
-    const auto& immediateResult = _getHost(criteria);
-    if (immediateResult) {
-        return {std::move(*immediateResult)};
-    }
-    _isMasterMonitor->requestImmediateCheck();
-
-    // fail fast on timeout
-    const auto deadline = _clockSource->now() + maxWait;
-    if (deadline - _clockSource->now() < Milliseconds(0)) {
-        return SemiFuture<HostAndPort>(_makeUnsatisfiedReadPrefError(criteria));
-    }
-
-    // otherwise, do async version
-    Future<future_type> result;
-    {
-        mongo::stdx::lock_guard<Mutex> lk(_mutex);
-
-        // We check if we are closed here since someone could have called
-        // close() concurrently with the call above.
-        if (isClosed()) {
-            return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
-        }
-
-        auto pf = makePromiseFuture<future_type>();
-        auto query = std::make_shared<SingleHostQuery>();
-        query->type = HostQueryType::SINGLE;
-        query->deadline = deadline;
-        query->criteria = criteria;
-        query->promise = std::move(pf.promise);
-
-        auto deadlineCb = [query,
-                           self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
-            stdx::lock_guard<Mutex> lock(self->_mutex);
-            if (query->done) {
-                return;
-            }
-
-            const auto cbStatus = cbArgs.status;
-            if (!cbStatus.isOK()) {
-                query->promise.setError(cbStatus);
-                query->done = true;
-                return;
-            }
-
-            const auto errorStatus = self->_makeUnsatisfiedReadPrefError(query->criteria);
-            query->promise.setError(errorStatus);
-            query->done = true;
-            self->_logDebug() << "timeout: " << errorStatus.toString();
-        };
-        auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
-
-        if (!swDeadlineHandle.isOK()) {
-            _logDebug() << "error scheduling deadline handler: " << swDeadlineHandle.getStatus();
-            return SemiFuture<future_type>::makeReady(swDeadlineHandle.getStatus());
-        }
-        query->deadlineHandle = swDeadlineHandle.getValue();
-
-        _outstandingQueries.emplace_back(query);
-        result = std::move(pf.future);
-    }
-
-    _outstandingQueriesCV.notify_all();
-    return std::move(result).semi();
+    return getHostsOrRefresh(criteria, maxWait)
+        .thenRunOn(_executor)
+        .then([self=shared_from_this()](const std::vector<HostAndPort>& result) {
+            invariant(result.size());
+            return result[self->_random.nextInt64(result.size())];
+        })
+        .semi();
 }
-
 
 // TODO: get rid of this; change ServerAddress underlying type to HostAndPort
 std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
@@ -254,9 +188,9 @@ std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
     using future_type = std::vector<HostAndPort>;
-    _logDebug() << "getHostsOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait;
+    _logger() << "getHostsOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait;
 
-    // In the fast case (stable topology), no need for the mutex acquisition.
+    // In the fast case (stable topology), we avoid mutex acquisition.
     if (isClosed()) {
         return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
     }
@@ -274,7 +208,6 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         return SemiFuture<std::vector<HostAndPort>>(_makeUnsatisfiedReadPrefError(criteria));
     }
 
-    // otherwise, do async version
     Future<future_type> result;
     {
         mongo::stdx::lock_guard<Mutex> lk(_mutex);
@@ -286,8 +219,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         }
 
         auto pf = makePromiseFuture<future_type>();
-        auto query = std::make_shared<MultiHostQuery>();
-        query->type = HostQueryType::MULTI;
+        auto query = std::make_shared<HostQuery>();
         query->deadline = deadline;
         query->criteria = criteria;
         query->promise = std::move(pf.promise);
@@ -309,7 +241,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
             const auto errorStatus = self->_makeUnsatisfiedReadPrefError(query->criteria);
             query->promise.setError(errorStatus);
             query->done = true;
-            self->_logDebug() << "timeout: " << errorStatus.toString();
+            self->_logger() << "timeout: " << errorStatus.toString();
         };
         auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
 
@@ -340,15 +272,6 @@ boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
         return _extractHosts(*result);
     }
     return boost::none;
-}
-
-boost::optional<HostAndPort> ReplicaSetMonitor::_getHost(const ReadPreferenceSetting& criteria) {
-    auto currentTopology = _currentTopology();
-    auto result = _serverSelector->selectServer(currentTopology, criteria);
-    if (result)
-        log() << getName() << " getHost; " << debugReadPref(criteria) << "; result - "
-              << ((result) ? (*result)->getAddress() : "");
-    return result ? boost::optional<HostAndPort>((*result)->getAddress()) : boost::none;
 }
 
 HostAndPort ReplicaSetMonitor::getMasterOrUassert() {
@@ -525,7 +448,7 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     // notify external components, if there are membership
     // changes in the topology.
     if (_hasMembershipChange(previousDescription, newDescription)) {
-        _logDebug() << "Topology Description Change: " << newDescription->toString();
+        _logger() << "Topology Description Change: " << newDescription->toString();
 
         // TODO: remove when HostAndPort conversion is done.
         std::vector<HostAndPort> servers;
@@ -609,14 +532,11 @@ std::string debug(boost::optional<HostAndPort> x) {
 // This function attempts to satisfy outstanding queries when we have new information.
 // It also will remove any queries that have already passed the deadline.
 //
-// It should be called with the mutex held.
-//
 // TODO: refactor so that we don't call _getHost(s) for every outstanding query
 // since some might be duplicates. but we do still want the randomization for multiple hosts.
-void ReplicaSetMonitor::_satisfyOutstandingQueries() {
+void ReplicaSetMonitor::_satisfyOutstandingQueries(WithLock) {
     auto topologyDescription = _currentTopology();
     auto& outstandingQueries = _outstandingQueries;
-    //    size_t totalQueries = _outstandingQueries.size();
     size_t numSatisfied = 0;
 
     bool shouldRemove;
@@ -629,36 +549,17 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries() {
         if (query->done) {
             shouldRemove = true;
         } else {
-            if (query->type == HostQueryType::MULTI) {
-                auto multiQuery = std::static_pointer_cast<MultiHostQuery>(query);
-                auto multiResult = _getHosts(multiQuery->criteria);
-                if (multiResult) {
-                    _executor->cancel(multiQuery->deadlineHandle);
-
-                    multiQuery->done = true;
-                    multiQuery->promise.emplaceValue(std::move(*multiResult));
-                    _logDebug() << "satisfy multi query: " << multiQuery->criteria.toString()
-                                << " (" << _executor->now() - multiQuery->start << ")";
-                    shouldRemove = true;
-                    ++numSatisfied;
-                }
-            } else {
-                invariant(query->type == HostQueryType::SINGLE);
-                auto singleQuery = std::dynamic_pointer_cast<SingleHostQuery>(query);
-                invariant(singleQuery);
-                auto singleResult = _getHost(singleQuery->criteria);
-                if (singleResult) {
-                    _executor->cancel(singleQuery->deadlineHandle);
-
-                    singleQuery->done = true;
-                    singleQuery->promise.emplaceValue(std::move(*singleResult));
-                    _logDebug() << "satisfy single query: " << singleQuery->criteria.toString()
-                                << " (" << _executor->now() - singleQuery->start << ")";
-                    shouldRemove = true;
-                    ++numSatisfied;
-                }
-            }  // end if
-        }      // end if
+            auto result = _getHosts(query->criteria);
+            if (result) {
+                _executor->cancel(query->deadlineHandle);
+                query->done = true;
+                query->promise.emplaceValue(std::move(*result));
+                _logger() << "satisfy query: " << query->criteria.toString() << " ("
+                            << _executor->now() - query->start << ")";
+                shouldRemove = true;
+                ++numSatisfied;
+            }
+        }
 
         if (shouldRemove) {
             it = outstandingQueries.erase(it);
@@ -696,43 +597,30 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
             // mutex is reacquired after wait
 
             if (self->_isClosed) {
-                self->_logDebug() << "exiting query processor loop";
+                self->_logger() << "exiting query processor loop";
                 return;
             }
 
-            self->_satisfyOutstandingQueries();
+            self->_satisfyOutstandingQueries(lock);
         }
     };
 
+    // TODO: we probably only need one of these, not one per instance.
     _queryProcessorThread = std::thread(queryProcessor);
 }
 
-logger::LogstreamBuilder ReplicaSetMonitor::_logDebug(int n) {
+logger::LogstreamBuilder ReplicaSetMonitor::_logger(int n) {
     return std::move(log() << kLogPrefix << " (" << this->getName() << ") ");
 }
 
-void ReplicaSetMonitor::_failOutstandingWitStatus(Status status) {
+void ReplicaSetMonitor::_failOutstandingWitStatus(WithLock, Status status) {
     for (auto query : _outstandingQueries) {
         if (query->done)
             continue;
 
         query->done = true;
         _executor->cancel(query->deadlineHandle);
-
-        switch (query->type) {
-            case HostQueryType::SINGLE: {
-                auto singleQuery = std::static_pointer_cast<SingleHostQuery>(query);
-                singleQuery->promise.setError(status);
-                break;
-            }
-            case HostQueryType::MULTI: {
-                auto multiQuery = std::static_pointer_cast<MultiHostQuery>(query);
-                multiQuery->promise.setError(status);
-                break;
-            }
-            default:
-                MONGO_UNREACHABLE;
-        }
+        query->promise.setError(status);
     }
     _outstandingQueries.clear();
 }

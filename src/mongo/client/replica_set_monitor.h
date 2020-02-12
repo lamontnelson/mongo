@@ -239,31 +239,20 @@ public:
     static inline const Seconds kDefaultFindHostTimeout{15};
 
 private:
-    enum class HostQueryType { SINGLE, MULTI };
-
     struct HostQuery {
-        HostQueryType type;
         Date_t deadline;
         executor::TaskExecutor::CallbackHandle deadlineHandle;
         ReadPreferenceSetting criteria;
         Date_t start = Date_t::now();
         bool done = false;
-        virtual ~HostQuery(){};
-    };
-    using HostQueryPtr = std::shared_ptr<HostQuery>;
-
-    struct MultiHostQuery : public HostQuery {
         Promise<std::vector<HostAndPort>> promise;
     };
-
-    struct SingleHostQuery : public HostQuery {
-        Promise<HostAndPort> promise;
-    };
+    using HostQueryPtr = std::shared_ptr<HostQuery>;
 
     std::vector<HostAndPort> _extractHosts(
         const std::vector<sdam::ServerDescriptionPtr>& serverDescriptions);
     boost::optional<std::vector<HostAndPort>> _getHosts(const ReadPreferenceSetting& criteria);
-    void _satisfyOutstandingQueries();
+    void _satisfyOutstandingQueries(WithLock);
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            sdam::TopologyDescriptionPtr previousDescription,
@@ -292,7 +281,7 @@ private:
     std::shared_ptr<executor::TaskExecutor> _initTaskExecutor(
         std::shared_ptr<executor::TaskExecutor> executor);
     void _startOutstandingQueryProcessor();
-    logger::LogstreamBuilder _logDebug(int n = -1);
+    logger::LogstreamBuilder _logger(int n = -1);
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
@@ -311,16 +300,13 @@ private:
     ClockSource* _clockSource;
     stdx::condition_variable _outstandingQueriesCV;
     std::vector<HostQueryPtr> _outstandingQueries;
+    mutable PseudoRandom _random;
 
     static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
     static inline const auto kLogPrefix = "ReplicaSetMonitor ";
 
-    template <typename F>
-    Future<F> _makeOutstandingQuery(HostQueryType type,
-                                    const ReadPreferenceSetting& criteria,
-                                    const Date_t& deadline);
-    void _failOutstandingWitStatus(Status status);
+    void _failOutstandingWitStatus(WithLock, Status status);
     bool _hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
                               sdam::TopologyDescriptionPtr newDescription);
 
