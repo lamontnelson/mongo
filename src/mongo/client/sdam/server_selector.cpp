@@ -46,6 +46,9 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
                                               const mongo::ReadPreferenceSetting& criteria) {
     // when querying the primary we don't need to consider tags
     bool shouldTagFilter = true;
+
+    // TODO: the old version of the RSM does this, and many of
+    // the tests seem to rely on this behavior for correctness.
 	if (!criteria.minOpTime.isNull()) {
 		auto eligibleServers = topologyDescription->findServers([](const ServerDescriptionPtr& s) {
 				return (s->getType() == ServerType::kRSPrimary ||
