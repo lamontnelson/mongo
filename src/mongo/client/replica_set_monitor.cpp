@@ -87,7 +87,7 @@ static auto maxWireCompare = [](const ServerDescriptionPtr& a, const ServerDescr
 };
 
 static auto secondaryPredicate = [](const ServerDescriptionPtr& server) {
-    return server->getType() == ServerType::kRSPrimary;
+    return server->getType() == ServerType::kRSSecondary;
 };
 
 std::string debugReadPref(const ReadPreferenceSetting& readPref) {
