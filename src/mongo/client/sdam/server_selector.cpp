@@ -46,6 +46,26 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
                                               const mongo::ReadPreferenceSetting& criteria) {
     // when querying the primary we don't need to consider tags
     bool shouldTagFilter = true;
+	if (!criteria.minOpTime.isNull()) {
+		auto eligibleServers = topologyDescription->findServers([](const ServerDescriptionPtr& s) {
+				return (s->getType() == ServerType::kRSPrimary ||
+						s->getType() == ServerType::kRSSecondary);
+		});
+
+		auto beginIt = eligibleServers.begin();
+		auto endIt = eligibleServers.end(); 
+		auto maxIt = std::max_element(beginIt, endIt, [topologyDescription](const ServerDescriptionPtr& left, const ServerDescriptionPtr& right) {
+			return left->getOpTime() < right->getOpTime();
+		});
+		if (maxIt != endIt) {
+			auto maxOpTime = (*maxIt)->getOpTime();
+			if (maxOpTime && maxOpTime < criteria.minOpTime) {
+				// ignore minOpTime
+				const_cast<mongo::ReadPreferenceSetting&>(criteria) = ReadPreferenceSetting(criteria.pref);
+				log() << "ignoring minOpTime for " << criteria.toString();
+			}
+		}
+	}
 
     switch (criteria.pref) {
         case ReadPreference::Nearest:
