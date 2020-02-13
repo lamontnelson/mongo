@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2020-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -39,11 +39,11 @@ namespace mongo::sdam {
 ServerSelector::~ServerSelector() {}
 
 SdamServerSelector::SdamServerSelector(const ServerSelectionConfiguration& config)
-    : _config(config), _random(PseudoRandom(Date_t::now().asInt64())) {}
+    : _config(config), _random(PseudoRandom(SecureRandom().nextInt64())) {}
 
 void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>* result,
                                               const TopologyDescriptionPtr topologyDescription,
-                                              const mongo::ReadPreferenceSetting& criteria) {
+                                              const ReadPreferenceSetting& criteria) {
     // when querying the primary we don't need to consider tags
     bool shouldTagFilter = true;
 
@@ -67,7 +67,7 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
             auto maxOpTime = (*maxIt)->getOpTime();
             if (maxOpTime && maxOpTime < criteria.minOpTime) {
                 // ignore minOpTime
-                const_cast<mongo::ReadPreferenceSetting&>(criteria) =
+                const_cast<ReadPreferenceSetting&>(criteria) =
                     ReadPreferenceSetting(criteria.pref);
                 log() << "ignoring minOpTime for " << criteria.toString();
             }
@@ -133,7 +133,7 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
 
 boost::optional<std::vector<ServerDescriptionPtr>> SdamServerSelector::selectServers(
     const TopologyDescriptionPtr topologyDescription,
-    const mongo::ReadPreferenceSetting& criteria) {
+    const ReadPreferenceSetting& criteria) {
 
     // If the topology wire version is invalid, raise an error
     if (!topologyDescription->isWireVersionCompatible()) {

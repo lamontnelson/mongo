@@ -27,6 +27,10 @@
  *    it in the license file.
  */
 #pragma once
+#include <deque>
+#include <memory>
+#include <vector>
+
 #include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/util/uuid.h"
@@ -81,16 +85,14 @@ public:
  * To publish an event to all registered listeners call the corresponding event function on the
  * TopologyEventsPublisher instance.
  */
-class TopologyEventsPublisher : public TopologyListener,
-                                public std::enable_shared_from_this<TopologyEventsPublisher> {
+class TopologyEventsPublisher final : public TopologyListener,
+                                      public std::enable_shared_from_this<TopologyEventsPublisher> {
 public:
     TopologyEventsPublisher(std::shared_ptr<executor::TaskExecutor> executor)
         : _executor(executor){};
     void registerListener(TopologyListenerPtr listener);
     void removeListener(TopologyListenerPtr listener);
     void close();
-
-    virtual ~TopologyEventsPublisher() {}
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            TopologyDescriptionPtr previousDescription,

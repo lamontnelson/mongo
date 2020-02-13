@@ -39,7 +39,6 @@
 #include "mongo/client/mongo_uri.h"
 #include "mongo/client/replica_set_change_notifier.h"
 #include "mongo/client/sdam/sdam.h"
-#include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/server_is_master_monitor.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/logger/log_component.h"
@@ -73,9 +72,7 @@ public:
     static constexpr auto kCheckTimeout = Seconds(5);
 
     /**
-     * Constructs a RSM instance from a mongoURI.
-     * If the executor param is provided the RSM will use this to execute isMaster requests (for
-     * testing)
+     * Constructs a RSM instance.
      */
     ReplicaSetMonitor(const MongoURI& uri,
                       std::shared_ptr<executor::TaskExecutor> executor = nullptr);
@@ -88,10 +85,8 @@ public:
 
     /**
      * Closes this RSM instance. This RSM instance is no longer useable once the function exits.
-     * Should be called exactly once.
      */
     void close();
-    inline bool isClosed() const;
 
     /**
      * Create a Replica Set monitor instance and fully initialize it.
@@ -278,10 +273,15 @@ private:
     // so that we are operating on a consistent read-only view of the topology.
     sdam::TopologyDescriptionPtr _currentTopology() const;
     boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
-    std::shared_ptr<executor::TaskExecutor> _initTaskExecutor(
-        std::shared_ptr<executor::TaskExecutor> executor);
     void _startOutstandingQueryProcessor();
-    logger::LogstreamBuilder _logger(int n = -1);
+    std::string _logPrefix();
+
+    void _failOutstandingWitStatus(WithLock, Status status);
+    bool _hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
+                              sdam::TopologyDescriptionPtr newDescription);
+
+    Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
+    Status _makeReplicaSetMonitorRemovedError() const;
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
@@ -292,8 +292,8 @@ private:
     const MongoURI _uri;
 
     std::shared_ptr<executor::TaskExecutor> _executor;
-    std::thread _queryProcessorThread;
-    std::atomic_bool _isClosed = true;
+    stdx::thread _queryProcessorThread;
+    AtomicWord<bool> _isClosed{true};
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
     // variables below are protected by the mutex
@@ -304,14 +304,10 @@ private:
 
     static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
-    static inline const auto kLogPrefix = "ReplicaSetMonitor ";
 
-    void _failOutstandingWitStatus(WithLock, Status status);
-    bool _hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
-                              sdam::TopologyDescriptionPtr newDescription);
-
-    Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
-    Status _makeReplicaSetMonitorRemovedError() const;
+    static inline const auto kLogPrefix = "[ReplicaSetMonitor]";
+    static inline const auto kDefaultLogLevel = logger::LogSeverity::Debug(1);
+    static inline const auto kLowerLogLevel = kDefaultLogLevel.lessSevere();
 };
 
 }  // namespace mongo

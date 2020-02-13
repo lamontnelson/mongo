@@ -35,7 +35,6 @@
 
 #include <algorithm>
 #include <limits>
-#include <random>
 
 #include "mongo/bson/simple_bsonelement_comparator.h"
 #include "mongo/client/connpool.h"
@@ -44,18 +43,12 @@
 #include "mongo/db/operation_context.h"
 #include "mongo/db/repl/bson_extract_optime.h"
 #include "mongo/db/server_options.h"
-#include "mongo/executor/network_interface_factory.h"
-#include "mongo/executor/network_interface_thread_pool.h"
 #include "mongo/executor/thread_pool_task_executor.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/rpc/metadata/egress_metadata_hook_list.h"
 #include "mongo/stdx/condition_variable.h"
-#include "mongo/util/background.h"
 #include "mongo/util/concurrency/thread_pool.h"
-#include "mongo/util/debug_util.h"
-#include "mongo/util/exit.h"
-#include "mongo/util/fail_point.h"
 #include "mongo/util/log.h"
 #include "mongo/util/string_map.h"
 #include "mongo/util/timer.h"
@@ -78,23 +71,43 @@ using CallbackHandle = TaskExecutor::CallbackHandle;
 const ReadPreferenceSetting kPrimaryOnlyReadPreference(ReadPreference::PrimaryOnly, TagSet());
 
 // Utility functions to use when finding servers
-static auto minWireCompare = [](const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
+bool minWireCompare(const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
     return a->getMinWireVersion() < b->getMinWireVersion();
-};
+}
 
-static auto maxWireCompare = [](const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
+bool maxWireCompare(const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
     return a->getMaxWireVersion() < b->getMaxWireVersion();
-};
+}
 
-static auto secondaryPredicate = [](const ServerDescriptionPtr& server) {
+bool secondaryPredicate(const ServerDescriptionPtr& server) {
     return server->getType() == ServerType::kRSSecondary;
-};
+}
 
-std::string debugReadPref(const ReadPreferenceSetting& readPref) {
-    std::stringstream s;
-    s << readPref.toString();
+std::string toStringWithMinOpTime(const ReadPreferenceSetting& readPref) {
+    BSONObjBuilder builder;
+    readPref.toInnerBSON(&builder);
     if (!readPref.minOpTime.isNull()) {
-        s << "; minOpTime - " << readPref.minOpTime;
+        builder.append("minOpTime", readPref.minOpTime.toBSON());
+    }
+    return builder.obj().toString();
+}
+
+// TODO: remove
+std::string debug(boost::optional<std::vector<HostAndPort>> x) {
+    std::stringstream s;
+    if (x) {
+        for (auto h : *x) {
+            s << h.toString() << "; ";
+        }
+    }
+    return s.str();
+}
+
+// TODO: remove
+std::string debug(boost::optional<HostAndPort> x) {
+    std::stringstream s;
+    if (x) {
+        s << (*x).toString() << "; ";
     }
     return s.str();
 }
@@ -103,12 +116,12 @@ std::string debugReadPref(const ReadPreferenceSetting& readPref) {
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskExecutor> executor)
     : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
       _uri(uri),
-      _executor(_initTaskExecutor(executor)),
+      _executor(executor),
       _random(PseudoRandom(Date_t::now().asInt64())) {
 
     // TODO: sdam should use the HostAndPort type for ServerAddress
     std::vector<ServerAddress> seeds;
-    for (const auto seed : uri.getServers()) {
+    for (const auto& seed : uri.getServers()) {
         seeds.push_back(seed.toString());
     }
 
@@ -124,8 +137,8 @@ ReplicaSetMonitorPtr ReplicaSetMonitor::make(const MongoURI& uri,
 }
 
 void ReplicaSetMonitor::init() {
-    stdx::lock_guard<Mutex> lock(_mutex);
-    _logger() << "Starting Replica Set Monitor " << _uri;
+    stdx::lock_guard lock(_mutex);
+    LOG(kDefaultLogLevel) << _logPrefix() << "Starting Replica Set Monitor with uri: " << _uri;
 
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
     _topologyManager =
@@ -135,17 +148,20 @@ void ReplicaSetMonitor::init() {
 
     _eventsPublisher->registerListener(shared_from_this());
     _eventsPublisher->registerListener(_isMasterMonitor);
-    _isClosed = false;
+    _isClosed.store(false);
 
     _startOutstandingQueryProcessor();
     globalRSMonitorManager.getNotifier().onFoundSet(getName());
 }
 
 void ReplicaSetMonitor::close() {
+    if (_isClosed.load())
+        return;
+
     {
-        stdx::lock_guard<Mutex> lock(_mutex);
-        _isClosed = true;
-        _logger() << "Closing Replica Set Monitor " << getName();
+        stdx::lock_guard lock(_mutex);
+        _isClosed.store(true);
+        LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
         _eventsPublisher->close();
         _isMasterMonitor->close();
         _failOutstandingWitStatus(
@@ -157,11 +173,7 @@ void ReplicaSetMonitor::close() {
     _outstandingQueriesCV.notify_all();
     _queryProcessorThread.join();
 
-    _logger() << "Done closing Replica Set Monitor " << getName();
-}
-
-bool ReplicaSetMonitor::isClosed() const {
-    return _isClosed.load();
+    LOG(kDefaultLogLevel) << _logPrefix() << "Done closing Replica Set Monitor";
 }
 
 SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
@@ -179,7 +191,7 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
 std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
     const std::vector<ServerDescriptionPtr>& serverDescriptions) {
     std::vector<HostAndPort> result;
-    for (const auto server : serverDescriptions) {
+    for (const auto& server : serverDescriptions) {
         result.push_back(HostAndPort(server->getAddress()));
     }
     return result;
@@ -188,19 +200,22 @@ std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
     using future_type = std::vector<HostAndPort>;
-    _logger() << "getHostsOrRefresh: " << debugReadPref(criteria) << "; maxWait - " << maxWait;
+
 
     // In the fast case (stable topology), we avoid mutex acquisition.
-    if (isClosed()) {
+    if (_isClosed.load()) {
         return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
     }
 
     // try to satisfy query immediately
-    const auto& immediateResult = _getHosts(criteria);
+    auto immediateResult = _getHosts(criteria);
     if (immediateResult) {
-        return {std::move(*immediateResult)};
+        LOG(kLowerLogLevel) << _logPrefix() << "getHosts: " << toStringWithMinOpTime(criteria)
+                            << " -> " << debug(immediateResult);
+        return {*immediateResult};
     }
     _isMasterMonitor->requestImmediateCheck();
+    LOG(kLowerLogLevel) << _logPrefix() << "start getHosts: " << toStringWithMinOpTime(criteria);
 
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
@@ -210,11 +225,11 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
 
     Future<future_type> result;
     {
-        mongo::stdx::lock_guard<Mutex> lk(_mutex);
+        stdx::lock_guard lk(_mutex);
 
         // We check if we are closed here since someone could have called
         // close() concurrently with the call above.
-        if (isClosed()) {
+        if (_isClosed.load()) {
             return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
         }
 
@@ -226,7 +241,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
 
         auto deadlineCb = [query,
                            self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
-            mongo::stdx::lock_guard<Mutex> lock(self->_mutex);
+            stdx::lock_guard lock(self->_mutex);
             if (query->done) {
                 return;
             }
@@ -241,7 +256,8 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
             const auto errorStatus = self->_makeUnsatisfiedReadPrefError(query->criteria);
             query->promise.setError(errorStatus);
             query->done = true;
-            self->_logger() << "timeout: " << errorStatus.toString();
+            LOG(kDefaultLogLevel) << self->_logPrefix()
+                                  << "host selection timeout: " << errorStatus.toString();
         };
         auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
 
@@ -264,11 +280,9 @@ boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
     auto result = _serverSelector->selectServers(_currentTopology(), criteria);
     if (result) {
         std::stringstream buf;
-        for (auto serverDescription : *result) {
+        for (const auto& serverDescription : *result) {
             buf << serverDescription->getAddress() << ", ";
         }
-        log() << getName() << " getHosts; " << debugReadPref(criteria) << "; result - "
-              << ((result) ? buf.str() : "");
         return _extractHosts(*result);
     }
     return boost::none;
@@ -301,15 +315,14 @@ bool ReplicaSetMonitor::isHostUp(const HostAndPort& host) const {
     auto currentTopology = _currentTopology();
     const boost::optional<ServerDescriptionPtr>& serverDescription =
         currentTopology->findServerByAddress(host.toString());
-    return serverDescription != boost::none &&
-        (*serverDescription)->getType() != ServerType::kUnknown;
+    return serverDescription && (*serverDescription)->getType() != ServerType::kUnknown;
 }
 
 int ReplicaSetMonitor::getMinWireVersion() const {
     auto currentTopology = _currentTopology();
     const std::vector<ServerDescriptionPtr>& servers = currentTopology->getServers();
     if (servers.size() > 0) {
-        const auto serverDescription =
+        const auto& serverDescription =
             *std::min_element(servers.begin(), servers.end(), minWireCompare);
         return serverDescription->getMinWireVersion();
     } else {
@@ -321,7 +334,7 @@ int ReplicaSetMonitor::getMaxWireVersion() const {
     auto currentTopology = _currentTopology();
     const std::vector<ServerDescriptionPtr>& servers = currentTopology->getServers();
     if (servers.size() > 0) {
-        const auto serverDescription =
+        const auto& serverDescription =
             *std::max_element(servers.begin(), servers.end(), maxWireCompare);
         return serverDescription->getMaxWireVersion();
     } else {
@@ -412,7 +425,7 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
         bool isSecondary = serverDescription->getType() == ServerType::kRSSecondary;
         bool isHidden = serverDescription->getType() == ServerType::kRSGhost;
 
-        BSONObjBuilder builder;
+        BSONObjBuilder builder(hosts.subobjStart());
         builder.append("addr", serverDescription->getAddress());
         builder.append("ok", isUp);
         builder.append("ismaster", isMaster);  // intentionally not camelCase
@@ -420,11 +433,10 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
         builder.append("secondary", isSecondary);
         builder.append("pingTimeMillis", pingTimeMillis(serverDescription));
 
-        BSONObjBuilder tagsBuilder;
-        serverDescription->getBsonTags(tagsBuilder);
-        builder.append("tags", tagsBuilder.obj());
-
-        hosts.append(builder.obj());
+        if (serverDescription->getTags().size()) {
+            BSONObjBuilder tagsBuilder(builder.subobjStart("tags"));
+            serverDescription->getBsonTags(tagsBuilder);
+        }
     }
 }
 
@@ -448,22 +460,17 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     // notify external components, if there are membership
     // changes in the topology.
     if (_hasMembershipChange(previousDescription, newDescription)) {
-        _logger() << "Topology Description Change: " << newDescription->toString();
+        LOG(kDefaultLogLevel) << _logPrefix() << "Topology Change: " << newDescription->toString();
 
         // TODO: remove when HostAndPort conversion is done.
-        std::vector<HostAndPort> servers;
-        for (const auto server : newDescription->getServers()) {
-            servers.push_back(HostAndPort(server->getAddress()));
-        }
+        std::vector<HostAndPort> servers = _extractHosts(newDescription->getServers());
 
         auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
         auto maybePrimary = newDescription->getPrimary();
         if (maybePrimary) {
             // TODO: remove need for HostAndPort conversion
-            std::set<HostAndPort> secondaries;
-            for (auto secondary : newDescription->findServers(secondaryPredicate)) {
-                secondaries.insert(HostAndPort(secondary->getAddress()));
-            }
+            auto hostList = _extractHosts(newDescription->findServers(secondaryPredicate));
+            std::set<HostAndPort> secondaries(hostList.begin(), hostList.end());
 
             auto primaryAddress = HostAndPort((*maybePrimary)->getAddress());
             globalRSMonitorManager.getNotifier().onConfirmedSet(
@@ -492,42 +499,6 @@ void ReplicaSetMonitor::onServerPingSucceededEvent(sdam::IsMasterRTT durationMS,
     _topologyManager->onServerRTTUpdated(hostAndPort, durationMS);
 }
 
-std::shared_ptr<executor::TaskExecutor> ReplicaSetMonitor::_initTaskExecutor(
-    std::shared_ptr<executor::TaskExecutor> executor) {
-    if (executor) {
-        return executor;
-    }
-
-    auto hookList = std::make_unique<rpc::EgressMetadataHookList>();
-    auto net = executor::makeNetworkInterface(
-        "ReplicaSetMonitor-TaskExecutor", nullptr, std::move(hookList));
-    auto pool = std::make_unique<executor::NetworkInterfaceThreadPool>(net.get());
-    _executor = std::make_shared<executor::ThreadPoolTaskExecutor>(std::move(pool), std::move(net));
-    _executor->startup();
-    return _executor;
-}
-
-// TODO: remove
-std::string debug(boost::optional<std::vector<HostAndPort>> x) {
-    std::stringstream s;
-    if (x) {
-        auto v = *x;
-        for (auto h : v) {
-            s << h.toString() << "; ";
-        }
-    }
-    return s.str();
-}
-
-// TODO: remove
-std::string debug(boost::optional<HostAndPort> x) {
-    std::stringstream s;
-    if (x) {
-        auto v = *x;
-        s << v.toString() << "; ";
-    }
-    return s.str();
-}
 
 // This function attempts to satisfy outstanding queries when we have new information.
 // It also will remove any queries that have already passed the deadline.
@@ -554,8 +525,8 @@ void ReplicaSetMonitor::_satisfyOutstandingQueries(WithLock) {
                 _executor->cancel(query->deadlineHandle);
                 query->done = true;
                 query->promise.emplaceValue(std::move(*result));
-                _logger() << "satisfy query: " << query->criteria.toString() << " ("
-                          << _executor->now() - query->start << ")";
+                LOG(kLowerLogLevel) << _logPrefix() << "finish getHosts: " << toStringWithMinOpTime(query->criteria)
+                                    << " (" << _executor->now() - query->start << ")";
                 shouldRemove = true;
                 ++numSatisfied;
             }
@@ -596,8 +567,8 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
             });
             // mutex is reacquired after wait
 
-            if (self->_isClosed) {
-                self->_logger() << "exiting query processor loop";
+            if (self->_isClosed.load()) {
+                LOG(kLowerLogLevel) << self->_logPrefix() << "exit query processor loop";
                 return;
             }
 
@@ -606,15 +577,15 @@ void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
     };
 
     // TODO: we probably only need one of these, not one per instance.
-    _queryProcessorThread = std::thread(queryProcessor);
+    _queryProcessorThread = stdx::thread(queryProcessor);
 }
 
-logger::LogstreamBuilder ReplicaSetMonitor::_logger(int n) {
-    return std::move(log() << kLogPrefix << " (" << this->getName() << ") ");
+std::string ReplicaSetMonitor::_logPrefix() {
+    return str::stream() << kLogPrefix << " [" << getName() << "] ";
 }
 
 void ReplicaSetMonitor::_failOutstandingWitStatus(WithLock, Status status) {
-    for (auto query : _outstandingQueries) {
+    for (const auto& query : _outstandingQueries) {
         if (query->done)
             continue;
 

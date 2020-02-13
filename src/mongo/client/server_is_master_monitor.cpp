@@ -39,14 +39,14 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
 }
 
 void SingleServerIsMasterMonitor::init() {
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
     _isClosed = false;
     _scheduleNextIsMaster(lock, Milliseconds(0));
 }
 
 void SingleServerIsMasterMonitor::requestImmediateCheck() {
     Milliseconds delayUntilNextCheck;
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
 
     // remain in expedited mode until the replica set recovers
     if (!_isExpedited) {
@@ -103,7 +103,7 @@ void SingleServerIsMasterMonitor::_scheduleNextIsMaster(WithLock, Milliseconds d
         });
 
     if (!swCbHandle.isOK()) {
-        mongo::Microseconds latency(timer.micros());
+        Microseconds latency(timer.micros());
         _onIsMasterFailure(latency, swCbHandle.getStatus(), BSONObj());
         return;
     }
@@ -116,7 +116,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
         HostAndPort(_host), "admin", IS_MASTER_BSON, nullptr, _timeoutMS);
     request.sslMode = _setUri.getSSLMode();
 
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
     if (_isClosed)
         return;
 
@@ -127,7 +127,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
          timer](const executor::TaskExecutor::RemoteCommandCallbackArgs& result) mutable {
             Milliseconds nextRefreshPeriod;
             {
-                stdx::lock_guard<Mutex> lk(self->_mutex);
+                stdx::lock_guard lk(self->_mutex);
                 self->_isMasterOutstanding = false;
 
                 if (self->_isClosed || ErrorCodes::isCancelationError(result.response.status)) {
@@ -150,7 +150,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
         });
 
     if (!swCbHandle.isOK()) {
-        mongo::Microseconds latency(timer.micros());
+        Microseconds latency(timer.micros());
         _onIsMasterFailure(latency, swCbHandle.getStatus(), BSONObj());
         fassertFailedWithStatus(31448, swCbHandle.getStatus());
     }
@@ -160,7 +160,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 }
 
 void SingleServerIsMasterMonitor::close() {
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
     LOG(kDebugLevel) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
     _isClosed = true;
 
@@ -215,7 +215,7 @@ Milliseconds SingleServerIsMasterMonitor::_currentRefreshPeriod(WithLock) {
 }
 
 void SingleServerIsMasterMonitor::disableExpeditedChecking() {
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
     _isExpedited = false;
 }
 
@@ -238,7 +238,7 @@ ServerIsMasterMonitor::ServerIsMasterMonitor(
 }
 
 void ServerIsMasterMonitor::close() {
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
     if (_isClosed)
         return;
 
@@ -252,7 +252,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     sdam::TopologyDescriptionPtr previousDescription,
     sdam::TopologyDescriptionPtr newDescription) {
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
     if (_isClosed)
         return;
 
@@ -312,7 +312,7 @@ std::shared_ptr<executor::TaskExecutor> ServerIsMasterMonitor::_setupExecutor(
 }
 
 void ServerIsMasterMonitor::requestImmediateCheck() {
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
     for (auto& addressAndMonitor : _singleMonitors) {
         addressAndMonitor.second->requestImmediateCheck();
     }

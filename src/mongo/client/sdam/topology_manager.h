@@ -45,7 +45,7 @@ class TopologyManager {
     TopologyManager(const TopologyManager&) = delete;
 
 public:
-    TopologyManager(SdamConfiguration config,
+    explicit TopologyManager(SdamConfiguration config,
                     ClockSource* clockSource,
                     TopologyEventsPublisherPtr eventsPublisher = nullptr);
 
@@ -88,7 +88,7 @@ private:
     const SdamConfiguration _config;
     ClockSource* _clockSource;
     TopologyDescriptionPtr _topologyDescription;
-    std::unique_ptr<TopologyStateMachine> _topologyStateMachine;
+    TopologyStateMachinePtr _topologyStateMachine;
     TopologyEventsPublisherPtr _topologyEventsPublisher;
 };
 }  // namespace mongo::sdam

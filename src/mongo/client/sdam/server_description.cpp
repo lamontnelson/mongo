@@ -398,9 +398,10 @@ BSONObj ServerDescription::toBson() const {
     bson.append("arbiters", _arbiters);
     bson.append("passives", _passives);
 
-    BSONObjBuilder tagsBuilder;
-    getBsonTags(tagsBuilder);
-    bson.append("tags", tagsBuilder.obj());
+    if (getTags().size()) {
+        BSONObjBuilder tagsBuilder(bson.subobjStart("tags"));
+        getBsonTags(tagsBuilder);
+    }
 
     return bson.obj();
 }

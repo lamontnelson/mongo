@@ -106,7 +106,7 @@ bool TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome
     // if we are equal to the old description, just install the new description without
     // performing any actions on the state machine.
     auto isEqualToOldServerDescription =
-        (lastServerDescription && (*(lastServerDescription.get()) == *newServerDescription));
+        (lastServerDescription && (**lastServerDescription) == *newServerDescription);
     if (isEqualToOldServerDescription) {
         _topologyDescription->installServerDescription(newServerDescription);
     } else {

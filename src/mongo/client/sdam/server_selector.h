@@ -114,16 +114,14 @@ private:
                 return duration_cast<Milliseconds>(result);
             } else if (topologyDescription->getType() == TopologyType::kReplicaSetNoPrimary) {
                 //  SMax.lastWriteDate - S.lastWriteDate + heartbeatFrequencyMS
-                ServerDescriptionPtr* maxServerDescription = nullptr;
                 Date_t maxLastWriteDate = Date_t::min();
 
                 // identify secondary with max last write date.
-                for (auto s : topologyDescription->getServers()) {
+                for (const auto& s : topologyDescription->getServers()) {
                     if (s->getType() != ServerType::kRSSecondary)
                         continue;
                     invariant(s->getLastWriteDate());
                     if (s->getLastWriteDate() > maxLastWriteDate) {
-                        maxServerDescription = &s;
                         maxLastWriteDate = *s->getLastWriteDate();
                     }
                 }
@@ -161,7 +159,7 @@ private:
     // function, and is a function that takes a ServerDescriptionPtr and returns a bool indicating
     // whether to keep this server or not based on the ReadPreference, server type, and recency
     // metrics of the server.
-    using SelectionFilter = std::function<std::function<bool(const ServerDescriptionPtr&)>(
+    using SelectionFilter = unique_function<std::function<bool(const ServerDescriptionPtr&)>(
         const ReadPreferenceSetting&)>;
 
     const SelectionFilter secondaryFilter = [this](const ReadPreferenceSetting& readPref) {
@@ -193,7 +191,7 @@ struct LatencyWindow {
     IsMasterRTT lower;
     IsMasterRTT upper;
 
-    LatencyWindow(const IsMasterRTT lowerBound, const IsMasterRTT windowWidth)
+    explicit LatencyWindow(const IsMasterRTT lowerBound, const IsMasterRTT windowWidth)
         : lower(lowerBound), upper(lowerBound + windowWidth) {}
 
     bool isWithinWindow(IsMasterRTT latency);
@@ -201,8 +199,8 @@ struct LatencyWindow {
     // remove servers not in the latency window in-place.
     void filterServers(std::vector<ServerDescriptionPtr>* servers);
 
-    static auto inline rttCompareFn = [](ServerDescriptionPtr a, ServerDescriptionPtr b) {
+    static bool rttCompareFn(const ServerDescriptionPtr& a, const ServerDescriptionPtr& b) {
         return a->getRtt() < b->getRtt();
-    };
+    }
 };
 }  // namespace mongo::sdam
