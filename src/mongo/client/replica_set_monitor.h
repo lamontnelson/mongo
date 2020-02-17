@@ -51,9 +51,12 @@ namespace mongo {
 
 class BSONObj;
 class ReplicaSetMonitor;
+class ReplicaSetMonitorQueryProcessor;
 class ReplicaSetMonitorTest;
 struct ReadPreferenceSetting;
-typedef std::shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorPtr;
+using ReplicaSetMonitorPtr = std::shared_ptr<ReplicaSetMonitor>;
+using ReplicaSetMontiorQueryProcessorPtr = std::shared_ptr<ReplicaSetMonitorQueryProcessor>;
+using ReplicaSetMonitorTask = std::function<void(ReplicaSetMonitorPtr)>;
 
 /**
  * Holds state about a replica set and provides a means to refresh the local view.
@@ -221,7 +224,6 @@ public:
      */
     static ReplicaSetChangeNotifier& getNotifier();
 
-
     /**
      * Permanently stops all monitoring on replica sets.
      */
@@ -244,10 +246,13 @@ private:
     };
     using HostQueryPtr = std::shared_ptr<HostQuery>;
 
+    SemiFuture<std::vector<HostAndPort>> _enqueueOutstandingQuery(
+        WithLock, const ReadPreferenceSetting& criteria, const Date_t& deadline);
+
     std::vector<HostAndPort> _extractHosts(
         const std::vector<sdam::ServerDescriptionPtr>& serverDescriptions);
+	boost::optional<std::vector<HostAndPort>> _getHosts(const TopologyDescriptionPtr& topology, const ReadPreferenceSetting& criteria);
     boost::optional<std::vector<HostAndPort>> _getHosts(const ReadPreferenceSetting& criteria);
-    void _satisfyOutstandingQueries(WithLock);
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            sdam::TopologyDescriptionPtr previousDescription,
@@ -272,8 +277,7 @@ private:
     // Note that most functions will want to save the result of this function once per computation
     // so that we are operating on a consistent read-only view of the topology.
     sdam::TopologyDescriptionPtr _currentTopology() const;
-    boost::optional<HostAndPort> _getHost(const ReadPreferenceSetting& criteria);
-    void _startOutstandingQueryProcessor();
+
     std::string _logPrefix();
 
     void _failOutstandingWitStatus(WithLock, Status status);
@@ -282,6 +286,9 @@ private:
 
     Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
     Status _makeReplicaSetMonitorRemovedError() const;
+
+	// execute the provided function with the RSM's mutex locked
+	void _withLock(ReplicaSetMonitorTask f);
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
@@ -292,13 +299,11 @@ private:
     const MongoURI _uri;
 
     std::shared_ptr<executor::TaskExecutor> _executor;
-    stdx::thread _queryProcessorThread;
+	ReplicaSetMontiorQueryProcessorPtr _queryProcessor;
     AtomicWord<bool> _isClosed{true};
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
-    // variables below are protected by the mutex
     ClockSource* _clockSource;
-    stdx::condition_variable _outstandingQueriesCV;
     std::vector<HostQueryPtr> _outstandingQueries;
     mutable PseudoRandom _random;
 
@@ -308,6 +313,8 @@ private:
     static inline const auto kLogPrefix = "[ReplicaSetMonitor]";
     static inline const auto kDefaultLogLevel = logger::LogSeverity::Debug(1);
     static inline const auto kLowerLogLevel = kDefaultLogLevel.lessSevere();
+
+    friend class ReplicaSetMonitorQueryProcessor;
 };
 
 }  // namespace mongo

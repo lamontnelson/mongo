@@ -46,8 +46,8 @@ class TopologyManager {
 
 public:
     explicit TopologyManager(SdamConfiguration config,
-                    ClockSource* clockSource,
-                    TopologyEventsPublisherPtr eventsPublisher = nullptr);
+                             ClockSource* clockSource,
+                             TopologyEventsPublisherPtr eventsPublisher = nullptr);
 
     /**
      * This function atomically:

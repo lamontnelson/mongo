@@ -67,8 +67,7 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
             auto maxOpTime = (*maxIt)->getOpTime();
             if (maxOpTime && maxOpTime < criteria.minOpTime) {
                 // ignore minOpTime
-                const_cast<ReadPreferenceSetting&>(criteria) =
-                    ReadPreferenceSetting(criteria.pref);
+                const_cast<ReadPreferenceSetting&>(criteria) = ReadPreferenceSetting(criteria.pref);
                 log() << "ignoring minOpTime for " << criteria.toString();
             }
         }
@@ -132,8 +131,7 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
 }
 
 boost::optional<std::vector<ServerDescriptionPtr>> SdamServerSelector::selectServers(
-    const TopologyDescriptionPtr topologyDescription,
-    const ReadPreferenceSetting& criteria) {
+    const TopologyDescriptionPtr topologyDescription, const ReadPreferenceSetting& criteria) {
 
     // If the topology wire version is invalid, raise an error
     if (!topologyDescription->isWireVersionCompatible()) {

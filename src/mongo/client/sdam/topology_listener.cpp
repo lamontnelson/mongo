@@ -44,9 +44,9 @@ void TopologyEventsPublisher::removeListener(TopologyListenerPtr listener) {
 }
 
 void TopologyEventsPublisher::close() {
-        stdx::lock_guard lock(_mutex);
-        _listeners.clear();
-        _isClosed = true;
+    stdx::lock_guard lock(_mutex);
+    _listeners.clear();
+    _isClosed = true;
 }
 
 void TopologyEventsPublisher::onTopologyDescriptionChangedEvent(

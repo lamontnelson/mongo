@@ -48,8 +48,7 @@ private:
     Milliseconds _heartbeatFrequencyMS;
     Milliseconds _timeoutMS = SdamConfiguration::kDefaultConnectTimeoutMS;
 
-        boost::optional<Date_t>
-            _lastIsMasterAt;
+    boost::optional<Date_t> _lastIsMasterAt;
     bool _isMasterOutstanding = false;
     bool _isExpedited = false;
     executor::TaskExecutor::CallbackHandle _nextIsMasterHandle;

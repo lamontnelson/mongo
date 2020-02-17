@@ -191,6 +191,7 @@ clientDriverEnv.Library(
         env.Idlc('global_conn_pool.idl')[0],
         'replica_set_change_notifier.cpp',
         'replica_set_monitor.cpp',
+        'replica_set_monitor_query_processor.cpp',
         'replica_set_monitor_manager.cpp',
 		'server_is_master_monitor.cpp',
     ],

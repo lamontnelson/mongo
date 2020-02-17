@@ -117,6 +117,7 @@ ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskEx
     : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
       _uri(uri),
       _executor(executor),
+	  _queryProcessor(globalRSMonitorManager.getQueryProcessor()) ,
       _random(PseudoRandom(Date_t::now().asInt64())) {
 
     // TODO: sdam should use the HostAndPort type for ServerAddress
@@ -150,7 +151,6 @@ void ReplicaSetMonitor::init() {
     _eventsPublisher->registerListener(_isMasterMonitor);
     _isClosed.store(false);
 
-    _startOutstandingQueryProcessor();
     globalRSMonitorManager.getNotifier().onFoundSet(getName());
 }
 
@@ -161,6 +161,7 @@ void ReplicaSetMonitor::close() {
     {
         stdx::lock_guard lock(_mutex);
         _isClosed.store(true);
+		_queryProcessor = nullptr;
         LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
         _eventsPublisher->close();
         _isMasterMonitor->close();
@@ -169,9 +170,6 @@ void ReplicaSetMonitor::close() {
 
         globalRSMonitorManager.getNotifier().onDroppedSet(getName());
     }
-
-    _outstandingQueriesCV.notify_all();
-    _queryProcessorThread.join();
 
     LOG(kDefaultLogLevel) << _logPrefix() << "Done closing Replica Set Monitor";
 }
@@ -199,12 +197,10 @@ std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
 
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
-    using future_type = std::vector<HostAndPort>;
-
 
     // In the fast case (stable topology), we avoid mutex acquisition.
     if (_isClosed.load()) {
-        return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
+        return _makeReplicaSetMonitorRemovedError();
     }
 
     // try to satisfy query immediately
@@ -223,61 +219,69 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         return SemiFuture<std::vector<HostAndPort>>(_makeUnsatisfiedReadPrefError(criteria));
     }
 
-    Future<future_type> result;
     {
         stdx::lock_guard lk(_mutex);
 
-        // We check if we are closed here since someone could have called
-        // close() concurrently with the call above.
+        // We check if we are closed under the mutex here since someone could have called
+        // close() concurrently with the code above.
         if (_isClosed.load()) {
-            return SemiFuture<future_type>(_makeReplicaSetMonitorRemovedError());
+            return _makeReplicaSetMonitorRemovedError();
         }
 
-        auto pf = makePromiseFuture<future_type>();
-        auto query = std::make_shared<HostQuery>();
-        query->deadline = deadline;
-        query->criteria = criteria;
-        query->promise = std::move(pf.promise);
-
-        auto deadlineCb = [query,
-                           self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
-            stdx::lock_guard lock(self->_mutex);
-            if (query->done) {
-                return;
-            }
-
-            const auto cbStatus = cbArgs.status;
-            if (!cbStatus.isOK()) {
-                query->promise.setError(cbStatus);
-                query->done = true;
-                return;
-            }
-
-            const auto errorStatus = self->_makeUnsatisfiedReadPrefError(query->criteria);
-            query->promise.setError(errorStatus);
-            query->done = true;
-            LOG(kDefaultLogLevel) << self->_logPrefix()
-                                  << "host selection timeout: " << errorStatus.toString();
-        };
-        auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
-
-        if (!swDeadlineHandle.isOK()) {
-            log() << "error scheduling deadline handler: " << swDeadlineHandle.getStatus();
-            return SemiFuture<future_type>::makeReady(swDeadlineHandle.getStatus());
-        }
-        query->deadlineHandle = swDeadlineHandle.getValue();
-
-        _outstandingQueries.emplace_back(query);
-        result = std::move(pf.future);
+        return std::move(_enqueueOutstandingQuery(lk, criteria, deadline)).semi();
     }
+}
 
-    _outstandingQueriesCV.notify_all();
-    return std::move(result).semi();
+SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::_enqueueOutstandingQuery(
+    WithLock, const ReadPreferenceSetting& criteria, const Date_t& deadline) {
+    using HostAndPortList = std::vector<HostAndPort>;
+    Future<HostAndPortList> result;
+
+    auto query = std::make_shared<HostQuery>();
+    query->criteria = criteria;
+    query->deadline = deadline;
+
+    auto pf = makePromiseFuture<HostAndPortList>();
+    query->promise = std::move(pf.promise);
+
+    auto deadlineCb = [query, self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
+        stdx::lock_guard lock(self->_mutex);
+        if (query->done) {
+            return;
+        }
+
+        const auto cbStatus = cbArgs.status;
+        if (!cbStatus.isOK()) {
+            query->promise.setError(cbStatus);
+            query->done = true;
+            return;
+        }
+
+        const auto errorStatus = self->_makeUnsatisfiedReadPrefError(query->criteria);
+        query->promise.setError(errorStatus);
+        query->done = true;
+        LOG(kDefaultLogLevel) << self->_logPrefix()
+                              << "host selection timeout: " << errorStatus.toString();
+    };
+    auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
+
+    if (!swDeadlineHandle.isOK()) {
+        log() << "error scheduling deadline handler: " << swDeadlineHandle.getStatus();
+        return SemiFuture<HostAndPortList>::makeReady(swDeadlineHandle.getStatus());
+    }
+    query->deadlineHandle = swDeadlineHandle.getValue();
+    _outstandingQueries.push_back(query);
+
+	// send topology changes to the query processor that satisfies the future.
+    _eventsPublisher->registerListener(_queryProcessor);
+
+    return std::move(pf.future).semi();
 }
 
 boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
+		const TopologyDescriptionPtr& topology,
     const ReadPreferenceSetting& criteria) {
-    auto result = _serverSelector->selectServers(_currentTopology(), criteria);
+    auto result = _serverSelector->selectServers(topology, criteria);
     if (result) {
         std::stringstream buf;
         for (const auto& serverDescription : *result) {
@@ -286,6 +290,11 @@ boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
         return _extractHosts(*result);
     }
     return boost::none;
+}
+
+boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
+    const ReadPreferenceSetting& criteria) {
+	return _getHosts(_currentTopology(), criteria);
 }
 
 HostAndPort ReplicaSetMonitor::getMasterOrUassert() {
@@ -486,7 +495,6 @@ void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durati
                                                         const BSONObj reply) {
     IsMasterOutcome outcome(hostAndPort, reply, durationMs);
     _topologyManager->onServerDescription(outcome);
-    _outstandingQueriesCV.notify_all();
 }
 
 void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress& hostAndPort,
@@ -497,87 +505,6 @@ void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress& hostAndPort
 void ReplicaSetMonitor::onServerPingSucceededEvent(sdam::IsMasterRTT durationMS,
                                                    const ServerAddress& hostAndPort) {
     _topologyManager->onServerRTTUpdated(hostAndPort, durationMS);
-}
-
-
-// This function attempts to satisfy outstanding queries when we have new information.
-// It also will remove any queries that have already passed the deadline.
-//
-// TODO: refactor so that we don't call _getHost(s) for every outstanding query
-// since some might be duplicates. but we do still want the randomization for multiple hosts.
-void ReplicaSetMonitor::_satisfyOutstandingQueries(WithLock) {
-    auto topologyDescription = _currentTopology();
-    auto& outstandingQueries = _outstandingQueries;
-    size_t numSatisfied = 0;
-
-    bool shouldRemove;
-    auto it = outstandingQueries.begin();
-
-    while (it != outstandingQueries.end()) {
-        auto& query = *it;
-        shouldRemove = false;
-
-        if (query->done) {
-            shouldRemove = true;
-        } else {
-            auto result = _getHosts(query->criteria);
-            if (result) {
-                _executor->cancel(query->deadlineHandle);
-                query->done = true;
-                query->promise.emplaceValue(std::move(*result));
-                LOG(kLowerLogLevel) << _logPrefix() << "finish getHosts: " << toStringWithMinOpTime(query->criteria)
-                                    << " (" << _executor->now() - query->start << ")";
-                shouldRemove = true;
-                ++numSatisfied;
-            }
-        }
-
-        if (shouldRemove) {
-            it = outstandingQueries.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    if (outstandingQueries.size()) {
-        _isMasterMonitor->requestImmediateCheck();
-    }
-}
-
-void ReplicaSetMonitor::_startOutstandingQueryProcessor() {
-    auto queryProcessor = [self = shared_from_this()]() {
-        while (true) {
-            stdx::unique_lock<Mutex> lock(self->_mutex);
-            Timer timer;
-            timer.reset();
-
-            self->_outstandingQueriesCV.wait(lock, [self] {
-                auto currentTopology = self->_currentTopology();
-                const auto& outstandingQueries = self->_outstandingQueries;
-                const auto isClosed = self->_isClosed.load();
-
-                // only wake up if we are closed or we have an outstanding query that we can
-                // satisfy.
-                bool isPossibleToSatisfy = outstandingQueries.size() > 0 &&
-                    (currentTopology->getType() == TopologyType::kReplicaSetWithPrimary ||
-                     currentTopology->getType() == TopologyType::kReplicaSetNoPrimary ||
-                     currentTopology->getType() == TopologyType::kSingle);
-
-                return isClosed || isPossibleToSatisfy;
-            });
-            // mutex is reacquired after wait
-
-            if (self->_isClosed.load()) {
-                LOG(kLowerLogLevel) << self->_logPrefix() << "exit query processor loop";
-                return;
-            }
-
-            self->_satisfyOutstandingQueries(lock);
-        }
-    };
-
-    // TODO: we probably only need one of these, not one per instance.
-    _queryProcessorThread = stdx::thread(queryProcessor);
 }
 
 std::string ReplicaSetMonitor::_logPrefix() {
@@ -620,6 +547,12 @@ bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDes
 
     return false;
 }
+
+
+	void ReplicaSetMonitor::_withLock(std::function<void(ReplicaSetMonitorPtr)> f) {
+		stdx::lock_guard<Mutex> lock(_mutex);
+		f(shared_from_this());
+	}
 
 Status ReplicaSetMonitor::_makeUnsatisfiedReadPrefError(
     const ReadPreferenceSetting& criteria) const {
