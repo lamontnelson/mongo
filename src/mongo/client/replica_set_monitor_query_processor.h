@@ -36,20 +36,20 @@
 namespace mongo {
 class ReplicaSetMonitor;
 
-class ReplicaSetMonitorQueryProcessor : public sdam::TopologyListener,
-     public std::enable_shared_from_this<ReplicaSetMonitorQueryProcessor> {
+class ReplicaSetMonitorQueryProcessor
+    : public sdam::TopologyListener,
+      public std::enable_shared_from_this<ReplicaSetMonitorQueryProcessor> {
 public:
     ReplicaSetMonitorQueryProcessor() {}
 
     void shutdown();
 
-    void addReplicaSetMonitor(ReplicaSetMonitorPtr rsm);
-
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            sdam::TopologyDescriptionPtr previousDescription,
                                            sdam::TopologyDescriptionPtr newDescription) override;
+
 private:
-	ReplicaSetMonitorTask _processOutstanding(const TopologyDescriptionPtr& topologyDescription);
+    ReplicaSetMonitorTask _processOutstanding(const TopologyDescriptionPtr& topologyDescription);
 
     static inline const logger::LogSeverity kLogLevel = logger::LogSeverity::Debug(1);
 

@@ -31,9 +31,9 @@
 
 #include <numeric>
 
-#include "mongo/util/log.h"
 #include "mongo/client/global_conn_pool.h"
 #include "mongo/client/replica_set_monitor_manager.h"
+#include "mongo/util/log.h"
 
 namespace mongo {
 namespace {
@@ -48,33 +48,36 @@ std::string toStringWithMinOpTime(const ReadPreferenceSetting& readPref) {
 }  // namespace
 
 void ReplicaSetMonitorQueryProcessor::shutdown() {
+    stdx::lock_guard lock(_mutex);
+    LOG(kLogLevel) << "shutdown replica set monitor query processor.";
+    _isShutdown = true;
+}
+
+void ReplicaSetMonitorQueryProcessor::onTopologyDescriptionChangedEvent(
+    UUID topologyId,
+    sdam::TopologyDescriptionPtr previousDescription,
+    sdam::TopologyDescriptionPtr newDescription) {
+    {
         stdx::lock_guard lock(_mutex);
-        LOG(kLogLevel) << "shutdown replica set monitor query processor.";
-        _isShutdown = true;
+        if (_isShutdown)
+            return;
+    }
+
+    const auto& setName = newDescription->getSetName();
+    invariant(setName);
+    auto replicaSetMonitor = globalRSMonitorManager.getMonitor(*setName);
+    if (!replicaSetMonitor) {
+        LOG(kLogLevel) << "could not find rsm instance for query processing.";
+        return;
+    }
+    replicaSetMonitor->_withLock(_processOutstanding(newDescription));
 }
 
-void ReplicaSetMonitorQueryProcessor::onTopologyDescriptionChangedEvent(UUID topologyId,
-                                           sdam::TopologyDescriptionPtr previousDescription,
-                                           sdam::TopologyDescriptionPtr newDescription) {
-	{     stdx::lock_guard lock(_mutex);
-		if (_isShutdown)
-			return;
-	}
-	
-	const auto& setName = newDescription->getSetName();
-	invariant(setName);
-	auto replicaSetMonitor = globalRSMonitorManager.getMonitor(*setName);
-	if (!replicaSetMonitor) {
-		LOG(kLogLevel) << "could not find rsm instance for query processing.";
-		return;
-	}
-	replicaSetMonitor->_withLock(_processOutstanding(newDescription));
-}
-
-ReplicaSetMonitorTask ReplicaSetMonitorQueryProcessor::_processOutstanding(const TopologyDescriptionPtr& topologyDescription) {
-	return [self=shared_from_this(), topologyDescription](const ReplicaSetMonitorPtr& rsm) {
-    // TODO: refactor so that we don't call _getHost(s) for every outstanding query
-    // since there some might be duplicates.
+ReplicaSetMonitorTask ReplicaSetMonitorQueryProcessor::_processOutstanding(
+    const TopologyDescriptionPtr& topologyDescription) {
+    return [self = shared_from_this(), topologyDescription](const ReplicaSetMonitorPtr& rsm) {
+        // TODO: refactor so that we don't call _getHost(s) for every outstanding query
+        // since there some might be duplicates.
         auto& outstandingQueries = rsm->_outstandingQueries;
         auto& executor = rsm->_executor;
 
@@ -112,8 +115,8 @@ ReplicaSetMonitorTask ReplicaSetMonitorQueryProcessor::_processOutstanding(const
         if (outstandingQueries.size()) {
             rsm->_isMasterMonitor->requestImmediateCheck();
         } else {
-			rsm->_eventsPublisher->removeListener(self);
-		}
-	};
+            rsm->_eventsPublisher->removeListener(self);
+        }
+    };
 }
 };  // namespace mongo

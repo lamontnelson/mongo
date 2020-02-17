@@ -117,7 +117,7 @@ ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskEx
     : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
       _uri(uri),
       _executor(executor),
-	  _queryProcessor(globalRSMonitorManager.getQueryProcessor()) ,
+      _queryProcessor(globalRSMonitorManager.getQueryProcessor()),
       _random(PseudoRandom(Date_t::now().asInt64())) {
 
     // TODO: sdam should use the HostAndPort type for ServerAddress
@@ -161,7 +161,7 @@ void ReplicaSetMonitor::close() {
     {
         stdx::lock_guard lock(_mutex);
         _isClosed.store(true);
-		_queryProcessor = nullptr;
+        _queryProcessor = nullptr;
         LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
         _eventsPublisher->close();
         _isMasterMonitor->close();
@@ -272,15 +272,14 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::_enqueueOutstandingQuery
     query->deadlineHandle = swDeadlineHandle.getValue();
     _outstandingQueries.push_back(query);
 
-	// send topology changes to the query processor that satisfies the future.
+    // send topology changes to the query processor that satisfies the future.
     _eventsPublisher->registerListener(_queryProcessor);
 
     return std::move(pf.future).semi();
 }
 
 boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
-		const TopologyDescriptionPtr& topology,
-    const ReadPreferenceSetting& criteria) {
+    const TopologyDescriptionPtr& topology, const ReadPreferenceSetting& criteria) {
     auto result = _serverSelector->selectServers(topology, criteria);
     if (result) {
         std::stringstream buf;
@@ -294,7 +293,7 @@ boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
 
 boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
     const ReadPreferenceSetting& criteria) {
-	return _getHosts(_currentTopology(), criteria);
+    return _getHosts(_currentTopology(), criteria);
 }
 
 HostAndPort ReplicaSetMonitor::getMasterOrUassert() {
@@ -549,10 +548,10 @@ bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDes
 }
 
 
-	void ReplicaSetMonitor::_withLock(std::function<void(ReplicaSetMonitorPtr)> f) {
-		stdx::lock_guard<Mutex> lock(_mutex);
-		f(shared_from_this());
-	}
+void ReplicaSetMonitor::_withLock(std::function<void(ReplicaSetMonitorPtr)> f) {
+    stdx::lock_guard<Mutex> lock(_mutex);
+    f(shared_from_this());
+}
 
 Status ReplicaSetMonitor::_makeUnsatisfiedReadPrefError(
     const ReadPreferenceSetting& criteria) const {

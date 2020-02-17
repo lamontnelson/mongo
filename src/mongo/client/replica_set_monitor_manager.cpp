@@ -63,8 +63,8 @@ using executor::TaskExecutor;
 using executor::TaskExecutorPool;
 using executor::ThreadPoolTaskExecutor;
 
-ReplicaSetMonitorManager::ReplicaSetMonitorManager() : _queryProcessor(std::make_shared<ReplicaSetMonitorQueryProcessor>()) {
-}
+ReplicaSetMonitorManager::ReplicaSetMonitorManager()
+    : _queryProcessor(std::make_shared<ReplicaSetMonitorQueryProcessor>()) {}
 
 ReplicaSetMonitorManager::~ReplicaSetMonitorManager() {
     shutdown();

@@ -251,7 +251,8 @@ private:
 
     std::vector<HostAndPort> _extractHosts(
         const std::vector<sdam::ServerDescriptionPtr>& serverDescriptions);
-	boost::optional<std::vector<HostAndPort>> _getHosts(const TopologyDescriptionPtr& topology, const ReadPreferenceSetting& criteria);
+    boost::optional<std::vector<HostAndPort>> _getHosts(const TopologyDescriptionPtr& topology,
+                                                        const ReadPreferenceSetting& criteria);
     boost::optional<std::vector<HostAndPort>> _getHosts(const ReadPreferenceSetting& criteria);
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
@@ -287,8 +288,8 @@ private:
     Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
     Status _makeReplicaSetMonitorRemovedError() const;
 
-	// execute the provided function with the RSM's mutex locked
-	void _withLock(ReplicaSetMonitorTask f);
+    // execute the provided function with the RSM's mutex locked
+    void _withLock(ReplicaSetMonitorTask f);
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
@@ -299,7 +300,7 @@ private:
     const MongoURI _uri;
 
     std::shared_ptr<executor::TaskExecutor> _executor;
-	ReplicaSetMontiorQueryProcessorPtr _queryProcessor;
+    ReplicaSetMontiorQueryProcessorPtr _queryProcessor;
     AtomicWord<bool> _isClosed{true};
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");

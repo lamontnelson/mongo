@@ -100,7 +100,7 @@ public:
 
     ReplicaSetChangeNotifier& getNotifier();
 
-	std::shared_ptr<ReplicaSetMonitorQueryProcessor> getQueryProcessor();
+    std::shared_ptr<ReplicaSetMonitorQueryProcessor> getQueryProcessor();
 
     bool isShutdown() const;
 
