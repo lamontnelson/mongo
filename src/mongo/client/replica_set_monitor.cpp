@@ -211,7 +211,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
         return {*immediateResult};
     }
     _isMasterMonitor->requestImmediateCheck();
-    LOG(kLowerLogLevel) << _logPrefix() << "start getHosts: " << toStringWithMinOpTime(criteria);
+    LOG(kDefaultLogLevel) << _logPrefix() << "start getHosts: " << toStringWithMinOpTime(criteria);
 
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;

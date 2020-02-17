@@ -65,16 +65,22 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
         return;
     }
 
+    const auto currentRefreshPeriod = _currentRefreshPeriod(lock);
+
     const Milliseconds timeSinceLastCheck =
         (_lastIsMasterAt) ? _executor->now() - *_lastIsMasterAt : Milliseconds::max();
 
-    delayUntilNextCheck = (_lastIsMasterAt && timeSinceLastCheck < _heartbeatFrequencyMS)
-        ? _heartbeatFrequencyMS - timeSinceLastCheck
+    delayUntilNextCheck = (_lastIsMasterAt && (timeSinceLastCheck < currentRefreshPeriod))
+        ? currentRefreshPeriod - timeSinceLastCheck
         : kZeroMs;
 
     // if our calculated delay is less than the next scheduled call, then run the check sooner.
-    // Otherwise, do nothing.
-    if (delayUntilNextCheck < (_currentRefreshPeriod(lock) - timeSinceLastCheck) ||
+    // Otherwise, do nothing. Three cases to cancel existing request:
+    // 1. refresh period has changed to expedited, so (currentRefreshPeriod - timeSinceLastCheck) is < 0
+    // 2. calculated delay is less then next scheduled isMaster
+    // 3. isMaster was never scheduled.
+    if (((currentRefreshPeriod - timeSinceLastCheck) < kZeroMs) ||
+        (delayUntilNextCheck < (currentRefreshPeriod - timeSinceLastCheck)) ||
         timeSinceLastCheck == Milliseconds::max()) {
         _cancelOutstandingRequest(lock);
     } else {
@@ -138,6 +144,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
                 self->_lastIsMasterAt = self->_executor->now();
                 nextRefreshPeriod = self->_currentRefreshPeriod(lk);
+                LOG(kDebugLevel) << "next refresh period in " + nextRefreshPeriod.toString();
                 self->_scheduleNextIsMaster(lk, nextRefreshPeriod);
             }
 
@@ -184,6 +191,9 @@ void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
 
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
+    LOG(kDebugLevel) << "received successful isMaster for server " << _host
+                     << " (" << latency << ")"
+                     << "; " << bson.toString();
     _eventListener->onServerHeartbeatSucceededEvent(
         duration_cast<Milliseconds>(latency), _host, bson);
 }
