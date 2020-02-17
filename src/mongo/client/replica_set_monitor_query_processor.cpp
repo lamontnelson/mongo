@@ -77,7 +77,7 @@ ReplicaSetMonitorTask ReplicaSetMonitorQueryProcessor::_processOutstanding(
     const TopologyDescriptionPtr& topologyDescription) {
     return [self = shared_from_this(), topologyDescription](const ReplicaSetMonitorPtr& rsm) {
         // TODO: refactor so that we don't call _getHost(s) for every outstanding query
-        // since there some might be duplicates.
+        // since there might be duplicates.
         auto& outstandingQueries = rsm->_outstandingQueries;
         auto& executor = rsm->_executor;
 
@@ -105,16 +105,15 @@ ReplicaSetMonitorTask ReplicaSetMonitorQueryProcessor::_processOutstanding(
                 }
             }
 
-            if (shouldRemove) {
-                it = outstandingQueries.erase(it);
-            } else {
-                ++it;
-            }
+            it = (shouldRemove) ? outstandingQueries.erase(it) : ++it;
         }
 
         if (outstandingQueries.size()) {
+            // enable expedited mode
             rsm->_isMasterMonitor->requestImmediateCheck();
         } else {
+            // if no more outstanding queries, no need to listen for topology changes in
+            // this monitor.
             rsm->_eventsPublisher->removeListener(self);
         }
     };

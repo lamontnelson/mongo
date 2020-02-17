@@ -496,6 +496,12 @@ void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durati
     _topologyManager->onServerDescription(outcome);
 }
 
+void ReplicaSetMonitor::onServerHeartbeatFailureEvent(IsMasterRTT durationMs, Status errorStatus,
+                                                          const ServerAddress &hostAndPort, const BSONObj reply) {
+    IsMasterOutcome outcome(hostAndPort, reply, errorStatus.toString());
+    _topologyManager->onServerDescription(outcome);
+}
+
 void ReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress& hostAndPort,
                                                 const Status& status) {
     failedHost(HostAndPort(hostAndPort), status);
@@ -547,7 +553,6 @@ bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDes
     return false;
 }
 
-
 void ReplicaSetMonitor::_withLock(std::function<void(ReplicaSetMonitorPtr)> f) {
     stdx::lock_guard<Mutex> lock(_mutex);
     f(shared_from_this());
@@ -564,4 +569,5 @@ Status ReplicaSetMonitor::_makeReplicaSetMonitorRemovedError() const {
     return Status(ErrorCodes::ReplicaSetMonitorRemoved,
                   str::stream() << "ReplicaSetMonitor for set " << getName() << " is removed");
 }
+
 }  // namespace mongo

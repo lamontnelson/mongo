@@ -40,8 +40,6 @@ class ReplicaSetMonitorQueryProcessor
     : public sdam::TopologyListener,
       public std::enable_shared_from_this<ReplicaSetMonitorQueryProcessor> {
 public:
-    ReplicaSetMonitorQueryProcessor() {}
-
     void shutdown();
 
     void onTopologyDescriptionChangedEvent(UUID topologyId,
