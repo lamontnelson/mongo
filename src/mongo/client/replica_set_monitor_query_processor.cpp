@@ -29,27 +29,12 @@
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "replica_set_monitor_query_processor.h"
 
-#include <numeric>
-
 #include "mongo/client/global_conn_pool.h"
-#include "mongo/client/replica_set_monitor_manager.h"
 #include "mongo/util/log.h"
 
 namespace mongo {
-namespace {
-std::string toStringWithMinOpTime(const ReadPreferenceSetting& readPref) {
-    BSONObjBuilder builder;
-    readPref.toInnerBSON(&builder);
-    if (!readPref.minOpTime.isNull()) {
-        builder.append("minOpTime", readPref.minOpTime.toBSON());
-    }
-    return builder.obj().toString();
-}
-}  // namespace
-
 void ReplicaSetMonitorQueryProcessor::shutdown() {
     stdx::lock_guard lock(_mutex);
-    LOG(kLogLevel) << "shutdown replica set monitor query processor.";
     _isShutdown = true;
 }
 
@@ -67,56 +52,13 @@ void ReplicaSetMonitorQueryProcessor::onTopologyDescriptionChangedEvent(
     if (setName) {
         auto replicaSetMonitor = globalRSMonitorManager.getMonitor(*setName);
         if (!replicaSetMonitor) {
-            LOG(kLogLevel) << "could not find rsm instance for query processing.";
+            LOG(kLogLevel) << "could not find rsm instance " << *setName << " for query processing.";
             return;
         }
-        replicaSetMonitor->_withLock(_processOutstanding(newDescription));
+        replicaSetMonitor->_processOutstanding(newDescription);
     }
-}
 
-ReplicaSetMonitorTask ReplicaSetMonitorQueryProcessor::_processOutstanding(
-    const TopologyDescriptionPtr& topologyDescription) {
-    return [self = shared_from_this(), topologyDescription](const ReplicaSetMonitorPtr& rsm) {
-        // TODO: refactor so that we don't call _getHost(s) for every outstanding query
-        // since there might be duplicates.
-        auto& outstandingQueries = rsm->_outstandingQueries;
-        auto& executor = rsm->_executor;
-
-        size_t numSatisfied = 0;
-
-        bool shouldRemove;
-        auto it = outstandingQueries.begin();
-        while (it != outstandingQueries.end()) {
-            auto& query = *it;
-            shouldRemove = false;
-
-            if (query->done) {
-                shouldRemove = true;
-            } else {
-                auto result = rsm->_getHosts(topologyDescription, query->criteria);
-                if (result) {
-                    executor->cancel(query->deadlineHandle);
-                    query->done = true;
-                    query->promise.emplaceValue(std::move(*result));
-                    LOG(kLogLevel) << rsm->_logPrefix()
-                                   << "finish getHosts: " << toStringWithMinOpTime(query->criteria)
-                                   << " (" << executor->now() - query->start << ")";
-                    shouldRemove = true;
-                    ++numSatisfied;
-                }
-            }
-
-            it = (shouldRemove) ? outstandingQueries.erase(it) : ++it;
-        }
-
-        if (outstandingQueries.size()) {
-            // enable expedited mode
-            rsm->_isMasterMonitor->requestImmediateCheck();
-        } else {
-            // if no more outstanding queries, no need to listen for topology changes in
-            // this monitor.
-            rsm->_eventsPublisher->removeListener(self);
-        }
-    };
+    // No set name occurs when there is an error monitoring isMaster replies (e.g. HostUnreachable).
+    // There is nothing to do in that case.
 }
 };  // namespace mongo

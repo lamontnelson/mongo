@@ -40,6 +40,7 @@
 #include "mongo/client/connpool.h"
 #include "mongo/client/global_conn_pool.h"
 #include "mongo/client/read_preference.h"
+#include "mongo/client/replica_set_monitor_query_processor.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/repl/bson_extract_optime.h"
 #include "mongo/db/server_options.h"
@@ -48,7 +49,6 @@
 #include "mongo/platform/mutex.h"
 #include "mongo/rpc/metadata/egress_metadata_hook_list.h"
 #include "mongo/stdx/condition_variable.h"
-#include "mongo/util/concurrency/thread_pool.h"
 #include "mongo/util/log.h"
 #include "mongo/util/string_map.h"
 #include "mongo/util/timer.h"
@@ -115,9 +115,9 @@ std::string debug(boost::optional<HostAndPort> x) {
 
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskExecutor> executor)
     : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
+      _queryProcessor(new ReplicaSetMonitorQueryProcessor()),
       _uri(uri),
       _executor(executor),
-      _queryProcessor(globalRSMonitorManager.getQueryProcessor()),
       _random(PseudoRandom(Date_t::now().asInt64())) {
 
     // TODO: sdam should use the HostAndPort type for ServerAddress
@@ -161,9 +161,9 @@ void ReplicaSetMonitor::close() {
     {
         stdx::lock_guard lock(_mutex);
         _isClosed.store(true);
-        _queryProcessor = nullptr;
         LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
         _eventsPublisher->close();
+        _queryProcessor->shutdown();
         _isMasterMonitor->close();
         _failOutstandingWitStatus(
             lock, Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
@@ -197,7 +197,6 @@ std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
 
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
-
     // In the fast case (stable topology), we avoid mutex acquisition.
     if (_isClosed.load()) {
         return _makeReplicaSetMonitorRemovedError();
@@ -210,6 +209,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
                             << " -> " << debug(immediateResult);
         return {*immediateResult};
     }
+
     _isMasterMonitor->requestImmediateCheck();
     LOG(kDefaultLogLevel) << _logPrefix() << "start getHosts: " << toStringWithMinOpTime(criteria);
 
@@ -272,7 +272,8 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::_enqueueOutstandingQuery
     query->deadlineHandle = swDeadlineHandle.getValue();
     _outstandingQueries.push_back(query);
 
-    // send topology changes to the query processor that satisfies the future.
+    // Send topology changes to the query processor to satisfy the future.
+    // It will be removed as a listener when all waiting queries have been satisfied.
     _eventsPublisher->registerListener(_queryProcessor);
 
     return std::move(pf.future).semi();
@@ -301,8 +302,7 @@ HostAndPort ReplicaSetMonitor::getMasterOrUassert() {
 }
 
 void ReplicaSetMonitor::failedHost(const HostAndPort& host, const Status& status) {
-    IsMasterOutcome outcome(host.toString(), BSONObj(), status.toString());
-    _topologyManager->onServerDescription(outcome);
+    failedHost(host, BSONObj(), status);
 }
 
 void ReplicaSetMonitor::failedHost(const HostAndPort& host, BSONObj bson, const Status& status) {
@@ -555,9 +555,43 @@ bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDes
     return false;
 }
 
-void ReplicaSetMonitor::_withLock(std::function<void(ReplicaSetMonitorPtr)> f) {
+void ReplicaSetMonitor::_processOutstanding(const TopologyDescriptionPtr& topologyDescription) {
+    // TODO: refactor so that we don't call _getHost(s) for every outstanding query
+    // since there might be duplicates.
     stdx::lock_guard<Mutex> lock(_mutex);
-    f(shared_from_this());
+
+    bool shouldRemove;
+    auto it = _outstandingQueries.begin();
+    while (it != _outstandingQueries.end()) {
+        auto& query = *it;
+        shouldRemove = false;
+
+        if (query->done) {
+            shouldRemove = true;
+        } else {
+            auto result = _getHosts(topologyDescription, query->criteria);
+            if (result) {
+                _executor->cancel(query->deadlineHandle);
+                query->done = true;
+                query->promise.emplaceValue(std::move(*result));
+                LOG(kDefaultLogLevel)
+                    << _logPrefix() << "finish getHosts: " << toStringWithMinOpTime(query->criteria)
+                    << " (" << _executor->now() - query->start << ")";
+                shouldRemove = true;
+            }
+        }
+
+        it = (shouldRemove) ? _outstandingQueries.erase(it) : ++it;
+    }
+
+    if (_outstandingQueries.size()) {
+        // enable expedited mode
+        _isMasterMonitor->requestImmediateCheck();
+    } else {
+        // if no more outstanding queries, no need to listen for topology changes in
+        // this monitor.
+        _eventsPublisher->removeListener(_queryProcessor);
+    }
 }
 
 Status ReplicaSetMonitor::_makeUnsatisfiedReadPrefError(
@@ -571,5 +605,4 @@ Status ReplicaSetMonitor::_makeReplicaSetMonitorRemovedError() const {
     return Status(ErrorCodes::ReplicaSetMonitorRemoved,
                   str::stream() << "ReplicaSetMonitor for set " << getName() << " is removed");
 }
-
 }  // namespace mongo

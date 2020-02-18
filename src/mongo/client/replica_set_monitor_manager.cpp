@@ -63,8 +63,7 @@ using executor::TaskExecutor;
 using executor::TaskExecutorPool;
 using executor::ThreadPoolTaskExecutor;
 
-ReplicaSetMonitorManager::ReplicaSetMonitorManager()
-    : _queryProcessor(std::make_shared<ReplicaSetMonitorQueryProcessor>()) {}
+ReplicaSetMonitorManager::ReplicaSetMonitorManager() {}
 
 ReplicaSetMonitorManager::~ReplicaSetMonitorManager() {
     shutdown();
@@ -187,8 +186,6 @@ void ReplicaSetMonitorManager::shutdown() {
         anchor->close();
     }
 
-    _queryProcessor->shutdown();
-
     if (taskExecutor) {
         taskExecutor->join();
     }
@@ -234,9 +231,5 @@ ReplicaSetChangeNotifier& ReplicaSetMonitorManager::getNotifier() {
 bool ReplicaSetMonitorManager::isShutdown() const {
     stdx::lock_guard<Latch> lk(_mutex);
     return _isShutdown;
-}
-
-std::shared_ptr<ReplicaSetMonitorQueryProcessor> ReplicaSetMonitorManager::getQueryProcessor() {
-    return _queryProcessor;
 }
 }  // namespace mongo

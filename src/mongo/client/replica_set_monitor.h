@@ -293,8 +293,7 @@ private:
     Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
     Status _makeReplicaSetMonitorRemovedError() const;
 
-    // execute the provided function with the RSM's mutex locked
-    void _withLock(ReplicaSetMonitorTask f);
+    void _processOutstanding(const TopologyDescriptionPtr& topologyDescription);
 
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
@@ -302,10 +301,15 @@ private:
     sdam::TopologyEventsPublisherPtr _eventsPublisher;
     ServerIsMasterMonitorPtr _isMasterMonitor;
 
+    // This object will be registered as a TopologyListener if there are
+    // any outstanding queries for this RSM instance.
+    ReplicaSetMontiorQueryProcessorPtr _queryProcessor;
+
     const MongoURI _uri;
 
     std::shared_ptr<executor::TaskExecutor> _executor;
-    ReplicaSetMontiorQueryProcessorPtr _queryProcessor;
+
+
     AtomicWord<bool> _isClosed{true};
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");

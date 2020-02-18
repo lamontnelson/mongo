@@ -33,7 +33,6 @@
 #include <vector>
 
 #include "mongo/client/replica_set_change_notifier.h"
-#include "mongo/client/replica_set_monitor_query_processor.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/util/hierarchical_acquisition.h"
@@ -100,8 +99,6 @@ public:
 
     ReplicaSetChangeNotifier& getNotifier();
 
-    std::shared_ptr<ReplicaSetMonitorQueryProcessor> getQueryProcessor();
-
     bool isShutdown() const;
 
 private:
@@ -116,8 +113,6 @@ private:
 
     // Widget to notify listeners when a RSM notices a change
     ReplicaSetChangeNotifier _notifier;
-
-    std::shared_ptr<ReplicaSetMonitorQueryProcessor> _queryProcessor;
 
     // Needs to be after `_taskExecutor`, so that it will be destroyed before the `_taskExecutor`.
     ReplicaSetMonitorsMap _monitors;
