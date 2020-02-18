@@ -49,7 +49,7 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
 
     // TODO: the old version of the RSM does this, and many of
     // the tests seem to rely on this behavior for correctness.
-    if (!criteria.minOpTime.isNull()) {
+    if (false && !criteria.minOpTime.isNull()) {
         auto eligibleServers = topologyDescription->findServers([](const ServerDescriptionPtr& s) {
             return (s->getType() == ServerType::kRSPrimary ||
                     s->getType() == ServerType::kRSSecondary);
