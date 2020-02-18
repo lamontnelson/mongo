@@ -86,9 +86,25 @@ public:
 
     BSONObj toBSON();
     std::string toString();
-    bool operator==(const TopologyDescription& rhs);
 
 private:
+    friend bool operator==(const TopologyDescription& lhs, const TopologyDescription& rhs) {
+        return std::tie(lhs._setName,
+                        lhs._type,
+                        lhs._maxSetVersion,
+                        lhs._maxElectionId,
+                        lhs._servers,
+                        lhs._compatible,
+                        lhs._logicalSessionTimeoutMinutes) ==
+               std::tie(rhs._setName,
+                        rhs._type,
+                        rhs._maxSetVersion,
+                        rhs._maxElectionId,
+                        rhs._servers,
+                        rhs._compatible,
+                        rhs._logicalSessionTimeoutMinutes);
+    }
+
     /**
      * Checks if all server descriptions are compatible with this server's WireVersion. If an
      * incompatible description is found, we set the topologyDescription's _compatible flag to

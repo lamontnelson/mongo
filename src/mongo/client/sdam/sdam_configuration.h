@@ -85,7 +85,7 @@ public:
     Milliseconds getServerSelectionTimeoutMs() const;
     Milliseconds getHeartBeatFrequencyMs() const;
 
-    static inline const Milliseconds kDefaultLocalThresholdMS = mongo::Milliseconds(15);
+    static inline const Milliseconds kDefaultLocalThresholdMS = Milliseconds(15);
     static inline const Milliseconds kDefaultServerSelectionTimeoutMs = Milliseconds(30000);
 
     static ServerSelectionConfiguration defaultConfiguration() {

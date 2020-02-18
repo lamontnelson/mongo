@@ -83,7 +83,7 @@ bool secondaryPredicate(const ServerDescriptionPtr& server) {
     return server->getType() == ServerType::kRSSecondary;
 }
 
-std::string toStringWithMinOpTime(const ReadPreferenceSetting& readPref) {
+std::string readPrefToStringWithMinOpTime(const ReadPreferenceSetting& readPref) {
     BSONObjBuilder builder;
     readPref.toInnerBSON(&builder);
     if (!readPref.minOpTime.isNull()) {
@@ -101,6 +101,13 @@ std::string hostListToString(boost::optional<std::vector<HostAndPort>> x) {
         }
     }
     return s.str();
+}
+
+int32_t pingTimeMillis(const ServerDescriptionPtr& serverDescription) {
+    static const Milliseconds maxLatency = Milliseconds::max();
+    auto serverRtt = serverDescription->getRtt();
+    auto latencyMillis = (serverRtt) ? duration_cast<Milliseconds>(*serverRtt) : maxLatency;
+    return std::min(latencyMillis, maxLatency).count();
 }
 }  // namespace
 
@@ -145,7 +152,7 @@ void ReplicaSetMonitor::init() {
     globalRSMonitorManager.getNotifier().onFoundSet(getName());
 }
 
-void ReplicaSetMonitor::close() {
+void ReplicaSetMonitor::drop() {
     if (_isClosed.load())
         return;
 
@@ -196,13 +203,13 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     // try to satisfy query immediately
     auto immediateResult = _getHosts(criteria);
     if (immediateResult) {
-        LOG(kLowerLogLevel) << _logPrefix() << "getHosts: " << toStringWithMinOpTime(criteria)
+        LOG(kLowerLogLevel) << _logPrefix() << "getHosts: " << readPrefToStringWithMinOpTime(criteria)
                             << " -> " << hostListToString(immediateResult);
         return {*immediateResult};
     }
 
     _isMasterMonitor->requestImmediateCheck();
-    LOG(kDefaultLogLevel) << _logPrefix() << "start getHosts: " << toStringWithMinOpTime(criteria);
+    LOG(kDefaultLogLevel) << _logPrefix() << "start getHosts: " << readPrefToStringWithMinOpTime(criteria);
 
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
@@ -273,14 +280,8 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::_enqueueOutstandingQuery
 boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
     const TopologyDescriptionPtr& topology, const ReadPreferenceSetting& criteria) {
     auto result = _serverSelector->selectServers(topology, criteria);
-    if (result) {
-        std::stringstream buf;
-        for (const auto& serverDescription : *result) {
-            buf << serverDescription->getAddress() << ", ";
-        }
-        return _extractHosts(*result);
-    }
-    return boost::none;
+    return (result) ? boost::optional<std::vector<HostAndPort>>(_extractHosts(*result))
+                    : boost::none;
 }
 
 boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
@@ -396,13 +397,6 @@ ReplicaSetChangeNotifier& ReplicaSetMonitor::getNotifier() {
     return globalRSMonitorManager.getNotifier();
 }
 
-int32_t pingTimeMillis(const ServerDescriptionPtr& serverDescription) {
-    static const Milliseconds maxLatency = Milliseconds::max();
-    auto serverRtt = serverDescription->getRtt();
-    auto latencyMillis = (serverRtt) ? duration_cast<Milliseconds>(*serverRtt) : maxLatency;
-    return std::min(latencyMillis, maxLatency).count();
-}
-
 void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC) const {
     auto topologyDescription = _currentTopology();
 
@@ -417,7 +411,7 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
 
     // NOTE: the format here must be consistent for backwards compatibility
     BSONArrayBuilder hosts(monitorInfo.subarrayStart("hosts"));
-    for (auto serverDescription : topologyDescription->getServers()) {
+    for (const auto& serverDescription : topologyDescription->getServers()) {
         bool isUp = serverDescription->getType() == ServerType::kRSSecondary ||
             serverDescription->getType() == ServerType::kRSPrimary;
         bool isMaster = serverDescription->getPrimary() == serverDescription->getAddress();
@@ -549,7 +543,7 @@ bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDes
 void ReplicaSetMonitor::_processOutstanding(const TopologyDescriptionPtr& topologyDescription) {
     // TODO: refactor so that we don't call _getHost(s) for every outstanding query
     // since there might be duplicates.
-    stdx::lock_guard<Mutex> lock(_mutex);
+    stdx::lock_guard lock(_mutex);
 
     bool shouldRemove;
     auto it = _outstandingQueries.begin();
@@ -566,7 +560,7 @@ void ReplicaSetMonitor::_processOutstanding(const TopologyDescriptionPtr& topolo
                 query->done = true;
                 query->promise.emplaceValue(std::move(*result));
                 LOG(kDefaultLogLevel)
-                    << _logPrefix() << "finish getHosts: " << toStringWithMinOpTime(query->criteria)
+                    << _logPrefix() << "finish getHosts: " << readPrefToStringWithMinOpTime(query->criteria)
                     << " (" << _executor->now() - query->start << ")";
                 shouldRemove = true;
             }

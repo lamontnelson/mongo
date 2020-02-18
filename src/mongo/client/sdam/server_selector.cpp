@@ -47,6 +47,8 @@ void SdamServerSelector::_getCandidateServers(std::vector<ServerDescriptionPtr>*
     // when querying the primary we don't need to consider tags
     bool shouldTagFilter = true;
 
+    // TODO: check to see if we want to enforce minOpTime at all since
+    // it was effectively optional in the original implementation.
     // TODO: the old version of the RSM does this, and many of
     // the tests seem to rely on this behavior for correctness.
     if (!criteria.minOpTime.isNull()) {

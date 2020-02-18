@@ -275,22 +275,6 @@ std::string TopologyDescription::toString() {
     return toBSON().toString();
 }
 
-bool TopologyDescription::operator==(const TopologyDescription& rhs) {
-    return std::tie(_setName,
-                    _type,
-                    _maxSetVersion,
-                    _maxElectionId,
-                    _servers,
-                    _compatible,
-                    _logicalSessionTimeoutMinutes) ==
-        std::tie(rhs._setName,
-                 rhs._type,
-                 rhs._maxSetVersion,
-                 rhs._maxElectionId,
-                 rhs._servers,
-                 rhs._compatible,
-                 rhs._logicalSessionTimeoutMinutes);
-}
 
 boost::optional<ServerDescriptionPtr> TopologyDescription::getPrimary() {
     if (getType() != TopologyType::kReplicaSetWithPrimary) {

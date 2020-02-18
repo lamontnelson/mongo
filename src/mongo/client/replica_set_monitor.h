@@ -31,7 +31,6 @@
 
 #include <functional>
 #include <memory>
-#include <mongo/executor/task_executor.h>
 #include <set>
 #include <string>
 
@@ -76,8 +75,7 @@ public:
     /**
      * Constructs a RSM instance.
      */
-    ReplicaSetMonitor(const MongoURI& uri,
-                      std::shared_ptr<executor::TaskExecutor> executor = nullptr);
+    ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<executor::TaskExecutor> executor);
 
     /**
      * Performs post-construction initialization. This function must be called exactly once before
@@ -88,7 +86,7 @@ public:
     /**
      * Closes this RSM instance. This RSM instance is no longer useable once the function exits.
      */
-    void close();
+    void drop();
 
     /**
      * Create a Replica Set monitor instance and fully initialize it.
@@ -292,6 +290,7 @@ private:
     Status _makeUnsatisfiedReadPrefError(const ReadPreferenceSetting& criteria) const;
     Status _makeReplicaSetMonitorRemovedError() const;
 
+    // Try to satisfy the outstanding queries for this instance with the given topology information.
     void _processOutstanding(const TopologyDescriptionPtr& topologyDescription);
 
     sdam::SdamConfiguration _sdamConfig;
@@ -317,7 +316,6 @@ private:
 
     static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
-
     static inline const auto kLogPrefix = "[ReplicaSetMonitor]";
     static inline const auto kDefaultLogLevel = logger::LogSeverity::Debug(1);
     static inline const auto kLowerLogLevel = kDefaultLogLevel.lessSevere();

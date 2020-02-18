@@ -107,7 +107,6 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(
 
 shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const MongoURI& uri) {
     invariant(uri.type() == ConnectionString::SET);
-    log() << "getOrCreateMonitor " << uri.toString();
     stdx::lock_guard<Latch> lk(_mutex);
     uassert(ErrorCodes::ShutdownInProgress,
             str::stream() << "Unable to get monitor for '" << uri << "' due to shutdown",
@@ -118,7 +117,6 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
     auto monitor = _monitors[setName].lock();
     if (monitor) {
         uassertNotMixingSSL(monitor->getOriginalUri().getSSLMode(), uri.getSSLMode());
-        log() << "getOrCreateMonitor" << uri.toString() << " - " << (size_t)monitor.get();
         return monitor;
     }
 
@@ -126,7 +124,6 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
 
     auto newMonitor = ReplicaSetMonitor::make(uri, getExecutor());
     _monitors[setName] = newMonitor;
-    log() << "getOrCreateMonitor" << uri.toString() << " - " << (size_t)newMonitor.get();
     return newMonitor;
 }
 
@@ -147,7 +144,7 @@ void ReplicaSetMonitorManager::removeMonitor(StringData setName) {
     ReplicaSetMonitorsMap::const_iterator it = _monitors.find(setName);
     if (it != _monitors.end()) {
         if (auto monitor = it->second.lock()) {
-            monitor->close();
+            monitor->drop();
         }
         _monitors.erase(it);
         log() << "Removed ReplicaSetMonitor for replica set " << setName;
@@ -182,8 +179,7 @@ void ReplicaSetMonitorManager::shutdown() {
         if (!anchor) {
             continue;
         }
-        log() << "Closing ReplicaSetMonitor " << anchor->getName();
-        anchor->close();
+        anchor->drop();
     }
 
     if (taskExecutor) {

@@ -1,5 +1,32 @@
+/**
+ *    Copyright (C) 2020-present MongoDB, Inc.
+ *
+ *    This program is free software: you can redistribute it and/or modify
+ *    it under the terms of the Server Side Public License, version 1,
+ *    as published by MongoDB, Inc.
+ *
+ *    This program is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    Server Side Public License for more details.
+ *
+ *    You should have received a copy of the Server Side Public License
+ *    along with this program. If not, see
+ *    <http://www.mongodb.com/licensing/server-side-public-license>.
+ *
+ *    As a special exception, the copyright holders give permission to link the
+ *    code of portions of this program with the OpenSSL library under certain
+ *    conditions as described in each individual source file and distribute
+ *    linked combinations including the program with the OpenSSL library. You
+ *    must comply with the Server Side Public License in all respects for
+ *    all of the code used other than as permitted herein. If you modify file(s)
+ *    with this exception, you may extend this exception to your version of the
+ *    file(s), but you are not obligated to do so. If you do not wish to do so,
+ *    delete this exception statement from your version. If you delete this
+ *    exception statement from all source files in the program, then also delete
+ *    it in the license file.
+ */
 #include "mongo/client/server_is_master_monitor.h"
-#include <mongo/client/sdam/sdam_datatypes.h>
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kDefault
 #include "mongo/client/sdam/sdam.h"
@@ -35,7 +62,7 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
       _heartbeatFrequencyMS(_overrideRefreshPeriod(heartbeatFrequencyMS)),
       _isShutdown(true),
       _setUri(setUri) {
-    LOG(kLogLevel) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
+    LOG(kLogLevel.lessSevere()) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
 }
 
 void SingleServerIsMasterMonitor::init() {
@@ -54,7 +81,7 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
     if (!_isExpedited) {
         // save some log lines.
         LOG(kLogLevel) << "[SingleServerIsMasterMonitor] Monitoring " << _host
-                         << " in expedited mode until we detect a primary.";
+                       << " in expedited mode until we detect a primary.";
         _isExpedited = true;
     }
 
@@ -62,8 +89,8 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
 
     if (_isMasterOutstanding) {
         LOG(kLogLevel) << "[SingleServerIsMasterMonitor] immediate isMaster check requested, but "
-                            "there is already an "
-                            "outstanding request.";
+                          "there is already an "
+                          "outstanding request.";
         return;
     }
 
@@ -91,7 +118,7 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
     }
 
     LOG(kLogLevel) << "[SingleServerIsMasterMonitor] Rescheduling next isMaster check for "
-                     << this->_host << " in " << delayUntilNextCheck;
+                   << this->_host << " in " << delayUntilNextCheck;
     _scheduleNextIsMaster(lock, delayUntilNextCheck);
 }
 
@@ -141,13 +168,14 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
                 if (self->_isShutdown || ErrorCodes::isCancelationError(result.response.status)) {
                     LOG(kLogLevel) << "[SingleServerIsMasterMonitor] not processing response: "
-                                     << result.response.status;
+                                   << result.response.status;
                     return;
                 }
 
                 self->_lastIsMasterAt = self->_executor->now();
                 nextRefreshPeriod = self->_currentRefreshPeriod(lk);
-                LOG(kLogLevel.lessSevere()) << "next refresh period in " + nextRefreshPeriod.toString();
+                LOG(kLogLevel.lessSevere())
+                    << "next refresh period in " + nextRefreshPeriod.toString();
                 self->_scheduleNextIsMaster(lk, nextRefreshPeriod);
             }
 
@@ -171,13 +199,13 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
 void SingleServerIsMasterMonitor::shutdown() {
     stdx::lock_guard lock(_mutex);
-    LOG(kLogLevel) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+    LOG(kLogLevel.lessSevere()) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
     _isShutdown = true;
 
     _cancelOutstandingRequest(lock);
 
     _executor = nullptr;
-    LOG(kLogLevel) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+    LOG(kLogLevel.lessSevere()) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
 }
 
 void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
@@ -194,9 +222,9 @@ void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
 
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
-    LOG(kLogLevel.lessSevere()) << "received successful isMaster for server " << _host << " (" << latency
-                     << ")"
-                     << "; " << bson.toString();
+    LOG(kLogLevel.lessSevere()) << "received successful isMaster for server " << _host << " ("
+                                << latency << ")"
+                                << "; " << bson.toString();
     _eventListener->onServerHeartbeatSucceededEvent(
         duration_cast<Milliseconds>(latency), _host, bson);
 }
@@ -205,8 +233,8 @@ void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
                                                      const Status& status,
                                                      const BSONObj bson) {
     LOG(kLogLevel) << "received failed isMaster for server " << _host << ": " << status.toString()
-                     << " (" << latency << ")"
-                     << "; " << bson.toString();
+                   << " (" << latency << ")"
+                   << "; " << bson.toString();
     _eventListener->onServerHeartbeatFailureEvent(
         duration_cast<Milliseconds>(latency), status, _host, bson);
 }
@@ -245,7 +273,7 @@ ServerIsMasterMonitor::ServerIsMasterMonitor(
       _isShutdown(false),
       _setUri(setUri) {
     LOG(kLogLevel) << "Starting Replica Set IsMaster monitor with "
-                        << initialTopologyDescription->getServers().size() << " members.";
+                   << initialTopologyDescription->getServers().size() << " members.";
     onTopologyDescriptionChangedEvent(
         initialTopologyDescription->getId(), nullptr, initialTopologyDescription);
 }
