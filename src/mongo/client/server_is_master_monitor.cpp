@@ -47,6 +47,8 @@ void SingleServerIsMasterMonitor::init() {
 void SingleServerIsMasterMonitor::requestImmediateCheck() {
     Milliseconds delayUntilNextCheck;
     stdx::lock_guard lock(_mutex);
+    if(_isClosed)
+        return;
 
     // remain in expedited mode until the replica set recovers
     if (!_isExpedited) {
@@ -324,6 +326,9 @@ std::shared_ptr<executor::TaskExecutor> ServerIsMasterMonitor::_setupExecutor(
 
 void ServerIsMasterMonitor::requestImmediateCheck() {
     stdx::lock_guard lock(_mutex);
+    if (_isClosed)
+        return;
+
     for (auto& addressAndMonitor : _singleMonitors) {
         addressAndMonitor.second->requestImmediateCheck();
     }
