@@ -61,7 +61,7 @@ rst.awaitNodesAgreeOnPrimary();
 assert.soon(() => {
     const res = rsConn.getDB("test").runCommand({create: "mycoll"});
     if (!res.ok) {
-        assert(res.code == ErrorCodes.NotMaster)
+        assert(res.code == ErrorCodes.NotMaster);
     }
     return res.ok;
 });
