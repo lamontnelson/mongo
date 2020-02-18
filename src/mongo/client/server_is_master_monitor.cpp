@@ -47,7 +47,7 @@ void SingleServerIsMasterMonitor::init() {
 void SingleServerIsMasterMonitor::requestImmediateCheck() {
     Milliseconds delayUntilNextCheck;
     stdx::lock_guard lock(_mutex);
-    if(_isClosed)
+    if (_isClosed)
         return;
 
     // remain in expedited mode until the replica set recovers
