@@ -93,21 +93,12 @@ std::string toStringWithMinOpTime(const ReadPreferenceSetting& readPref) {
 }
 
 // TODO: remove
-std::string debug(boost::optional<std::vector<HostAndPort>> x) {
+std::string hostListToString(boost::optional<std::vector<HostAndPort>> x) {
     std::stringstream s;
     if (x) {
         for (auto h : *x) {
             s << h.toString() << "; ";
         }
-    }
-    return s.str();
-}
-
-// TODO: remove
-std::string debug(boost::optional<HostAndPort> x) {
-    std::stringstream s;
-    if (x) {
-        s << (*x).toString() << "; ";
     }
     return s.str();
 }
@@ -118,7 +109,7 @@ ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskEx
       _queryProcessor(new ReplicaSetMonitorQueryProcessor()),
       _uri(uri),
       _executor(executor),
-      _random(PseudoRandom(Date_t::now().asInt64())) {
+      _random(PseudoRandom(SecureRandom().nextInt64())) {
 
     // TODO: sdam should use the HostAndPort type for ServerAddress
     std::vector<ServerAddress> seeds;
@@ -145,7 +136,7 @@ void ReplicaSetMonitor::init() {
     _topologyManager =
         std::make_unique<TopologyManager>(_sdamConfig, _clockSource, _eventsPublisher);
     _isMasterMonitor = std::make_unique<ServerIsMasterMonitor>(
-        _uri, _sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription());
+        _uri, _sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription(), _executor);
 
     _eventsPublisher->registerListener(shared_from_this());
     _eventsPublisher->registerListener(_isMasterMonitor);
@@ -164,7 +155,7 @@ void ReplicaSetMonitor::close() {
         LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
         _eventsPublisher->close();
         _queryProcessor->shutdown();
-        _isMasterMonitor->close();
+        _isMasterMonitor->shutdown();
         _failOutstandingWitStatus(
             lock, Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
 
@@ -206,7 +197,7 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     auto immediateResult = _getHosts(criteria);
     if (immediateResult) {
         LOG(kLowerLogLevel) << _logPrefix() << "getHosts: " << toStringWithMinOpTime(criteria)
-                            << " -> " << debug(immediateResult);
+                            << " -> " << hostListToString(immediateResult);
         return {*immediateResult};
     }
 

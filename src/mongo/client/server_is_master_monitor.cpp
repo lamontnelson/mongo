@@ -33,27 +33,27 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
       _eventListener(eventListener),
       _executor(executor),
       _heartbeatFrequencyMS(_overrideRefreshPeriod(heartbeatFrequencyMS)),
-      _isClosed(true),
+      _isShutdown(true),
       _setUri(setUri) {
-    LOG(kDebugLevel) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
+    LOG(kLogLevel) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
 }
 
 void SingleServerIsMasterMonitor::init() {
     stdx::lock_guard lock(_mutex);
-    _isClosed = false;
+    _isShutdown = false;
     _scheduleNextIsMaster(lock, Milliseconds(0));
 }
 
 void SingleServerIsMasterMonitor::requestImmediateCheck() {
     Milliseconds delayUntilNextCheck;
     stdx::lock_guard lock(_mutex);
-    if (_isClosed)
+    if (_isShutdown)
         return;
 
     // remain in expedited mode until the replica set recovers
     if (!_isExpedited) {
         // save some log lines.
-        LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] Monitoring " << _host
+        LOG(kLogLevel) << "[SingleServerIsMasterMonitor] Monitoring " << _host
                          << " in expedited mode until we detect a primary.";
         _isExpedited = true;
     }
@@ -61,7 +61,7 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
     // .. but continue with rescheduling the next request.
 
     if (_isMasterOutstanding) {
-        LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] immediate isMaster check requested, but "
+        LOG(kLogLevel) << "[SingleServerIsMasterMonitor] immediate isMaster check requested, but "
                             "there is already an "
                             "outstanding request.";
         return;
@@ -90,13 +90,13 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
         return;
     }
 
-    LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] Rescheduling next isMaster check for "
+    LOG(kLogLevel) << "[SingleServerIsMasterMonitor] Rescheduling next isMaster check for "
                      << this->_host << " in " << delayUntilNextCheck;
     _scheduleNextIsMaster(lock, delayUntilNextCheck);
 }
 
 void SingleServerIsMasterMonitor::_scheduleNextIsMaster(WithLock, Milliseconds delay) {
-    if (_isClosed)
+    if (_isShutdown)
         return;
 
     invariant(!_isMasterOutstanding);
@@ -126,7 +126,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
     request.sslMode = _setUri.getSSLMode();
 
     stdx::lock_guard lock(_mutex);
-    if (_isClosed)
+    if (_isShutdown)
         return;
 
     Timer timer;
@@ -139,15 +139,15 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
                 stdx::lock_guard lk(self->_mutex);
                 self->_isMasterOutstanding = false;
 
-                if (self->_isClosed || ErrorCodes::isCancelationError(result.response.status)) {
-                    LOG(kDebugLevel) << "[SingleServerIsMasterMonitor] not processing response: "
+                if (self->_isShutdown || ErrorCodes::isCancelationError(result.response.status)) {
+                    LOG(kLogLevel) << "[SingleServerIsMasterMonitor] not processing response: "
                                      << result.response.status;
                     return;
                 }
 
                 self->_lastIsMasterAt = self->_executor->now();
                 nextRefreshPeriod = self->_currentRefreshPeriod(lk);
-                LOG(kDebugLevel) << "next refresh period in " + nextRefreshPeriod.toString();
+                LOG(kLogLevel.lessSevere()) << "next refresh period in " + nextRefreshPeriod.toString();
                 self->_scheduleNextIsMaster(lk, nextRefreshPeriod);
             }
 
@@ -169,15 +169,15 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
     _remoteCommandHandle = swCbHandle.getValue();
 }
 
-void SingleServerIsMasterMonitor::close() {
+void SingleServerIsMasterMonitor::shutdown() {
     stdx::lock_guard lock(_mutex);
-    LOG(kDebugLevel) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
-    _isClosed = true;
+    LOG(kLogLevel) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+    _isShutdown = true;
 
     _cancelOutstandingRequest(lock);
 
     _executor = nullptr;
-    LOG(kDebugLevel) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+    LOG(kLogLevel) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
 }
 
 void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
@@ -194,8 +194,8 @@ void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
 
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
-    LOG(kDebugLevel) << "received successful isMaster for server " << _host
-                     << " (" << latency << ")"
+    LOG(kLogLevel.lessSevere()) << "received successful isMaster for server " << _host << " (" << latency
+                     << ")"
                      << "; " << bson.toString();
     _eventListener->onServerHeartbeatSucceededEvent(
         duration_cast<Milliseconds>(latency), _host, bson);
@@ -204,7 +204,7 @@ void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
 void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
                                                      const Status& status,
                                                      const BSONObj bson) {
-    LOG(kDebugLevel) << "received failed isMaster for server " << _host << ": " << status.toString()
+    LOG(kLogLevel) << "received failed isMaster for server " << _host << ": " << status.toString()
                      << " (" << latency << ")"
                      << "; " << bson.toString();
     _eventListener->onServerHeartbeatFailureEvent(
@@ -242,22 +242,22 @@ ServerIsMasterMonitor::ServerIsMasterMonitor(
     : _sdamConfiguration(sdamConfiguration),
       _eventPublisher(eventsPublisher),
       _executor(_setupExecutor(executor)),
-      _isClosed(false),
+      _isShutdown(false),
       _setUri(setUri) {
-    LOG(kLogDebugLevel) << "Starting Replica Set IsMaster monitor with "
+    LOG(kLogLevel) << "Starting Replica Set IsMaster monitor with "
                         << initialTopologyDescription->getServers().size() << " members.";
     onTopologyDescriptionChangedEvent(
         initialTopologyDescription->getId(), nullptr, initialTopologyDescription);
 }
 
-void ServerIsMasterMonitor::close() {
+void ServerIsMasterMonitor::shutdown() {
     stdx::lock_guard lock(_mutex);
-    if (_isClosed)
+    if (_isShutdown)
         return;
 
-    _isClosed = true;
+    _isShutdown = true;
     for (auto singleMonitor : _singleMonitors) {
-        singleMonitor.second->close();
+        singleMonitor.second->shutdown();
     }
 }
 
@@ -266,7 +266,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
     sdam::TopologyDescriptionPtr previousDescription,
     sdam::TopologyDescriptionPtr newDescription) {
     stdx::lock_guard lock(_mutex);
-    if (_isClosed)
+    if (_isShutdown)
         return;
 
     const auto newType = newDescription->getType();
@@ -283,8 +283,8 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
         const auto& serverAddress = it->first;
         if (newDescription->findServerByAddress(serverAddress) == boost::none) {
             auto& singleMonitor = _singleMonitors[serverAddress];
-            singleMonitor->close();
-            LOG(kLogDebugLevel) << serverAddress << " was removed from the topology.";
+            singleMonitor->shutdown();
+            LOG(kLogLevel) << serverAddress << " was removed from the topology.";
             it = _singleMonitors.erase(it);
         } else {
             ++it;
@@ -297,7 +297,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
         bool isMissing =
             _singleMonitors.find(serverDescription->getAddress()) == _singleMonitors.end();
         if (isMissing) {
-            LOG(kLogDebugLevel) << serverAddress << " was added to the topology.";
+            LOG(kLogLevel) << serverAddress << " was added to the topology.";
             _singleMonitors[serverAddress] = std::make_shared<SingleServerIsMasterMonitor>(
                 _setUri,
                 serverAddress,
@@ -326,7 +326,7 @@ std::shared_ptr<executor::TaskExecutor> ServerIsMasterMonitor::_setupExecutor(
 
 void ServerIsMasterMonitor::requestImmediateCheck() {
     stdx::lock_guard lock(_mutex);
-    if (_isClosed)
+    if (_isShutdown)
         return;
 
     for (auto& addressAndMonitor : _singleMonitors) {

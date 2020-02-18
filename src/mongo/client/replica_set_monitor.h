@@ -56,7 +56,6 @@ class ReplicaSetMonitorTest;
 struct ReadPreferenceSetting;
 using ReplicaSetMonitorPtr = std::shared_ptr<ReplicaSetMonitor>;
 using ReplicaSetMontiorQueryProcessorPtr = std::shared_ptr<ReplicaSetMonitorQueryProcessor>;
-using ReplicaSetMonitorTask = std::function<void(ReplicaSetMonitorPtr)>;
 
 /**
  * Holds state about a replica set and provides a means to refresh the local view.
@@ -308,7 +307,6 @@ private:
     const MongoURI _uri;
 
     std::shared_ptr<executor::TaskExecutor> _executor;
-
 
     AtomicWord<bool> _isClosed{true};
 

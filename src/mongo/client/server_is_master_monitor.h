@@ -16,6 +16,9 @@ public:
                                          TopologyEventsPublisherPtr eventListener,
                                          std::shared_ptr<executor::TaskExecutor> executor);
 
+    void init();
+    void shutdown();
+
     /**
      * Request an immediate check. The server will be checked immediately if we haven't completed
      * an isMaster less than SdamConfiguration::kMinHeartbeatFrequencyMS ago. Otherwise,
@@ -24,9 +27,6 @@ public:
      */
     void requestImmediateCheck();
     void disableExpeditedChecking();
-
-    void init();
-    void close();
 
 private:
     void _scheduleNextIsMaster(WithLock, Milliseconds delay);
@@ -39,7 +39,7 @@ private:
     Milliseconds _currentRefreshPeriod(WithLock);
     void _cancelOutstandingRequest(WithLock);
 
-    static const int kDebugLevel = 0;
+    static inline const logger::LogSeverity kLogLevel = logger::LogSeverity::Debug(1);
 
     Mutex _mutex;
     ServerAddress _host;
@@ -54,7 +54,7 @@ private:
     executor::TaskExecutor::CallbackHandle _nextIsMasterHandle;
     executor::TaskExecutor::CallbackHandle _remoteCommandHandle;
 
-    bool _isClosed;
+    bool _isShutdown;
     MongoURI _setUri;
 };
 using SingleServerIsMasterMonitorPtr = std::shared_ptr<SingleServerIsMasterMonitor>;
@@ -70,13 +70,16 @@ public:
 
     virtual ~ServerIsMasterMonitor() {}
 
+    void shutdown();
+
     /**
      * Request an immediate check of each member in the replica set.
      */
     void requestImmediateCheck();
 
-    void close();
-
+    /**
+     * Add/Remove Single Monitors based on the current topology membership.
+     */
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            TopologyDescriptionPtr previousDescription,
                                            TopologyDescriptionPtr newDescription) override;
@@ -89,14 +92,14 @@ private:
         const std::shared_ptr<executor::TaskExecutor>& executor);
     void _disableExpeditedChecking(WithLock);
 
-    static const int kLogDebugLevel = 0;
+    static inline const logger::LogSeverity kLogLevel = logger::LogSeverity::Debug(0);
 
     Mutex _mutex;
     SdamConfiguration _sdamConfiguration;
     TopologyEventsPublisherPtr _eventPublisher;
     std::shared_ptr<executor::TaskExecutor> _executor;
     std::unordered_map<ServerAddress, SingleServerIsMasterMonitorPtr> _singleMonitors;
-    bool _isClosed;
+    bool _isShutdown;
     MongoURI _setUri;
 };
 using ServerIsMasterMonitorPtr = std::shared_ptr<ServerIsMasterMonitor>;
