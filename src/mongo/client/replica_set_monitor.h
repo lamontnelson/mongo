@@ -263,7 +263,9 @@ private:
                                          const sdam::ServerAddress& hostAndPort,
                                          const BSONObj reply) override;
 
-    void onServerHeartbeatFailureEvent(IsMasterRTT durationMs, Status errorStatus, const ServerAddress &hostAndPort,
+    void onServerHeartbeatFailureEvent(IsMasterRTT durationMs,
+                                       Status errorStatus,
+                                       const ServerAddress& hostAndPort,
                                        const BSONObj reply) override;
 
     void onServerPingFailedEvent(const sdam::ServerAddress& hostAndPort,

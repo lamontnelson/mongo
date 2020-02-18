@@ -67,7 +67,7 @@ void ReplicaSetMonitorQueryProcessor::onTopologyDescriptionChangedEvent(
     if (setName) {
         auto replicaSetMonitor = globalRSMonitorManager.getMonitor(*setName);
         if (!replicaSetMonitor) {
-                    LOG(kLogLevel) << "could not find rsm instance for query processing.";
+            LOG(kLogLevel) << "could not find rsm instance for query processing.";
             return;
         }
         replicaSetMonitor->_withLock(_processOutstanding(newDescription));

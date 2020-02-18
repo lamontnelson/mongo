@@ -76,7 +76,8 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
 
     // if our calculated delay is less than the next scheduled call, then run the check sooner.
     // Otherwise, do nothing. Three cases to cancel existing request:
-    // 1. refresh period has changed to expedited, so (currentRefreshPeriod - timeSinceLastCheck) is < 0
+    // 1. refresh period has changed to expedited, so (currentRefreshPeriod - timeSinceLastCheck) is
+    // < 0
     // 2. calculated delay is less then next scheduled isMaster
     // 3. isMaster was never scheduled.
     if (((currentRefreshPeriod - timeSinceLastCheck) < kZeroMs) ||

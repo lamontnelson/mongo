@@ -496,8 +496,10 @@ void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durati
     _topologyManager->onServerDescription(outcome);
 }
 
-void ReplicaSetMonitor::onServerHeartbeatFailureEvent(IsMasterRTT durationMs, Status errorStatus,
-                                                          const ServerAddress &hostAndPort, const BSONObj reply) {
+void ReplicaSetMonitor::onServerHeartbeatFailureEvent(IsMasterRTT durationMs,
+                                                      Status errorStatus,
+                                                      const ServerAddress& hostAndPort,
+                                                      const BSONObj reply) {
     IsMasterOutcome outcome(hostAndPort, reply, errorStatus.toString());
     _topologyManager->onServerDescription(outcome);
 }
