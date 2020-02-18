@@ -96,13 +96,13 @@ private:
                         lhs._servers,
                         lhs._compatible,
                         lhs._logicalSessionTimeoutMinutes) ==
-               std::tie(rhs._setName,
-                        rhs._type,
-                        rhs._maxSetVersion,
-                        rhs._maxElectionId,
-                        rhs._servers,
-                        rhs._compatible,
-                        rhs._logicalSessionTimeoutMinutes);
+            std::tie(rhs._setName,
+                     rhs._type,
+                     rhs._maxSetVersion,
+                     rhs._maxElectionId,
+                     rhs._servers,
+                     rhs._compatible,
+                     rhs._logicalSessionTimeoutMinutes);
     }
 
     /**

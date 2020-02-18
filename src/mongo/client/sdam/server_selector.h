@@ -88,7 +88,8 @@ private:
 
     // staleness for a ServerDescription is defined here:
     // https://github.com/mongodb/specifications/blob/master/source/server-selection/server-selection.rst#maxstalenessseconds
-    Milliseconds _calculateStaleness(const TopologyDescriptionPtr& topologyDescription, const ServerDescriptionPtr& serverDescription) {
+    Milliseconds _calculateStaleness(const TopologyDescriptionPtr& topologyDescription,
+                                     const ServerDescriptionPtr& serverDescription) {
         if (serverDescription->getType() != ServerType::kRSSecondary)
             return Milliseconds(0);
 
@@ -102,9 +103,9 @@ private:
             auto& primaryDescription = *maybePrimaryDescription;
 
             auto result = (serverDescription->getLastUpdateTime() - lastWriteDate) -
-                          (primaryDescription->getLastUpdateTime() -
-                           *primaryDescription->getLastWriteDate()) +
-                          _config.getHeartBeatFrequencyMs();
+                (primaryDescription->getLastUpdateTime() -
+                 *primaryDescription->getLastWriteDate()) +
+                _config.getHeartBeatFrequencyMs();
             return duration_cast<Milliseconds>(result);
         } else if (topologyDescription->getType() == TopologyType::kReplicaSetNoPrimary) {
             //  SMax.lastWriteDate - S.lastWriteDate + heartbeatFrequencyMS
@@ -120,8 +121,7 @@ private:
                 }
             }
 
-            auto result =
-                (maxLastWriteDate - lastWriteDate) + _config.getHeartBeatFrequencyMs();
+            auto result = (maxLastWriteDate - lastWriteDate) + _config.getHeartBeatFrequencyMs();
             return duration_cast<Milliseconds>(result);
         } else {
             // Not a replica set

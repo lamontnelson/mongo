@@ -203,13 +203,15 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     // try to satisfy query immediately
     auto immediateResult = _getHosts(criteria);
     if (immediateResult) {
-        LOG(kLowerLogLevel) << _logPrefix() << "getHosts: " << readPrefToStringWithMinOpTime(criteria)
-                            << " -> " << hostListToString(immediateResult);
+        LOG(kLowerLogLevel) << _logPrefix()
+                            << "getHosts: " << readPrefToStringWithMinOpTime(criteria) << " -> "
+                            << hostListToString(immediateResult);
         return {*immediateResult};
     }
 
     _isMasterMonitor->requestImmediateCheck();
-    LOG(kDefaultLogLevel) << _logPrefix() << "start getHosts: " << readPrefToStringWithMinOpTime(criteria);
+    LOG(kDefaultLogLevel) << _logPrefix()
+                          << "start getHosts: " << readPrefToStringWithMinOpTime(criteria);
 
     // fail fast on timeout
     const auto deadline = _clockSource->now() + maxWait;
@@ -560,8 +562,9 @@ void ReplicaSetMonitor::_processOutstanding(const TopologyDescriptionPtr& topolo
                 query->done = true;
                 query->promise.emplaceValue(std::move(*result));
                 LOG(kDefaultLogLevel)
-                    << _logPrefix() << "finish getHosts: " << readPrefToStringWithMinOpTime(query->criteria)
-                    << " (" << _executor->now() - query->start << ")";
+                    << _logPrefix()
+                    << "finish getHosts: " << readPrefToStringWithMinOpTime(query->criteria) << " ("
+                    << _executor->now() - query->start << ")";
                 shouldRemove = true;
             }
         }

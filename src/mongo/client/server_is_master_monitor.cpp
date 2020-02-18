@@ -62,7 +62,8 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
       _heartbeatFrequencyMS(_overrideRefreshPeriod(heartbeatFrequencyMS)),
       _isShutdown(true),
       _setUri(setUri) {
-    LOG(kLogLevel.lessSevere()) << "Created Replica Set SingleServerIsMasterMonitor for host " << host;
+    LOG(kLogLevel.lessSevere()) << "Created Replica Set SingleServerIsMasterMonitor for host "
+                                << host;
 }
 
 void SingleServerIsMasterMonitor::init() {
@@ -199,13 +200,15 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
 void SingleServerIsMasterMonitor::shutdown() {
     stdx::lock_guard lock(_mutex);
-    LOG(kLogLevel.lessSevere()) << "Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+    LOG(kLogLevel.lessSevere()) << "Closing Replica Set SingleServerIsMasterMonitor for host "
+                                << _host;
     _isShutdown = true;
 
     _cancelOutstandingRequest(lock);
 
     _executor = nullptr;
-    LOG(kLogLevel.lessSevere()) << "Done Closing Replica Set SingleServerIsMasterMonitor for host " << _host;
+    LOG(kLogLevel.lessSevere()) << "Done Closing Replica Set SingleServerIsMasterMonitor for host "
+                                << _host;
 }
 
 void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
