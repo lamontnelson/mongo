@@ -108,7 +108,7 @@ const boost::optional<ServerDescriptionPtr> TopologyDescription::findServerByAdd
 
 boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescription(
     const ServerDescriptionPtr& newServerDescription) {
-    LOG(1) << "(" << getSetName() << ") install ServerDescription "
+    LOG(2) << "(" << getSetName() << ") install ServerDescription "
            << newServerDescription->toString();
 
     boost::optional<ServerDescriptionPtr> previousDescription;

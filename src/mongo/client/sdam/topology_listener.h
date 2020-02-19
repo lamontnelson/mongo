@@ -130,7 +130,7 @@ private:
     using EventPtr = std::unique_ptr<Event>;
 
     void _sendEvent(TopologyListenerPtr listener, const TopologyEventsPublisher::Event& event);
-    void nextDelivery();
+    void _nextDelivery();
     void _scheduleNextDelivery();
 
     // Lock acquisition order to avoid deadlock is _eventQueueMutex -> _mutex

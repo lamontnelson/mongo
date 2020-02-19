@@ -100,7 +100,7 @@ void TopologyEventsPublisher::onServerHeartbeatFailureEvent(IsMasterRTT duration
 void TopologyEventsPublisher::_scheduleNextDelivery() {
     // run nextDelivery async
     _executor->schedule(
-        [self = shared_from_this()](const Status& status) { self->nextDelivery(); });
+        [self = shared_from_this()](const Status& status) { self->_nextDelivery(); });
 }
 
 void TopologyEventsPublisher::onServerPingFailedEvent(const ServerAddress& hostAndPort,
@@ -110,7 +110,7 @@ void TopologyEventsPublisher::onServerPingSucceededEvent(IsMasterRTT durationMS,
                                                          const ServerAddress& hostAndPort) {}
 
 // TODO: this could be done in batches if this is a bottleneck.
-void TopologyEventsPublisher::nextDelivery() {
+void TopologyEventsPublisher::_nextDelivery() {
     // get the next event to send
     EventPtr nextEvent;
     {
