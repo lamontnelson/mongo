@@ -139,7 +139,8 @@ void TopologyManager::onServerRTTUpdated(ServerAddress hostAndPort, IsMasterRTT 
     }
 
     // otherwise, the server was removed from the topology. Nothing to do.
-    LOG(2) << "Not updating RTT. Server " << hostAndPort << " does not exist in " << getTopologyDescription()->getSetName();
+    LOG(2) << "Not updating RTT. Server " << hostAndPort << " does not exist in "
+           << getTopologyDescription()->getSetName();
 }
 
 void TopologyManager::_publishTopologyDescriptionChanged(
