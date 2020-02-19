@@ -93,18 +93,25 @@ private:
         if (serverDescription->getType() != ServerType::kRSSecondary)
             return Milliseconds(0);
 
-        const Date_t& lastWriteDate = *serverDescription->getLastWriteDate();
+        const Date_t& lastWriteDate = serverDescription->getLastWriteDate()
+            ? *serverDescription->getLastWriteDate()
+            : Date_t::min();
 
         if (topologyDescription->getType() == TopologyType::kReplicaSetWithPrimary) {
             // (S.lastUpdateTime - S.lastWriteDate) - (P.lastUpdateTime - P.lastWriteDate) +
             // heartbeatFrequencyMS
-            auto maybePrimaryDescription = topologyDescription->getPrimary();
-            invariant(maybePrimaryDescription);
-            auto& primaryDescription = *maybePrimaryDescription;
+
+            // topologyType == kReplicaSetWithPrimary implies the validity of the primary server
+            // description.
+            invariant(topologyDescription->getPrimary());
+            const auto& primaryDescription = *topologyDescription->getPrimary();
+
+            const auto& primaryLastWriteDate = primaryDescription->getLastWriteDate()
+                ? *primaryDescription->getLastWriteDate()
+                : Date_t::min();
 
             auto result = (serverDescription->getLastUpdateTime() - lastWriteDate) -
-                (primaryDescription->getLastUpdateTime() -
-                 *primaryDescription->getLastWriteDate()) +
+                (primaryDescription->getLastUpdateTime() - primaryLastWriteDate) +
                 _config.getHeartBeatFrequencyMs();
             return duration_cast<Milliseconds>(result);
         } else if (topologyDescription->getType() == TopologyType::kReplicaSetNoPrimary) {
@@ -115,9 +122,12 @@ private:
             for (const auto& s : topologyDescription->getServers()) {
                 if (s->getType() != ServerType::kRSSecondary)
                     continue;
-                invariant(s->getLastWriteDate());
-                if (s->getLastWriteDate() > maxLastWriteDate) {
-                    maxLastWriteDate = *s->getLastWriteDate();
+
+                const auto& sLastWriteDate =
+                    s->getLastWriteDate() ? *s->getLastWriteDate() : Date_t::min();
+
+                if (sLastWriteDate > maxLastWriteDate) {
+                    maxLastWriteDate = sLastWriteDate;
                 }
             }
 
@@ -129,26 +139,7 @@ private:
         }
     }
 
-    const std::function<bool(const ReadPreferenceSetting& readPref, const ServerDescriptionPtr& s)>
-        recencyFilter =
-            [this](const ReadPreferenceSetting& readPref, const ServerDescriptionPtr& s) {
-                bool result = true;
-
-                // TODO: check to see if we want to enforce minOpTime at all since
-                // it was effectively optional in the original implementation.
-                if (!readPref.minOpTime.isNull()) {
-                    result = result && (s->getOpTime() >= readPref.minOpTime);
-                }
-
-                if (readPref.maxStalenessSeconds.count()) {
-                    auto topologyDescription = s->getTopologyDescription();
-                    invariant(topologyDescription);
-                    auto staleness = _calculateStaleness(*topologyDescription, s);
-                    result = result && (staleness <= readPref.maxStalenessSeconds);
-                }
-
-                return result;
-            };
+    bool recencyFilter(const ReadPreferenceSetting& readPref, const ServerDescriptionPtr& s);
 
     // A SelectionFilter is a higher order function used to filter out servers from the current
     // Topology. It's return value is used as input to the TopologyDescription::findServers
@@ -184,8 +175,8 @@ private:
 
 // This is used to filter out servers based on their current latency measurements.
 struct LatencyWindow {
-    IsMasterRTT lower;
-    IsMasterRTT upper;
+    const IsMasterRTT lower;
+    const IsMasterRTT upper;
 
     explicit LatencyWindow(const IsMasterRTT lowerBound, const IsMasterRTT windowWidth)
         : lower(lowerBound), upper(lowerBound + windowWidth) {}

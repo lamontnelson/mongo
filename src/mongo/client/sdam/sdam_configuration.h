@@ -77,9 +77,8 @@ private:
 
 class ServerSelectionConfiguration {
 public:
-    ServerSelectionConfiguration(
-        const Milliseconds localThresholdMs,
-        const Milliseconds serverSelectionTimeoutMs);
+    ServerSelectionConfiguration(const Milliseconds localThresholdMs,
+                                 const Milliseconds serverSelectionTimeoutMs);
 
     Milliseconds getLocalThresholdMs() const;
     Milliseconds getServerSelectionTimeoutMs() const;

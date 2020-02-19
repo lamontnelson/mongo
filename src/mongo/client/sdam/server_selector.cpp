@@ -227,11 +227,35 @@ void SdamServerSelector::filterTags(std::vector<ServerDescriptionPtr>* servers,
     servers->erase(std::remove_if(servers->begin(), servers->end(), predicate), servers->end());
 }
 
+bool SdamServerSelector::recencyFilter(const ReadPreferenceSetting& readPref,
+                                       const ServerDescriptionPtr& s) {
+    bool result = true;
+
+    // TODO: check to see if we want to enforce minOpTime at all since
+    // it was effectively optional in the original implementation.
+    if (!readPref.minOpTime.isNull()) {
+        result = result && (s->getOpTime() >= readPref.minOpTime);
+    }
+
+    if (readPref.maxStalenessSeconds.count()) {
+        auto topologyDescription = s->getTopologyDescription();
+        invariant(topologyDescription);
+        auto staleness = _calculateStaleness(*topologyDescription, s);
+        result = result && (staleness <= readPref.maxStalenessSeconds);
+    }
+
+    return result;
+}
+
 
 void LatencyWindow::filterServers(std::vector<ServerDescriptionPtr>* servers) {
     servers->erase(std::remove_if(servers->begin(),
                                   servers->end(),
                                   [&](const ServerDescriptionPtr& s) {
+                                      // Servers that have made it to this stage are not ServerType
+                                      // == kUnknown, so they must have an associated latency.
+                                      invariant(s->getType() != ServerType::kUnknown);
+                                      invariant(s->getRtt());
                                       return !this->isWithinWindow(*s->getRtt());
                                   }),
                    servers->end());
