@@ -137,7 +137,7 @@ void ServerDescription::saveTags(BSONObj tagsObj) {
     }
 }
 
-void ServerDescription::getBsonTags(BSONObjBuilder& builder) const {
+void ServerDescription::appendBsonTags(BSONObjBuilder& builder) const {
     for (const auto& pair : _tags) {
         const auto& key = pair.first;
         const auto& value = pair.second;
@@ -400,7 +400,7 @@ BSONObj ServerDescription::toBson() const {
 
     if (getTags().size()) {
         BSONObjBuilder tagsBuilder(bson.subobjStart("tags"));
-        getBsonTags(tagsBuilder);
+        appendBsonTags(tagsBuilder);
     }
 
     return bson.obj();

@@ -430,7 +430,7 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
 
         if (serverDescription->getTags().size()) {
             BSONObjBuilder tagsBuilder(builder.subobjStart("tags"));
-            serverDescription->getBsonTags(tagsBuilder);
+            serverDescription->appendBsonTags(tagsBuilder);
         }
     }
 }
