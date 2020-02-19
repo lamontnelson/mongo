@@ -64,9 +64,9 @@ public:
     Milliseconds getHeartBeatFrequency() const;
     const boost::optional<std::string>& getSetName() const;
 
-    static inline const Milliseconds kDefaultHeartbeatFrequencyMs = Seconds(10);
-    static inline const Milliseconds kMinHeartbeatFrequencyMS = Milliseconds(500);
-    static inline const Milliseconds kDefaultConnectTimeoutMS = Milliseconds(100);
+    static constexpr Milliseconds kDefaultHeartbeatFrequencyMs = Seconds(10);
+    static constexpr Milliseconds kMinHeartbeatFrequencyMS = Milliseconds(500);
+    static constexpr Milliseconds kDefaultConnectTimeoutMS = Milliseconds(100);
 
 private:
     boost::optional<std::vector<ServerAddress>> _seedList;
@@ -78,15 +78,15 @@ private:
 class ServerSelectionConfiguration {
 public:
     ServerSelectionConfiguration(
-        const Milliseconds localThresholdMs = kDefaultLocalThresholdMS,
-        const Milliseconds serverSelectionTimeoutMs = kDefaultServerSelectionTimeoutMs);
+        const Milliseconds localThresholdMs,
+        const Milliseconds serverSelectionTimeoutMs);
 
     Milliseconds getLocalThresholdMs() const;
     Milliseconds getServerSelectionTimeoutMs() const;
     Milliseconds getHeartBeatFrequencyMs() const;
 
-    static inline const Milliseconds kDefaultLocalThresholdMS = Milliseconds(15);
-    static inline const Milliseconds kDefaultServerSelectionTimeoutMs = Milliseconds(30000);
+    static constexpr Milliseconds kDefaultLocalThresholdMS = Milliseconds(15);
+    static constexpr Milliseconds kDefaultServerSelectionTimeoutMs = Milliseconds(30000);
 
     static ServerSelectionConfiguration defaultConfiguration() {
         return ServerSelectionConfiguration{kDefaultLocalThresholdMS,
@@ -94,9 +94,8 @@ public:
     }
 
 private:
-    ServerSelectionConfiguration(){};
-    Milliseconds _localThresholdMs;
-    Milliseconds _serverSelectionTimeoutMs;
+    Milliseconds _localThresholdMs = kDefaultLocalThresholdMS;
+    Milliseconds _serverSelectionTimeoutMs = kDefaultServerSelectionTimeoutMs;
     Milliseconds _heartBeatFrequencyMs = SdamConfiguration::kDefaultHeartbeatFrequencyMs;
 };
 }  // namespace mongo::sdam
