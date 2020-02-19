@@ -191,7 +191,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
     if (!swCbHandle.isOK()) {
         Microseconds latency(timer.micros());
         _onIsMasterFailure(latency, swCbHandle.getStatus(), BSONObj());
-        fassertFailedWithStatus(31448, swCbHandle.getStatus());
+        uasserted(31448, swCbHandle.getStatus().toString());
     }
 
     _isMasterOutstanding = true;
