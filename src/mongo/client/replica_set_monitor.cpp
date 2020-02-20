@@ -141,8 +141,8 @@ void ReplicaSetMonitor::init() {
     LOG(kDefaultLogLevel) << _logPrefix() << "Starting Replica Set Monitor with uri: " << _uri;
 
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
-    _topologyManager =
-        std::make_unique<TopologyManager>(_sdamConfig, getGlobalServiceContext()->getPreciseClockSource(), _eventsPublisher);
+    _topologyManager = std::make_unique<TopologyManager>(
+        _sdamConfig, getGlobalServiceContext()->getPreciseClockSource(), _eventsPublisher);
     _isMasterMonitor = std::make_unique<ServerIsMasterMonitor>(
         _uri, _sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription(), _executor);
 
