@@ -232,7 +232,8 @@ public:
 
 private:
     class ReplicaSetMonitorQueryProcessor;
-    using ReplicaSetMontiorQueryProcessorPtr = std::shared_ptr<ReplicaSetMonitor::ReplicaSetMonitorQueryProcessor>;
+    using ReplicaSetMontiorQueryProcessorPtr =
+        std::shared_ptr<ReplicaSetMonitor::ReplicaSetMonitorQueryProcessor>;
 
     struct HostQuery {
         Date_t deadline;
@@ -311,7 +312,6 @@ private:
     AtomicWord<bool> _isDropped{true};
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
-    ClockSource* _clockSource;
     std::vector<HostQueryPtr> _outstandingQueries;
     mutable PseudoRandom _random;
 

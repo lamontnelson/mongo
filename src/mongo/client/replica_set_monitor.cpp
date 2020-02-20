@@ -127,7 +127,6 @@ ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskEx
     }
 
     _sdamConfig = SdamConfiguration(seeds);
-    _clockSource = getGlobalServiceContext()->getPreciseClockSource();
 }
 
 ReplicaSetMonitorPtr ReplicaSetMonitor::make(const MongoURI& uri,
@@ -143,7 +142,7 @@ void ReplicaSetMonitor::init() {
 
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
     _topologyManager =
-        std::make_unique<TopologyManager>(_sdamConfig, _clockSource, _eventsPublisher);
+        std::make_unique<TopologyManager>(_sdamConfig, getGlobalServiceContext()->getPreciseClockSource(), _eventsPublisher);
     _isMasterMonitor = std::make_unique<ServerIsMasterMonitor>(
         _uri, _sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription(), _executor);
 

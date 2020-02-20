@@ -104,9 +104,10 @@ TEST_F(TopologyDescriptionTestFixture, ShouldAllowTypeSingleWithASingleSeed) {
 }
 
 TEST_F(TopologyDescriptionTestFixture, DoesNotAllowMultipleSeedsWithSingle) {
-    ASSERT_THROWS_CODE(TopologyDescription(SdamConfiguration(kTwoServersNormalCase, TopologyType::kSingle)),
-                       DBException,
-                       ErrorCodes::InvalidSeedList);
+    ASSERT_THROWS_CODE(
+        TopologyDescription(SdamConfiguration(kTwoServersNormalCase, TopologyType::kSingle)),
+        DBException,
+        ErrorCodes::InvalidSeedList);
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldSetTheReplicaSetName) {
@@ -118,10 +119,10 @@ TEST_F(TopologyDescriptionTestFixture, ShouldSetTheReplicaSetName) {
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowSettingTheReplicaSetNameWithWrongType) {
-    ASSERT_THROWS_CODE(
-        TopologyDescription(SdamConfiguration(kOneServer, TopologyType::kUnknown, mongo::Seconds(10), kSetName)),
-        DBException,
-        ErrorCodes::InvalidTopologyType);
+    ASSERT_THROWS_CODE(TopologyDescription(SdamConfiguration(
+                           kOneServer, TopologyType::kUnknown, mongo::Seconds(10), kSetName)),
+                       DBException,
+                       ErrorCodes::InvalidTopologyType);
 }
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowTopologyTypeRSNoPrimaryWithoutSetName) {

@@ -55,9 +55,9 @@ public:
      * allowed.
      */
     explicit SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
-                      TopologyType initialType = TopologyType::kUnknown,
-                      Milliseconds heartBeatFrequencyMs = kDefaultHeartbeatFrequencyMs,
-                      boost::optional<std::string> setName = boost::none);
+                               TopologyType initialType = TopologyType::kUnknown,
+                               Milliseconds heartBeatFrequencyMs = kDefaultHeartbeatFrequencyMs,
+                               boost::optional<std::string> setName = boost::none);
 
     const boost::optional<std::vector<ServerAddress>>& getSeedList() const;
     TopologyType getInitialType() const;
@@ -78,7 +78,7 @@ private:
 class ServerSelectionConfiguration {
 public:
     explicit ServerSelectionConfiguration(const Milliseconds localThresholdMs,
-                                 const Milliseconds serverSelectionTimeoutMs);
+                                          const Milliseconds serverSelectionTimeoutMs);
 
     Milliseconds getLocalThresholdMs() const;
     Milliseconds getServerSelectionTimeoutMs() const;
