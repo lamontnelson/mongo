@@ -105,15 +105,17 @@ std::string hostListToString(boost::optional<std::vector<HostAndPort>> x) {
 
 int32_t pingTimeMillis(const ServerDescriptionPtr& serverDescription) {
     static const Milliseconds maxLatency = Milliseconds::max();
-    auto serverRtt = serverDescription->getRtt();
+    const auto& serverRtt = serverDescription->getRtt();
     auto latencyMillis = (serverRtt) ? duration_cast<Milliseconds>(*serverRtt) : maxLatency;
     return std::min(latencyMillis, maxLatency).count();
 }
+
+constexpr auto kZeroMs = Milliseconds(0);
 }  // namespace
 
 ReplicaSetMonitor::ReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskExecutor> executor)
     : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
-      _queryProcessor(new ReplicaSetMonitorQueryProcessor()),
+      _queryProcessor(std::make_shared<ReplicaSetMonitorQueryProcessor>()),
       _uri(uri),
       _executor(executor),
       _random(PseudoRandom(SecureRandom().nextInt64())) {
@@ -147,27 +149,25 @@ void ReplicaSetMonitor::init() {
 
     _eventsPublisher->registerListener(shared_from_this());
     _eventsPublisher->registerListener(_isMasterMonitor);
-    _isClosed.store(false);
+    _isDropped.store(false);
 
     globalRSMonitorManager.getNotifier().onFoundSet(getName());
 }
 
 void ReplicaSetMonitor::drop() {
-    if (_isClosed.load())
+    stdx::lock_guard lock(_mutex);
+    if (_isDropped.load())
         return;
 
-    {
-        stdx::lock_guard lock(_mutex);
-        _isClosed.store(true);
-        LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
-        _eventsPublisher->close();
-        _queryProcessor->shutdown();
-        _isMasterMonitor->shutdown();
-        _failOutstandingWitStatus(
-            lock, Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
+    _isDropped.store(true);
+    LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
+    _eventsPublisher->close();
+    _queryProcessor->shutdown();
+    _isMasterMonitor->shutdown();
+    _failOutstandingWithStatus(
+        lock, Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
 
-        globalRSMonitorManager.getNotifier().onDroppedSet(getName());
-    }
+    globalRSMonitorManager.getNotifier().onDroppedSet(getName());
 
     LOG(kDefaultLogLevel) << _logPrefix() << "Done closing Replica Set Monitor";
 }
@@ -196,9 +196,12 @@ std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
 SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
     const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
     // In the fast case (stable topology), we avoid mutex acquisition.
-    if (_isClosed.load()) {
+    if (_isDropped.load()) {
         return _makeReplicaSetMonitorRemovedError();
     }
+
+    // start counting from the beginning of the operation
+    const auto deadline = _executor->now() + ((maxWait > kZeroMs) ? maxWait : kZeroMs);
 
     // try to satisfy query immediately
     auto immediateResult = _getHosts(criteria);
@@ -214,9 +217,9 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
                           << "start getHosts: " << readPrefToStringWithMinOpTime(criteria);
 
     // fail fast on timeout
-    const auto deadline = _clockSource->now() + maxWait;
-    if (deadline - _clockSource->now() < Milliseconds(0)) {
-        return SemiFuture<std::vector<HostAndPort>>(_makeUnsatisfiedReadPrefError(criteria));
+    const Date_t& now = _executor->now();
+    if (deadline <= now) {
+        return _makeUnsatisfiedReadPrefError(criteria);
     }
 
     {
@@ -224,11 +227,11 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::getHostsOrRefresh(
 
         // We check if we are closed under the mutex here since someone could have called
         // close() concurrently with the code above.
-        if (_isClosed.load()) {
+        if (_isDropped.load()) {
             return _makeReplicaSetMonitorRemovedError();
         }
 
-        return std::move(_enqueueOutstandingQuery(lk, criteria, deadline)).semi();
+        return _enqueueOutstandingQuery(lk, criteria, deadline);
     }
 }
 
@@ -244,25 +247,26 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::_enqueueOutstandingQuery
     auto pf = makePromiseFuture<HostAndPortList>();
     query->promise = std::move(pf.promise);
 
-    auto deadlineCb = [query, self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
-        stdx::lock_guard lock(self->_mutex);
-        if (query->done) {
-            return;
-        }
+    auto deadlineCb =
+        [this, query, self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
+            stdx::lock_guard lock(_mutex);
+            if (query->done) {
+                return;
+            }
 
-        const auto cbStatus = cbArgs.status;
-        if (!cbStatus.isOK()) {
-            query->promise.setError(cbStatus);
+            const auto cbStatus = cbArgs.status;
+            if (!cbStatus.isOK()) {
+                query->promise.setError(cbStatus);
+                query->done = true;
+                return;
+            }
+
+            const auto errorStatus = _makeUnsatisfiedReadPrefError(query->criteria);
+            query->promise.setError(errorStatus);
             query->done = true;
-            return;
-        }
-
-        const auto errorStatus = self->_makeUnsatisfiedReadPrefError(query->criteria);
-        query->promise.setError(errorStatus);
-        query->done = true;
-        LOG(kDefaultLogLevel) << self->_logPrefix()
-                              << "host selection timeout: " << errorStatus.toString();
-    };
+            LOG(kDefaultLogLevel) << _logPrefix()
+                                  << "host selection timeout: " << errorStatus.toString();
+        };
     auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
 
     if (!swDeadlineHandle.isOK()) {
@@ -282,8 +286,9 @@ SemiFuture<std::vector<HostAndPort>> ReplicaSetMonitor::_enqueueOutstandingQuery
 boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
     const TopologyDescriptionPtr& topology, const ReadPreferenceSetting& criteria) {
     auto result = _serverSelector->selectServers(topology, criteria);
-    return (result) ? boost::optional<std::vector<HostAndPort>>(_extractHosts(*result))
-                    : boost::none;
+    if (!result)
+        return boost::none;
+    return _extractHosts(*result);
 }
 
 boost::optional<std::vector<HostAndPort>> ReplicaSetMonitor::_getHosts(
@@ -315,8 +320,7 @@ bool ReplicaSetMonitor::isPrimary(const HostAndPort& host) const {
 
 bool ReplicaSetMonitor::isHostUp(const HostAndPort& host) const {
     auto currentTopology = _currentTopology();
-    const boost::optional<ServerDescriptionPtr>& serverDescription =
-        currentTopology->findServerByAddress(host.toString());
+    const auto& serverDescription = currentTopology->findServerByAddress(host.toString());
     return serverDescription && (*serverDescription)->getType() != ServerType::kUnknown;
 }
 
@@ -370,7 +374,7 @@ const MongoURI& ReplicaSetMonitor::getOriginalUri() const {
 }
 
 bool ReplicaSetMonitor::contains(const HostAndPort& host) const {
-    return _currentTopology()->findServerByAddress(host.toString()) != boost::none;
+    return static_cast<bool>(_currentTopology()->findServerByAddress(host.toString()));
 }
 
 shared_ptr<ReplicaSetMonitor> ReplicaSetMonitor::createIfNeeded(const string& name,
@@ -414,11 +418,35 @@ void ReplicaSetMonitor::appendInfo(BSONObjBuilder& bsonObjBuilder, bool forFTDC)
     // NOTE: the format here must be consistent for backwards compatibility
     BSONArrayBuilder hosts(monitorInfo.subarrayStart("hosts"));
     for (const auto& serverDescription : topologyDescription->getServers()) {
-        bool isUp = serverDescription->getType() == ServerType::kRSSecondary ||
-            serverDescription->getType() == ServerType::kRSPrimary;
-        bool isMaster = serverDescription->getPrimary() == serverDescription->getAddress();
-        bool isSecondary = serverDescription->getType() == ServerType::kRSSecondary;
-        bool isHidden = serverDescription->getType() == ServerType::kRSGhost;
+        bool isUp = false;
+        bool isMaster = false;
+        bool isSecondary = false;
+        bool isHidden = false;
+
+        switch (serverDescription->getType()) {
+            case ServerType::kRSPrimary:
+                isUp = true;
+                isMaster = true;
+                break;
+            case ServerType::kRSSecondary:
+                isUp = true;
+                isSecondary = true;
+                break;
+            case ServerType::kStandalone:
+                isUp = true;
+                break;
+            case ServerType::kMongos:
+                isUp = true;
+                break;
+            case ServerType::kRSGhost:
+                isHidden = true;
+                break;
+            case ServerType::kRSArbiter:
+                isHidden = true;
+                break;
+            default:
+                break;
+        }
 
         BSONObjBuilder builder(hosts.subobjStart());
         builder.append("addr", serverDescription->getAddress());
@@ -440,7 +468,7 @@ void ReplicaSetMonitor::shutdown() {
 }
 
 bool ReplicaSetMonitor::isKnownToHaveGoodPrimary() const {
-    return _currentPrimary() != boost::none;
+    return static_cast<bool>(_currentPrimary());
 }
 
 sdam::TopologyDescriptionPtr ReplicaSetMonitor::_currentTopology() const {
@@ -474,7 +502,7 @@ void ReplicaSetMonitor::onTopologyDescriptionChangedEvent(
             globalRSMonitorManager.getNotifier().onPossibleSet(connectionString);
         }
     }
-}  // namespace mongo
+}
 
 void ReplicaSetMonitor::onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durationMs,
                                                         const ServerAddress& hostAndPort,
@@ -505,7 +533,7 @@ std::string ReplicaSetMonitor::_logPrefix() {
     return str::stream() << kLogPrefix << " [" << getName() << "] ";
 }
 
-void ReplicaSetMonitor::_failOutstandingWitStatus(WithLock, Status status) {
+void ReplicaSetMonitor::_failOutstandingWithStatus(WithLock, Status status) {
     for (const auto& query : _outstandingQueries) {
         if (query->done)
             continue;
@@ -529,7 +557,7 @@ bool ReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDes
             return true;
         const ServerDescription& s = *server;
         const ServerDescription& ns = **newServer;
-        if (!(s == ns))
+        if (s != ns)
             return true;
     }
 

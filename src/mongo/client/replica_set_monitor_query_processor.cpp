@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2020-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -33,12 +33,12 @@
 #include "mongo/util/log.h"
 
 namespace mongo {
-void ReplicaSetMonitorQueryProcessor::shutdown() {
+void ReplicaSetMonitor::ReplicaSetMonitorQueryProcessor::shutdown() {
     stdx::lock_guard lock(_mutex);
     _isShutdown = true;
 }
 
-void ReplicaSetMonitorQueryProcessor::onTopologyDescriptionChangedEvent(
+void ReplicaSetMonitor::ReplicaSetMonitorQueryProcessor::onTopologyDescriptionChangedEvent(
     UUID topologyId,
     sdam::TopologyDescriptionPtr previousDescription,
     sdam::TopologyDescriptionPtr newDescription) {

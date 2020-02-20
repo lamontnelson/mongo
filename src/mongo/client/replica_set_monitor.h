@@ -50,11 +50,9 @@ namespace mongo {
 
 class BSONObj;
 class ReplicaSetMonitor;
-class ReplicaSetMonitorQueryProcessor;
 class ReplicaSetMonitorTest;
 struct ReadPreferenceSetting;
 using ReplicaSetMonitorPtr = std::shared_ptr<ReplicaSetMonitor>;
-using ReplicaSetMontiorQueryProcessorPtr = std::shared_ptr<ReplicaSetMonitorQueryProcessor>;
 
 /**
  * Holds state about a replica set and provides a means to refresh the local view.
@@ -230,9 +228,12 @@ public:
      * The default timeout, which will be used for finding a replica set host if the caller does
      * not explicitly specify it.
      */
-    static inline const Seconds kDefaultFindHostTimeout{15};
+    static constexpr Seconds kDefaultFindHostTimeout{15};
 
 private:
+    class ReplicaSetMonitorQueryProcessor;
+    using ReplicaSetMontiorQueryProcessorPtr = std::shared_ptr<ReplicaSetMonitor::ReplicaSetMonitorQueryProcessor>;
+
     struct HostQuery {
         Date_t deadline;
         executor::TaskExecutor::CallbackHandle deadlineHandle;
@@ -283,7 +284,7 @@ private:
 
     std::string _logPrefix();
 
-    void _failOutstandingWitStatus(WithLock, Status status);
+    void _failOutstandingWithStatus(WithLock, Status status);
     bool _hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
                               sdam::TopologyDescriptionPtr newDescription);
 
@@ -307,7 +308,7 @@ private:
 
     std::shared_ptr<executor::TaskExecutor> _executor;
 
-    AtomicWord<bool> _isClosed{true};
+    AtomicWord<bool> _isDropped{true};
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitor");
     ClockSource* _clockSource;
@@ -316,11 +317,9 @@ private:
 
     static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
-    static inline const auto kLogPrefix = "[ReplicaSetMonitor]";
     static inline const auto kDefaultLogLevel = logger::LogSeverity::Debug(1);
     static inline const auto kLowerLogLevel = kDefaultLogLevel.lessSevere();
-
-    friend class ReplicaSetMonitorQueryProcessor;
+    static constexpr auto kLogPrefix = "[ReplicaSetMonitor]";
 };
 
 }  // namespace mongo

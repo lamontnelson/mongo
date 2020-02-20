@@ -30,13 +30,11 @@
 
 #include "replica_set_monitor.h"
 
-#include "mongo/client/replica_set_monitor_manager.h"
+#include "mongo/client/replica_set_monitor.h"
 #include "mongo/client/sdam/sdam.h"
 
 namespace mongo {
-class ReplicaSetMonitor;
-
-class ReplicaSetMonitorQueryProcessor : public sdam::TopologyListener {
+class ReplicaSetMonitor::ReplicaSetMonitorQueryProcessor final : public sdam::TopologyListener {
 public:
     void shutdown();
 
