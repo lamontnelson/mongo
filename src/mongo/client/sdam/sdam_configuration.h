@@ -54,7 +54,7 @@ public:
      * If setName is not null, only TopologyType ReplicaSetNoPrimary and Single, are
      * allowed.
      */
-    SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
+    explicit SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
                       TopologyType initialType = TopologyType::kUnknown,
                       Milliseconds heartBeatFrequencyMs = kDefaultHeartbeatFrequencyMs,
                       boost::optional<std::string> setName = boost::none);
@@ -77,7 +77,7 @@ private:
 
 class ServerSelectionConfiguration {
 public:
-    ServerSelectionConfiguration(const Milliseconds localThresholdMs,
+    explicit ServerSelectionConfiguration(const Milliseconds localThresholdMs,
                                  const Milliseconds serverSelectionTimeoutMs);
 
     Milliseconds getLocalThresholdMs() const;
