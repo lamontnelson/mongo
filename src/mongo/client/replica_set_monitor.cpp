@@ -183,7 +183,6 @@ SemiFuture<HostAndPort> ReplicaSetMonitor::getHostOrRefresh(const ReadPreference
         .semi();
 }
 
-// TODO: get rid of this; change ServerAddress underlying type to HostAndPort
 std::vector<HostAndPort> ReplicaSetMonitor::_extractHosts(
     const std::vector<ServerDescriptionPtr>& serverDescriptions) {
     std::vector<HostAndPort> result;
