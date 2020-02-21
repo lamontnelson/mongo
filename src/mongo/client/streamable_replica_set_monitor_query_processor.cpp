@@ -52,7 +52,8 @@ void StreamableReplicaSetMonitor::StreamableReplicaSetMonitorQueryProcessor::
 
     const auto& setName = newDescription->getSetName();
     if (setName) {
-        auto replicaSetMonitor = std::static_pointer_cast<StreamableReplicaSetMonitor>(globalRSMonitorManager.getMonitor(*setName));
+        auto replicaSetMonitor = std::static_pointer_cast<StreamableReplicaSetMonitor>(
+            globalRSMonitorManager.getMonitor(*setName));
         if (!replicaSetMonitor) {
             LOG(kLogLevel) << "could not find rsm instance " << *setName
                            << " for query processing.";

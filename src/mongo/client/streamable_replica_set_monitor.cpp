@@ -129,7 +129,7 @@ StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(const MongoURI& uri, st
 }
 
 ReplicaSetMonitorPtr StreamableReplicaSetMonitor::make(const MongoURI& uri,
-                                             std::shared_ptr<TaskExecutor> executor) {
+                                                       std::shared_ptr<TaskExecutor> executor) {
     auto result = std::make_shared<StreamableReplicaSetMonitor>(uri, executor);
     result->init();
     return result;
@@ -170,8 +170,8 @@ void StreamableReplicaSetMonitor::drop() {
     LOG(kDefaultLogLevel) << _logPrefix() << "Done closing Replica Set Monitor";
 }
 
-SemiFuture<HostAndPort> StreamableReplicaSetMonitor::getHostOrRefresh(const ReadPreferenceSetting& criteria,
-                                                            Milliseconds maxWait) {
+SemiFuture<HostAndPort> StreamableReplicaSetMonitor::getHostOrRefresh(
+    const ReadPreferenceSetting& criteria, Milliseconds maxWait) {
     return getHostsOrRefresh(criteria, maxWait)
         .thenRunOn(_executor)
         .then([self = shared_from_this()](const std::vector<HostAndPort>& result) {
@@ -301,7 +301,9 @@ void StreamableReplicaSetMonitor::failedHost(const HostAndPort& host, const Stat
     failedHost(host, BSONObj(), status);
 }
 
-void StreamableReplicaSetMonitor::failedHost(const HostAndPort& host, BSONObj bson, const Status& status) {
+void StreamableReplicaSetMonitor::failedHost(const HostAndPort& host,
+                                             BSONObj bson,
+                                             const Status& status) {
     IsMasterOutcome outcome(host.toString(), bson, status.toString());
     _topologyManager->onServerDescription(outcome);
 }
@@ -472,27 +474,27 @@ void StreamableReplicaSetMonitor::onTopologyDescriptionChangedEvent(
 }
 
 void StreamableReplicaSetMonitor::onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durationMs,
-                                                        const ServerAddress& hostAndPort,
-                                                        const BSONObj reply) {
+                                                                  const ServerAddress& hostAndPort,
+                                                                  const BSONObj reply) {
     IsMasterOutcome outcome(hostAndPort, reply, durationMs);
     _topologyManager->onServerDescription(outcome);
 }
 
 void StreamableReplicaSetMonitor::onServerHeartbeatFailureEvent(IsMasterRTT durationMs,
-                                                      Status errorStatus,
-                                                      const ServerAddress& hostAndPort,
-                                                      const BSONObj reply) {
+                                                                Status errorStatus,
+                                                                const ServerAddress& hostAndPort,
+                                                                const BSONObj reply) {
     IsMasterOutcome outcome(hostAndPort, reply, errorStatus.toString());
     _topologyManager->onServerDescription(outcome);
 }
 
 void StreamableReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress& hostAndPort,
-                                                const Status& status) {
+                                                          const Status& status) {
     failedHost(HostAndPort(hostAndPort), status);
 }
 
 void StreamableReplicaSetMonitor::onServerPingSucceededEvent(sdam::IsMasterRTT durationMS,
-                                                   const ServerAddress& hostAndPort) {
+                                                             const ServerAddress& hostAndPort) {
     _topologyManager->onServerRTTUpdated(hostAndPort, durationMS);
 }
 
@@ -512,8 +514,8 @@ void StreamableReplicaSetMonitor::_failOutstandingWithStatus(WithLock, Status st
     _outstandingQueries.clear();
 }
 
-bool StreamableReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescriptionPtr oldDescription,
-                                             sdam::TopologyDescriptionPtr newDescription) {
+bool StreamableReplicaSetMonitor::_hasMembershipChange(
+    sdam::TopologyDescriptionPtr oldDescription, sdam::TopologyDescriptionPtr newDescription) {
 
     if (oldDescription->getServers().size() != newDescription->getServers().size())
         return true;
@@ -537,7 +539,8 @@ bool StreamableReplicaSetMonitor::_hasMembershipChange(sdam::TopologyDescription
     return false;
 }
 
-void StreamableReplicaSetMonitor::_processOutstanding(const TopologyDescriptionPtr& topologyDescription) {
+void StreamableReplicaSetMonitor::_processOutstanding(
+    const TopologyDescriptionPtr& topologyDescription) {
     // TODO: refactor so that we don't call _getHost(s) for every outstanding query
     // since there might be duplicates.
     stdx::lock_guard lock(_mutex);

@@ -29,8 +29,8 @@
 #include "mongo/client/server_is_master_monitor.h"
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kDefault
-#include "mongo/client/sdam/sdam.h"
 #include "mongo/client/replica_set_monitor.h"
+#include "mongo/client/sdam/sdam.h"
 #include "mongo/executor/network_interface_factory.h"
 #include "mongo/executor/network_interface_thread_pool.h"
 #include "mongo/executor/thread_pool_task_executor.h"
@@ -245,7 +245,8 @@ void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
 Milliseconds SingleServerIsMasterMonitor::_overrideRefreshPeriod(Milliseconds original) {
     Milliseconds r = original;
     static constexpr auto kPeriodField = "period"_sd;
-    if (auto modifyReplicaSetMonitorDefaultRefreshPeriod = globalFailPointRegistry().find("modifyReplicaSetMonitorDefaultRefreshPeriod")) {
+    if (auto modifyReplicaSetMonitorDefaultRefreshPeriod =
+            globalFailPointRegistry().find("modifyReplicaSetMonitorDefaultRefreshPeriod")) {
         modifyReplicaSetMonitorDefaultRefreshPeriod->executeIf(
             [&r](const BSONObj& data) {
                 r = duration_cast<Milliseconds>(Seconds{data.getIntField(kPeriodField)});
