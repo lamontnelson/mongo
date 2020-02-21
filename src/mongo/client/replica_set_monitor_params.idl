@@ -36,4 +36,4 @@ server_parameters:
         set_at: startup
         cpp_vartype: AtomicWord<bool>
         cpp_varname: disableStreamableReplicaSetMonitor
-        default: true 
+        default: false
