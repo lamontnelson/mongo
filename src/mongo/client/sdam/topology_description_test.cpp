@@ -40,8 +40,13 @@ namespace mongo {
 template std::ostream& operator<<(std::ostream& os,
                                   const std::vector<mongo::sdam::ServerAddress>& s);
 
+bool operator==(const TopologyVersion& a, const TopologyVersion& b) {
+    return a.getProcessId() == b.getProcessId() && a.getCounter() == b.getCounter();
+}
+
 namespace sdam {
 using mongo::operator<<;
+
 
 class TopologyDescriptionTestFixture : public SdamTestFixture {
 protected:
