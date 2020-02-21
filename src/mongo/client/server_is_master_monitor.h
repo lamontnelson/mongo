@@ -1,4 +1,3 @@
-
 /**
  *    Copyright (C) 2020-present MongoDB, Inc.
  *
@@ -127,7 +126,7 @@ private:
     SdamConfiguration _sdamConfiguration;
     TopologyEventsPublisherPtr _eventPublisher;
     std::shared_ptr<executor::TaskExecutor> _executor;
-    std::unordered_map<ServerAddress, SingleServerIsMasterMonitorPtr> _singleMonitors;
+    stdx::unordered_map<ServerAddress, SingleServerIsMasterMonitorPtr> _singleMonitors;
     bool _isShutdown;
     MongoURI _setUri;
 };
