@@ -107,6 +107,9 @@ const boost::optional<ServerDescriptionPtr> TopologyDescription::findServerByAdd
 
 boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescription(
     const ServerDescriptionPtr& newServerDescription) {
+    LOG(2) << "(" << getSetName() << ") install ServerDescription "
+           << newServerDescription->toString();
+
     boost::optional<ServerDescriptionPtr> previousDescription;
     if (getType() == TopologyType::kSingle) {
         // For Single, there is always one ServerDescription in TopologyDescription.servers;
@@ -130,6 +133,8 @@ boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescript
             _servers.push_back(std::shared_ptr<ServerDescription>(newServerDescription));
         }
     }
+
+    newServerDescription->_topologyDescription = shared_from_this();
 
     checkWireCompatibilityVersions();
     calculateLogicalSessionTimeout();
@@ -174,13 +179,12 @@ void TopologyDescription::checkWireCompatibilityVersions() {
             break;
         }
     }
-
     _compatibleError = (_compatible) ? boost::none : boost::make_optional(errorOss.str());
 }
 
 const std::string TopologyDescription::minimumRequiredMongoVersionString(int version) {
     switch (version) {
-        case RESUMABLE_INITIAL_SYNC:
+		case RESUMABLE_INITIAL_SYNC:
             return "4.4";
         case SHARDED_TRANSACTIONS:
             return "4.2";
@@ -270,54 +274,15 @@ std::string TopologyDescription::toString() {
     return toBSON().toString();
 }
 
-////////////////////////
-// SdamConfiguration
-////////////////////////
-SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>> seedList,
-                                     TopologyType initialType,
-                                     mongo::Milliseconds heartBeatFrequencyMs,
-                                     boost::optional<std::string> setName)
-    : _seedList(seedList),
-      _initialType(initialType),
-      _heartBeatFrequencyMs(heartBeatFrequencyMs),
-      _setName(setName) {
-    uassert(ErrorCodes::InvalidSeedList,
-            "seed list size must be >= 1",
-            !seedList || (*seedList).size() >= 1);
 
-    uassert(ErrorCodes::InvalidSeedList,
-            "TopologyType Single must have exactly one entry in the seed list.",
-            _initialType != TopologyType::kSingle || (*seedList).size() == 1);
+boost::optional<ServerDescriptionPtr> TopologyDescription::getPrimary() {
+    if (getType() != TopologyType::kReplicaSetWithPrimary) {
+        return boost::none;
+    }
 
-    uassert(
-        ErrorCodes::InvalidTopologyType,
-        "Only ToplogyTypes ReplicaSetNoPrimary and Single are allowed when a setName is provided.",
-        !_setName ||
-            (_initialType == TopologyType::kReplicaSetNoPrimary ||
-             _initialType == TopologyType::kSingle));
-
-    uassert(ErrorCodes::TopologySetNameRequired,
-            "setName is required for ReplicaSetNoPrimary",
-            _initialType != TopologyType::kReplicaSetNoPrimary || _setName);
-
-    uassert(ErrorCodes::InvalidHeartBeatFrequency,
-            "topology heartbeat must be >= 500ms",
-            _heartBeatFrequencyMs >= kMinHeartbeatFrequencyMS);
+    auto foundPrimaries = findServers(
+        [](const ServerDescriptionPtr& s) { return s->getType() == ServerType::kRSPrimary; });
+    invariant(foundPrimaries.size() == 1);
+    return foundPrimaries[0];
 }
-
-const boost::optional<std::vector<ServerAddress>>& SdamConfiguration::getSeedList() const {
-    return _seedList;
-}
-
-TopologyType SdamConfiguration::getInitialType() const {
-    return _initialType;
-}
-
-Milliseconds SdamConfiguration::getHeartBeatFrequency() const {
-    return _heartBeatFrequencyMs;
-}
-
-const boost::optional<std::string>& SdamConfiguration::getSetName() const {
-    return _setName;
-}
-};  // namespace mongo::sdam
+}  // namespace mongo::sdam
