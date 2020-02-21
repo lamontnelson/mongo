@@ -199,6 +199,9 @@ clientDriverEnv.Library(
         'replica_set_monitor_manager.cpp',
         env.Idlc('replica_set_monitor_params.idl')[0],
         'server_ping_monitor.cpp',
+        'server_is_master_monitor.cpp',
+        'streamable_replica_set_monitor.cpp',
+        'streamable_replica_set_monitor_query_processor.cpp',
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/db/write_concern_options',
@@ -210,6 +213,7 @@ clientDriverEnv.Library(
         '$BUILD_DIR/mongo/util/background_job',
         '$BUILD_DIR/mongo/util/md5',
         '$BUILD_DIR/mongo/util/net/network',
+		'$BUILD_DIR/mongo/client/sdam/sdam',
         'clientdriver_minimal',
         'read_preference',
     ],
