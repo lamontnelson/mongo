@@ -28,11 +28,12 @@
  */
 #pragma once
 
-#include "mongo/client/streamable_replica_set_monitor.h"
 #include "mongo/client/sdam/sdam.h"
+#include "mongo/client/streamable_replica_set_monitor.h"
 
 namespace mongo {
-class StreamableReplicaSetMonitor::StreamableReplicaSetMonitorQueryProcessor final : public sdam::TopologyListener {
+class StreamableReplicaSetMonitor::StreamableReplicaSetMonitorQueryProcessor final
+    : public sdam::TopologyListener {
 public:
     void shutdown();
 
