@@ -112,8 +112,9 @@ int32_t pingTimeMillis(const ServerDescriptionPtr& serverDescription) {
 constexpr auto kZeroMs = Milliseconds(0);
 }  // namespace
 
-StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(const MongoURI& uri, std::shared_ptr<TaskExecutor> executor) :
-      _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
+StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(const MongoURI& uri,
+                                                         std::shared_ptr<TaskExecutor> executor)
+    : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
       _queryProcessor(std::make_shared<StreamableReplicaSetMonitorQueryProcessor>()),
       _uri(uri),
       _executor(executor),
@@ -591,4 +592,6 @@ Status StreamableReplicaSetMonitor::_makeReplicaSetMonitorRemovedError() const {
     return Status(ErrorCodes::ReplicaSetMonitorRemoved,
                   str::stream() << "ReplicaSetMonitor for set " << getName() << " is removed");
 }
+
+void StreamableReplicaSetMonitor::runScanForMockReplicaSet() {}
 }  // namespace mongo

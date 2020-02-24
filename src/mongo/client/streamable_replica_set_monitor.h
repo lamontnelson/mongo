@@ -60,8 +60,8 @@ using ReplicaSetMonitorPtr = std::shared_ptr<ReplicaSetMonitor>;
  *
  * All methods perform the required synchronization to allow callers from multiple threads.
  */
-class StreamableReplicaSetMonitor :
-      public ReplicaSetMonitor,
+class StreamableReplicaSetMonitor
+    : public ReplicaSetMonitor,
       public sdam::TopologyListener,
       public std::enable_shared_from_this<StreamableReplicaSetMonitor> {
 
@@ -114,6 +114,7 @@ public:
     void appendInfo(BSONObjBuilder& b, bool forFTDC = false) const;
 
     bool isKnownToHaveGoodPrimary() const;
+    void runScanForMockReplicaSet() override;
 
 private:
     class StreamableReplicaSetMonitorQueryProcessor;
