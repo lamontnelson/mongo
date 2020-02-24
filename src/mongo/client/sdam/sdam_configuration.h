@@ -66,7 +66,7 @@ public:
 
     static constexpr Milliseconds kDefaultHeartbeatFrequencyMs = Seconds(10);
     static constexpr Milliseconds kMinHeartbeatFrequencyMS = Milliseconds(500);
-    static constexpr Milliseconds kDefaultConnectTimeoutMS = Milliseconds(100);
+    static constexpr Milliseconds kDefaultConnectTimeoutMS = Milliseconds(10000);
 
 private:
     boost::optional<std::vector<ServerAddress>> _seedList;
