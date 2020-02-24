@@ -31,6 +31,7 @@
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/db/wire_version.h"
+#include "mongo/logv2/log.h"
 
 namespace mongo::sdam {
 ////////////////////////
@@ -107,8 +108,7 @@ const boost::optional<ServerDescriptionPtr> TopologyDescription::findServerByAdd
 
 boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescription(
     const ServerDescriptionPtr& newServerDescription) {
-    LOG(2) << "(" << getSetName() << ") install ServerDescription "
-           << newServerDescription->toString();
+    LOGV2_DEBUG(4333202, 2, "install server description {description}", "description"_attr = newServerDescription->toString());
 
     boost::optional<ServerDescriptionPtr> previousDescription;
     if (getType() == TopologyType::kSingle) {

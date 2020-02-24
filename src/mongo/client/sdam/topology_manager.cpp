@@ -30,6 +30,8 @@
 
 #include "mongo/client/sdam/topology_manager.h"
 
+#include <string>
+
 #include "mongo/client/sdam/topology_state_machine.h"
 #include "mongo/logv2/log.h"
 #include "mongo/rpc/topology_version_gen.h"
@@ -143,9 +145,8 @@ void TopologyManager::onServerRTTUpdated(ServerAddress hostAndPort, IsMasterRTT 
     }
 
     // otherwise, the server was removed from the topology. Nothing to do.
-    LOGV2(433301,
-          str::stream() << "Not updating RTT. Server {server}" << hostAndPort
-                        << " does not exist in ",
+    LOGV2(4333201,
+          "Not updating RTT. Server {server} does not exist in {setName}",
           "server"_attr = hostAndPort,
           "setName"_attr = getTopologyDescription()->getSetName());
 }
