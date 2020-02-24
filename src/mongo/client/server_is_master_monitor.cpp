@@ -319,7 +319,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
             auto& singleMonitor = _singleMonitors[serverAddress];
             singleMonitor->shutdown();
             LOG(kLogLevel) << serverAddress << " was removed from the topology.";
-            it = _singleMonitors.erase(it);
+            it = _singleMonitors.erase(it, ++it);
         } else {
             ++it;
         }
