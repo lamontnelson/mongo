@@ -181,11 +181,6 @@ void ReplicaSetMonitorManager::shutdown() {
         taskExecutor = std::exchange(_taskExecutor, {});
     }
 
-    if (taskExecutor) {
-        LOGV2_DEBUG(20188, 1, "Shutting down task executor used for monitoring replica sets");
-        taskExecutor->shutdown();
-    }
-
     for (auto& [name, monitor] : monitors) {
         auto anchor = monitor.lock();
         if (!anchor) {
@@ -195,6 +190,8 @@ void ReplicaSetMonitorManager::shutdown() {
     }
 
     if (taskExecutor) {
+        LOGV2_DEBUG(20188, 1, "Shutting down task executor used for monitoring replica sets");
+        taskExecutor->shutdown();
         taskExecutor->join();
     }
 }
