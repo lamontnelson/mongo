@@ -200,9 +200,11 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
 void SingleServerIsMasterMonitor::shutdown() {
     stdx::lock_guard lock(_mutex);
+	if (std::exchange(_isShutdown, true))
+		return;
+
     LOG(kLogLevel.lessSevere()) << "Closing Replica Set SingleServerIsMasterMonitor for host "
                                 << _host;
-    _isShutdown = true;
 
     _cancelOutstandingRequest(lock);
 
@@ -212,11 +214,11 @@ void SingleServerIsMasterMonitor::shutdown() {
 }
 
 void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
-    if (_nextIsMasterHandle.isValid()) {
+    if (_nextIsMasterHandle) {
         _executor->cancel(_nextIsMasterHandle);
     }
 
-    if (_remoteCommandHandle.isValid()) {
+    if (_remoteCommandHandle) {
         _executor->cancel(_remoteCommandHandle);
     }
 
