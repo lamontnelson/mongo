@@ -7,6 +7,14 @@ load("jstests/replsets/rslib.js");
 (function() {
 "use strict";
 
+function sleep(milliseconds) {
+    const date = Date.now();
+    let currentDate = null;
+    do {
+        currentDate = Date.now();
+    } while (currentDate - date < milliseconds);
+}
+
 // Skip db hash check and shard replication since the removed node has wrong config and is still
 // alive.
 TestData.skipCheckDBHashes = true;
@@ -16,6 +24,7 @@ var NODE_COUNT = 3;
 var st = new ShardingTest({shards: {rs0: {nodes: NODE_COUNT, oplogSize: 10}}});
 var replTest = st.rs0;
 var mongos = st.s;
+//sleep(30 * 1000);
 
 var shardDoc = mongos.getDB('config').shards.findOne();
 assert.eq(NODE_COUNT, shardDoc.host.split(',').length);  // seed list should contain all nodes
