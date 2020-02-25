@@ -214,12 +214,12 @@ void SingleServerIsMasterMonitor::shutdown() {
 }
 
 void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
-    if (_nextIsMasterHandle) {
-        _executor->cancel(_nextIsMasterHandle);
-    }
-
     if (_remoteCommandHandle) {
         _executor->cancel(_remoteCommandHandle);
+    }
+
+    if (_nextIsMasterHandle) {
+        _executor->cancel(_nextIsMasterHandle);
     }
 
     _isMasterOutstanding = false;
