@@ -303,8 +303,6 @@ TEST_F(ServerSelectorTestFixture, ShouldSelectPreferredIfAvailable) {
     TopologyStateMachine stateMachine(sdamConfiguration);
     auto topologyDescription = std::make_shared<TopologyDescription>(sdamConfiguration);
 
-    const int MAX_STALENESS = 60;
-    const auto sixtySeconds = Seconds(MAX_STALENESS);
     const auto now = Date_t::now();
 
 
@@ -359,8 +357,6 @@ TEST_F(ServerSelectorTestFixture, ShouldSelectTaggedSecondaryIfPreferredPrimaryN
     TopologyStateMachine stateMachine(sdamConfiguration);
     auto topologyDescription = std::make_shared<TopologyDescription>(sdamConfiguration);
 
-    const int MAX_STALENESS = 60;
-    const auto sixtySeconds = Seconds(MAX_STALENESS);
     const auto now = Date_t::now();
 
     const auto d0 = now - Milliseconds(1000);
