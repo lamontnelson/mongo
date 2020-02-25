@@ -130,13 +130,13 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
         return monitor;
     }
 
-    LOGV2(20186, "Starting new replica set monitor for {uri}", "uri"_attr = uri.toString());
-
     std::shared_ptr<ReplicaSetMonitor> newMonitor;
     if (disableStreamableReplicaSetMonitor.load()) {
+        LOGV2(4333204, "Starting Scanning ReplicaSetMonitor", "uri"_attr = uri.toString());
         newMonitor = std::make_shared<ScanningReplicaSetMonitor>(uri);
         newMonitor->init();
     } else {
+        LOGV2(4333205, "Starting Streamable ReplicaSetMonitor", "uri"_attr = uri.toString());
         newMonitor = StreamableReplicaSetMonitor::make(uri, getExecutor());
     }
     _monitors[setName] = newMonitor;

@@ -143,6 +143,7 @@ void StreamableReplicaSetMonitor::init() {
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
     _topologyManager = std::make_unique<TopologyManager>(
         _sdamConfig, getGlobalServiceContext()->getPreciseClockSource(), _eventsPublisher);
+
     _isMasterMonitor = std::make_unique<ServerIsMasterMonitor>(
         _uri, _sdamConfig, _eventsPublisher, _topologyManager->getTopologyDescription(), _executor);
 
@@ -155,10 +156,10 @@ void StreamableReplicaSetMonitor::init() {
 
 void StreamableReplicaSetMonitor::drop() {
     stdx::lock_guard lock(_mutex);
-    if (_isDropped.load())
+    if (_isDropped.swap(true)) {
         return;
+    }
 
-    _isDropped.store(true);
     LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
     _eventsPublisher->close();
     _queryProcessor->shutdown();
