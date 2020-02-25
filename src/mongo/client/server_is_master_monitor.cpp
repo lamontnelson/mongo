@@ -132,12 +132,11 @@ void SingleServerIsMasterMonitor::_scheduleNextIsMaster(WithLock, Milliseconds d
     Timer timer;
     auto swCbHandle = _executor->scheduleWorkAt(
         _executor->now() + delay,
-        [self = shared_from_this()](const executor::TaskExecutor::CallbackArgs& cbData) noexcept {
-            try {
-                uassertStatusOK(cbData.status);
-                self->_doRemoteCommand();
-            } catch (ExceptionForCat<ErrorCategory::ShutdownError>&) {
+        [self = shared_from_this()](const executor::TaskExecutor::CallbackArgs& cbData) {
+            if (!cbData.status.isOK()) {
+                return;
             }
+            self->_doRemoteCommand();
         });
 
     if (!swCbHandle.isOK()) {
@@ -192,7 +191,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
     if (!swCbHandle.isOK()) {
         Microseconds latency(timer.micros());
         _onIsMasterFailure(latency, swCbHandle.getStatus(), BSONObj());
-        uassertStatusOK(swCbHandle);
+        uasserted(31448, swCbHandle.getStatus().toString());
     }
 
     _isMasterOutstanding = true;
@@ -201,8 +200,8 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
 void SingleServerIsMasterMonitor::shutdown() {
     stdx::lock_guard lock(_mutex);
-    if (std::exchange(_isShutdown, true))
-        return;
+	if (std::exchange(_isShutdown, true))
+		return;
 
     LOG(kLogLevel.lessSevere()) << "Closing Replica Set SingleServerIsMasterMonitor for host "
                                 << _host;

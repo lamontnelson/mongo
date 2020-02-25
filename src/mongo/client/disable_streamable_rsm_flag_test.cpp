@@ -36,11 +36,11 @@
 //#include "mongo/unittest/unittest.h"
 //#include "mongo/util/assert_util.h"
 //
-// namespace mongo {
-// namespace {
+//namespace mongo {
+//namespace {
 //
-// class RSMDisableStreamableFlagTestFixture : public unittest::Test {
-// protected:
+//class RSMDisableStreamableFlagTestFixture : public unittest::Test {
+//protected:
 //    void setUp() {
 //        setGlobalServiceContext(ServiceContext::make());
 //        ReplicaSetMonitor::cleanup();
@@ -96,7 +96,7 @@
 // * Checks that a StreamableReplicaSetMonitor is created when the the
 // * disableStreamableReplicaSetMonitor flag is set to false.
 // */
-// TEST_F(RSMDisableStreamableFlagTestFixture, checkIsStreamableIfDisableStreamableIsFalse) {
+//TEST_F(RSMDisableStreamableFlagTestFixture, checkIsStreamableIfDisableStreamableIsFalse) {
 //    setParameter(false);
 //    auto uri = MongoURI::parse("mongodb://a,b,c/?replicaSet=name");
 //    ASSERT_OK(uri.getStatus());
@@ -115,7 +115,7 @@
 // * Checks that a ScanningReplicaSetMonitor is created when the disableStreamableReplicaSetMonitor
 // * flag is set to true.
 // */
-// TEST_F(RSMDisableStreamableFlagTestFixture, checkIsScanningIfDisableStreamableIsTrue) {
+//TEST_F(RSMDisableStreamableFlagTestFixture, checkIsScanningIfDisableStreamableIsTrue) {
 //    setParameter(true);
 //    auto uri = MongoURI::parse("mongodb://a,b,c/?replicaSet=name");
 //    ASSERT_OK(uri.getStatus());
