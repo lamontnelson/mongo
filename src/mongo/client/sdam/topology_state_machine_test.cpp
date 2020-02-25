@@ -167,7 +167,8 @@ TEST_F(TopologyStateMachineTestFixture,
     const auto serverAddress = (*kTwoSeedReplicaSetNoPrimaryConfig.getSeedList()).front();
 
     TopologyStateMachine stateMachine(kTwoSeedReplicaSetNoPrimaryConfig);
-    auto topologyDescription = std::make_shared<TopologyDescription>(kTwoSeedReplicaSetNoPrimaryConfig);
+    auto topologyDescription =
+        std::make_shared<TopologyDescription>(kTwoSeedReplicaSetNoPrimaryConfig);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(serverAddress)
@@ -192,7 +193,8 @@ TEST_F(TopologyStateMachineTestFixture,
     const auto primaryAddress = (*kTwoSeedReplicaSetNoPrimaryConfig.getSeedList()).back();
 
     TopologyStateMachine stateMachine(kTwoSeedReplicaSetNoPrimaryConfig);
-    auto topologyDescription = std::make_shared<TopologyDescription>(kTwoSeedReplicaSetNoPrimaryConfig);
+    auto topologyDescription =
+        std::make_shared<TopologyDescription>(kTwoSeedReplicaSetNoPrimaryConfig);
 
     auto primaryDescription = ServerDescriptionBuilder()
                                   .withAddress(primaryAddress)
@@ -233,7 +235,8 @@ TEST_F(TopologyStateMachineTestFixture,
     const auto me = std::string("foo") + serverAddress;
 
     TopologyStateMachine stateMachine(kTwoSeedReplicaSetNoPrimaryConfig);
-    auto topologyDescription = std::make_shared<TopologyDescription>(kTwoSeedReplicaSetNoPrimaryConfig);
+    auto topologyDescription =
+        std::make_shared<TopologyDescription>(kTwoSeedReplicaSetNoPrimaryConfig);
 
     auto serverDescription = ServerDescriptionBuilder()
                                  .withAddress(serverAddress)
