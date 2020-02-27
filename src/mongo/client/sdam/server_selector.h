@@ -93,7 +93,7 @@ private:
         if (serverDescription->getType() != ServerType::kRSSecondary)
             return Milliseconds(0);
 
-        const Date_t& lastWriteDate = serverDescription->getLastWriteDate()
+        const Date_t lastWriteDate = serverDescription->getLastWriteDate()
             ? *serverDescription->getLastWriteDate()
             : Date_t::min();
 
