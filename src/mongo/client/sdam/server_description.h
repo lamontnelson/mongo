@@ -52,7 +52,7 @@ public:
      */
     ServerDescription(ServerAddress address)
         : _address(std::move(address)), _type(ServerType::kUnknown) {
-        boost::to_lower(_address);
+        //boost::to_lower(_address);
     }
 
     /**

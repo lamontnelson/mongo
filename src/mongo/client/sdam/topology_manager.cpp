@@ -67,7 +67,7 @@ TopologyManager::TopologyManager(SdamConfiguration config,
                                  TopologyEventsPublisherPtr eventsPublisher)
     : _config(std::move(config)),
       _clockSource(clockSource),
-      _topologyDescription(std::make_unique<TopologyDescription>(_config)),
+      _topologyDescription(std::make_shared<TopologyDescription>(_config)),
       _topologyStateMachine(std::make_unique<TopologyStateMachine>(_config)),
       _topologyEventsPublisher(eventsPublisher) {}
 
@@ -107,7 +107,7 @@ bool TopologyManager::onServerDescription(const IsMasterOutcome& isMasterOutcome
         _clockSource, isMasterOutcome, lastRTT, newTopologyVersion, poolResetCounter);
 
     auto oldTopologyDescription = _topologyDescription;
-    _topologyDescription = std::make_shared<TopologyDescription>(*_topologyDescription);
+    _topologyDescription = std::make_shared<TopologyDescription>(*oldTopologyDescription);
 
     // if we are equal to the old description, just install the new description without
     // performing any actions on the state machine.
