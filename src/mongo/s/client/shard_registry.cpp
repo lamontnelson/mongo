@@ -501,6 +501,19 @@ shared_ptr<Shard> ShardRegistryData::findByShardId(const ShardId& shardId) const
 }
 
 shared_ptr<Shard> ShardRegistryData::_findByShardId(WithLock, ShardId const& shardId) const {
+    std::stringstream ss;
+    std::shared_ptr<Shard> shard;
+    for (auto i = _lookup.begin(); i != _lookup.end(); i++) {
+        shard = i->second;
+        ss << "(" << i->first << "," << shard->getId() << ")"
+           << ", ";
+    }
+
+    LOGV2(123,
+          "_findByShardId: {shardId}; {ids}",
+          "shardId"_attr = shardId.toString(),
+          "ids"_attr = ss.str());
+
     auto i = _lookup.find(shardId);
     return (i != _lookup.end()) ? i->second : nullptr;
 }
