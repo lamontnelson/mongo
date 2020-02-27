@@ -115,14 +115,14 @@ void ServerDescription::storeHostListIfPresent(const std::string key,
         std::transform(hostsBsonArray.begin(),
                        hostsBsonArray.end(),
                        std::inserter(destination, destination.begin()),
-                       [](const BSONElement e) { return boost::to_lower_copy(e.String()); });
+                       [](const BSONElement e) { return e.String(); });
     }
 }
 
 void ServerDescription::saveHosts(const BSONObj response) {
     if (response.hasField("me")) {
         auto me = response.getField("me");
-        _me = boost::to_lower_copy(me.str());
+        _me = me.str();
     }
 
     storeHostListIfPresent("hosts", response, _hosts);
