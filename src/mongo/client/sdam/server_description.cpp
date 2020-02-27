@@ -434,9 +434,12 @@ ServerDescriptionPtr ServerDescription::cloneWithRTT(IsMasterRTT rtt) {
 }
 
 const boost::optional<TopologyDescriptionPtr> ServerDescription::getTopologyDescription() {
-    return (_topologyDescription)
-        ? boost::optional<TopologyDescriptionPtr>(_topologyDescription->lock())
-        : boost::none;
+    if (_topologyDescription) {
+        invariant(_topologyDescription.get());
+        boost::optional<TopologyDescriptionPtr>(_topologyDescription->lock());
+    } else {
+        return boost::none;
+    }
 }
 
 

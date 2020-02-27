@@ -1499,7 +1499,6 @@ var ShardingTest = function(params) {
         }
 
         rs.awaitSecondaryNodes();
-        print("HERE: " + rs.getURL());
         var rsConn = new Mongo(rs.getURL());
         rsConn.name = rs.getURL();
 
