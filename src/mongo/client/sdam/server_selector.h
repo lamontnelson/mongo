@@ -106,7 +106,7 @@ private:
             invariant(topologyDescription->getPrimary());
             const auto& primaryDescription = *topologyDescription->getPrimary();
 
-            const auto& primaryLastWriteDate = primaryDescription->getLastWriteDate()
+            const auto primaryLastWriteDate = primaryDescription->getLastWriteDate()
                 ? *primaryDescription->getLastWriteDate()
                 : Date_t::min();
 
@@ -123,7 +123,7 @@ private:
                 if (s->getType() != ServerType::kRSSecondary)
                     continue;
 
-                const auto& sLastWriteDate =
+                const auto sLastWriteDate =
                     s->getLastWriteDate() ? *s->getLastWriteDate() : Date_t::min();
 
                 if (sLastWriteDate > maxLastWriteDate) {
