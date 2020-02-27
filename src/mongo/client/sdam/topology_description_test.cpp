@@ -84,18 +84,20 @@ TEST_F(TopologyDescriptionTestFixture, ShouldHaveCorrectDefaultValues) {
     assertDefaultConfig(TopologyDescription());
 }
 
-TEST_F(TopologyDescriptionTestFixture, ShouldNormalizeInitialSeedList) {
-    auto config = SdamConfiguration(kTwoServersVaryCase);
-    TopologyDescription topologyDescription(config);
-
-    auto expectedAddresses = kTwoServersNormalCase;
-
-    auto serverAddresses = map<ServerDescriptionPtr, ServerAddress>(
-        topologyDescription.getServers(),
-        [](const ServerDescriptionPtr& description) { return description->getAddress(); });
-
-    ASSERT_EQUALS(expectedAddresses, serverAddresses);
-}
+// Disable this test since this causes failures in jstests running on
+// hosts with mixed case hostnames.
+// TEST_F(TopologyDescriptionTestFixture, ShouldNormalizeInitialSeedList) {
+//    auto config = SdamConfiguration(kTwoServersVaryCase);
+//    TopologyDescription topologyDescription(config);
+//
+//    auto expectedAddresses = kTwoServersNormalCase;
+//
+//    auto serverAddresses = map<ServerDescriptionPtr, ServerAddress>(
+//        topologyDescription.getServers(),
+//        [](const ServerDescriptionPtr& description) { return description->getAddress(); });
+//
+//    ASSERT_EQUALS(expectedAddresses, serverAddresses);
+//}
 
 TEST_F(TopologyDescriptionTestFixture, ShouldAllowTypeSingleWithASingleSeed) {
     TopologyDescription topologyDescription(kSingleSeedConfig);
