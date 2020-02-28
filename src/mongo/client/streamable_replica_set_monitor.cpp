@@ -91,7 +91,6 @@ std::string readPrefToStringWithMinOpTime(const ReadPreferenceSetting& readPref)
     return builder.obj().toString();
 }
 
-// TODO: remove
 std::string hostListToString(boost::optional<std::vector<HostAndPort>> x) {
     std::stringstream s;
     if (x) {
