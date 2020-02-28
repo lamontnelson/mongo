@@ -203,7 +203,9 @@ private:
     // pool for server. Incremented on network error or timeout.
     int _poolResetCounter = 0;
 
-    // The topology description of that we are a part of
+    // The topology description of that we are a part of. Since this is a weak_ptr, code that accesses this variable
+    // should ensure that the TopologyDescription cannot be destroyed by holding a copy of it's shared_ptr.
+    // The SdamServerSelector uses this variable when calculating staleness.
     boost::optional<std::weak_ptr<TopologyDescription>> _topologyDescription;
 
     friend class TopologyDescription;
