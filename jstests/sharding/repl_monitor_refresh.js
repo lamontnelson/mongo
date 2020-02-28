@@ -7,14 +7,6 @@ load("jstests/replsets/rslib.js");
 (function() {
 "use strict";
 
-function sleep(milliseconds) {
-    const date = Date.now();
-    let currentDate = null;
-    do {
-        currentDate = Date.now();
-    } while (currentDate - date < milliseconds);
-}
-
 // Skip db hash check and shard replication since the removed node has wrong config and is still
 // alive.
 TestData.skipCheckDBHashes = true;
