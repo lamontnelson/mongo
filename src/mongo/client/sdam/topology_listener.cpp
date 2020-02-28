@@ -152,7 +152,7 @@ void TopologyEventsPublisher::_sendEvent(TopologyListenerPtr listener, const Eve
                                                     event.reply);
             break;
         case EventType::TOPOLOGY_DESCRIPTION_CHANGED:
-            // TODO: fix uuid or just remove
+            // TODO SERVER-46497: fix uuid or just remove
             listener->onTopologyDescriptionChangedEvent(
                 UUID::gen(), event.previousDescription, event.newDescription);
             break;
