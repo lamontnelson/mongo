@@ -111,6 +111,30 @@ int32_t pingTimeMillis(const ServerDescriptionPtr& serverDescription) {
 constexpr auto kZeroMs = Milliseconds(0);
 }  // namespace
 
+
+/*
+ * The concurrency control for this class is outlined below:
+ *
+ * The _mutex member variable is used to protect access to the _outstandingQueries list. This list
+ * is accessed when the RSM instance cannot immediately satisfy a query.
+ *
+ * The TopologyManager holds a pointer to the current topology, and it is responsible for making
+ * sure that concurrent access to topology is safe. In practice, this means that methods that access
+ * the topology information should first obtain a copy of the current topology information (via
+ * _currentTopology) and maintain a copy of it in it's stack so that the TopologyDescription will
+ * not be destroyed.
+ *
+ * Additionally, the atomic bool value _isDropped is used to determine if we are shutting down. In
+ * the getHostsOrRefresh method, _isDropped is checked in the normal case when we can satisfy a
+ * query immediately, and if not, the mutex is taken to add the query to the outstanding list. This
+ * implies that getHostsOrRefresh should avoid accessing any mutable state before the lock is taken
+ * when enqueing the outstanding query.
+ *
+ * All child classes (_topologyManager, _serverMonitor, _pingMonitor, _eventsPublisher) handle their
+ * own concurrency control, and effectively provide serialized access to their respective
+ * functionality. Once they are shutdown in the drop() method the operations exposed via their api
+ * are effectively no-ops.
+ */
 StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(const MongoURI& uri,
                                                          std::shared_ptr<TaskExecutor> executor)
     : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
