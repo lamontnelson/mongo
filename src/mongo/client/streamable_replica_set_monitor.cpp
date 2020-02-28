@@ -542,8 +542,11 @@ bool StreamableReplicaSetMonitor::_hasMembershipChange(
 
 void StreamableReplicaSetMonitor::_processOutstanding(
     const TopologyDescriptionPtr& topologyDescription) {
-    // TODO: refactor so that we don't call _getHost(s) for every outstanding query
-    // since there might be duplicates.
+
+    // Note that a possible performance optimization is:
+    // instead of calling _getHosts for every outstanding query, we could
+    // first group them by equivalence classes then call _getHosts once per class.
+
     stdx::lock_guard lock(_mutex);
 
     bool shouldRemove;
