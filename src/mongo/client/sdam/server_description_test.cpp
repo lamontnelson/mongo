@@ -42,7 +42,7 @@
 namespace mongo::sdam {
 // Disabling these tests since this causes jstest failures when
 // running on a host with a mixed case hostname.
-//TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
+// TEST(ServerDescriptionTest, ShouldNormalizeAddress) {
 //    ServerDescription a("foo:1234");
 //    ServerDescription b("FOo:1234");
 //    ASSERT_EQUALS(a.getAddress(), b.getAddress());
@@ -399,7 +399,7 @@ TEST_F(ServerDescriptionTestFixture, ShouldStoreLastUpdateTime) {
 
 // Disabling these tests since this causes jstest failures when
 // running on a host with a mixed case hostname.
-//TEST_F(ServerDescriptionTestFixture, ShouldStoreHostNamesAsLowercase) {
+// TEST_F(ServerDescriptionTestFixture, ShouldStoreHostNamesAsLowercase) {
 //    auto response = IsMasterOutcome("FOO:1234", kBsonHostNames, mongo::Milliseconds(40));
 //    auto description = ServerDescription(clockSource, response);
 //
