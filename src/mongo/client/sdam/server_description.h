@@ -51,8 +51,7 @@ public:
      * Construct an unknown ServerDescription with default values except the server's address.
      */
     ServerDescription(ServerAddress address)
-        : _address(std::move(address)), _type(ServerType::kUnknown) {
-    }
+        : _address(std::move(address)), _type(ServerType::kUnknown) {}
 
     /**
      * Build a new ServerDescription according to the rules of the SDAM spec based on the
