@@ -119,7 +119,7 @@ StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(const MongoURI& uri,
       _executor(executor),
       _random(PseudoRandom(SecureRandom().nextInt64())) {
 
-    // TODO: sdam should use the HostAndPort type for ServerAddress
+    // TODO SERVER-45395: sdam should use the HostAndPort type for ServerAddress
     std::vector<ServerAddress> seeds;
     for (const auto& seed : uri.getServers()) {
         seeds.push_back(seed.toString());
@@ -455,13 +455,13 @@ void StreamableReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     if (_hasMembershipChange(previousDescription, newDescription)) {
         LOG(kDefaultLogLevel) << _logPrefix() << "Topology Change: " << newDescription->toString();
 
-        // TODO: remove when HostAndPort conversion is done.
+        // TODO SERVER-45395: remove when HostAndPort conversion is done
         std::vector<HostAndPort> servers = _extractHosts(newDescription->getServers());
 
         auto connectionString = ConnectionString::forReplicaSet(getName(), servers);
         auto maybePrimary = newDescription->getPrimary();
         if (maybePrimary) {
-            // TODO: remove need for HostAndPort conversion
+            // TODO SERVER-45395: remove need for HostAndPort conversion
             auto hostList = _extractHosts(newDescription->findServers(secondaryPredicate));
             std::set<HostAndPort> secondaries(hostList.begin(), hostList.end());
 
