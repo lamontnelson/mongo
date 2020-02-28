@@ -200,8 +200,8 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
 void SingleServerIsMasterMonitor::shutdown() {
     stdx::lock_guard lock(_mutex);
-	if (std::exchange(_isShutdown, true))
-		return;
+    if (std::exchange(_isShutdown, true))
+        return;
 
     LOG(kLogLevel.lessSevere()) << "Closing Replica Set SingleServerIsMasterMonitor for host "
                                 << _host;

@@ -24,7 +24,6 @@ var NODE_COUNT = 3;
 var st = new ShardingTest({shards: {rs0: {nodes: NODE_COUNT, oplogSize: 10}}});
 var replTest = st.rs0;
 var mongos = st.s;
-//sleep(30 * 1000);
 
 var shardDoc = mongos.getDB('config').shards.findOne();
 assert.eq(NODE_COUNT, shardDoc.host.split(',').length);  // seed list should contain all nodes
