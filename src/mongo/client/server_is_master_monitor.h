@@ -67,9 +67,10 @@ private:
     Milliseconds _currentRefreshPeriod(WithLock);
     void _cancelOutstandingRequest(WithLock);
 
-    static inline const logger::LogSeverity kLogLevel = logger::LogSeverity::Debug(1);
+    static inline const auto kLogLevel = 1;
 
-    Mutex _mutex = MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(4), "SingleServerIsMasterMonitor::mutex");
+    Mutex _mutex =
+        MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(4), "SingleServerIsMasterMonitor::mutex");
     ServerAddress _host;
     TopologyEventsPublisherPtr _eventListener;
     std::shared_ptr<executor::TaskExecutor> _executor;
@@ -120,9 +121,10 @@ private:
         const std::shared_ptr<executor::TaskExecutor>& executor);
     void _disableExpeditedChecking(WithLock);
 
-    static inline const logger::LogSeverity kLogLevel = logger::LogSeverity::Debug(0);
+    static inline const auto kLogLevel = 0;
 
-    Mutex _mutex = MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(5), "ServerIsMasterMonitor::mutex");
+    Mutex _mutex =
+        MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(5), "ServerIsMasterMonitor::mutex");
     SdamConfiguration _sdamConfiguration;
     TopologyEventsPublisherPtr _eventPublisher;
     std::shared_ptr<executor::TaskExecutor> _executor;

@@ -34,8 +34,8 @@
 #include "mongo/executor/network_interface_factory.h"
 #include "mongo/executor/network_interface_thread_pool.h"
 #include "mongo/executor/thread_pool_task_executor.h"
+#include "mongo/logv2/log.h"
 #include "mongo/rpc/metadata/egress_metadata_hook_list.h"
-#include "mongo/util/log.h"
 
 namespace mongo {
 namespace {
@@ -62,8 +62,10 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
       _heartbeatFrequencyMS(_overrideRefreshPeriod(heartbeatFrequencyMS)),
       _isShutdown(true),
       _setUri(setUri) {
-    LOG(kLogLevel.lessSevere()) << "Created Replica Set SingleServerIsMasterMonitor for host "
-                                << host;
+    LOGV2_DEBUG(4333217,
+                kLogLevel + 1,
+                "Created Replica Set SingleServerIsMasterMonitor for {host}",
+                "host"_attr = host);
 }
 
 void SingleServerIsMasterMonitor::init() {
@@ -81,17 +83,21 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
     // remain in expedited mode until the replica set recovers
     if (!_isExpedited) {
         // save some log lines.
-        LOG(kLogLevel) << "[SingleServerIsMasterMonitor] Monitoring " << _host
-                       << " in expedited mode until we detect a primary.";
+        LOGV2_DEBUG(4333216,
+                    kLogLevel,
+                    "SingleServerIsMasterMonitor Monitoring {host} in expedited mode until we "
+                    "detect a primary.",
+                    "host"_attr = _host);
         _isExpedited = true;
     }
 
     // .. but continue with rescheduling the next request.
 
     if (_isMasterOutstanding) {
-        LOG(kLogLevel) << "[SingleServerIsMasterMonitor] immediate isMaster check requested, but "
-                          "there is already an "
-                          "outstanding request.";
+        LOGV2_DEBUG(4333216,
+                    kLogLevel,
+                    "[SingleServerIsMasterMonitor] immediate isMaster check requested, but there "
+                    "is already an outstanding request.");
         return;
     }
 
@@ -118,8 +124,12 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
         return;
     }
 
-    LOG(kLogLevel) << "[SingleServerIsMasterMonitor] Rescheduling next isMaster check for "
-                   << this->_host << " in " << delayUntilNextCheck;
+    LOGV2_DEBUG(
+        4333218,
+        kLogLevel,
+        "[SingleServerIsMasterMonitor] Rescheduling next isMaster check for {host} in {delay}",
+        "host"_attr = _host,
+        "delay"_attr = delayUntilNextCheck);
     _scheduleNextIsMaster(lock, delayUntilNextCheck);
 }
 
@@ -168,15 +178,19 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
                 self->_isMasterOutstanding = false;
 
                 if (self->_isShutdown || ErrorCodes::isCancelationError(result.response.status)) {
-                    LOG(kLogLevel) << "[SingleServerIsMasterMonitor] not processing response: "
-                                   << result.response.status;
+                    LOGV2_DEBUG(4333219,
+                                kLogLevel,
+                                "[SingleServerIsMasterMonitor] not processing response: {status}",
+                                "status"_attr = result.response.status);
                     return;
                 }
 
                 self->_lastIsMasterAt = self->_executor->now();
                 nextRefreshPeriod = self->_currentRefreshPeriod(lk);
-                LOG(kLogLevel.lessSevere())
-                    << "next refresh period in " + nextRefreshPeriod.toString();
+                LOGV2_DEBUG(4333220,
+                            kLogLevel + 1,
+                            "[SingleServerIsMasterMonitor] next refresh period in {period}",
+                            "period"_attr = nextRefreshPeriod.toString());
                 self->_scheduleNextIsMaster(lk, nextRefreshPeriod);
             }
 
@@ -203,14 +217,18 @@ void SingleServerIsMasterMonitor::shutdown() {
     if (std::exchange(_isShutdown, true))
         return;
 
-    LOG(kLogLevel.lessSevere()) << "Closing Replica Set SingleServerIsMasterMonitor for host "
-                                << _host;
+    LOGV2_DEBUG(4333220,
+                kLogLevel + 1,
+                "Closing Replica Set SingleServerIsMasterMonitor for host {host}",
+                "host"_attr = _host);
 
     _cancelOutstandingRequest(lock);
 
     _executor = nullptr;
-    LOG(kLogLevel.lessSevere()) << "Done Closing Replica Set SingleServerIsMasterMonitor for host "
-                                << _host;
+    LOGV2_DEBUG(4333221,
+                kLogLevel + 1,
+                "Done Closing Replica Set SingleServerIsMasterMonitor for host {host}",
+                "host"_attr = _host);
 }
 
 void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
@@ -227,9 +245,12 @@ void SingleServerIsMasterMonitor::_cancelOutstandingRequest(WithLock) {
 
 void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
                                                      const BSONObj bson) {
-    LOG(kLogLevel.lessSevere()) << "received successful isMaster for server " << _host << " ("
-                                << latency << ")"
-                                << "; " << bson.toString();
+    LOGV2_DEBUG(4333221,
+                kLogLevel + 1,
+                "received successful isMaster for server {host} ({latency}); {bson}",
+                "host"_attr = _host,
+                "latency"_attr = latency,
+                "bson"_attr = bson.toString());
     _eventListener->onServerHeartbeatSucceededEvent(
         duration_cast<Milliseconds>(latency), _host, bson);
 }
@@ -237,9 +258,13 @@ void SingleServerIsMasterMonitor::_onIsMasterSuccess(sdam::IsMasterRTT latency,
 void SingleServerIsMasterMonitor::_onIsMasterFailure(sdam::IsMasterRTT latency,
                                                      const Status& status,
                                                      const BSONObj bson) {
-    LOG(kLogLevel) << "received failed isMaster for server " << _host << ": " << status.toString()
-                   << " (" << latency << ")"
-                   << "; " << bson.toString();
+    LOGV2_DEBUG(4333222,
+                kLogLevel,
+                "received failed isMaster for server {host}: {status} ({latency}): {bson}",
+                "host"_attr = _host,
+                "status"_attr = status.toString(),
+                "latency"_attr = latency,
+                "bson"_attr = bson.toString());
     _eventListener->onServerHeartbeatFailureEvent(
         duration_cast<Milliseconds>(latency), status, _host, bson);
 }
@@ -280,8 +305,10 @@ ServerIsMasterMonitor::ServerIsMasterMonitor(
       _executor(_setupExecutor(executor)),
       _isShutdown(false),
       _setUri(setUri) {
-    LOG(kLogLevel) << "Starting Replica Set IsMaster monitor with "
-                   << initialTopologyDescription->getServers().size() << " members.";
+    LOGV2_DEBUG(4333223,
+                kLogLevel,
+                "Starting Replica Set IsMaster monitor with {size} members.",
+                "size"_attr = initialTopologyDescription->getServers().size());
     onTopologyDescriptionChangedEvent(
         initialTopologyDescription->getId(), nullptr, initialTopologyDescription);
 }
@@ -320,7 +347,10 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
         if (newDescription->findServerByAddress(serverAddress) == boost::none) {
             auto& singleMonitor = _singleMonitors[serverAddress];
             singleMonitor->shutdown();
-            LOG(kLogLevel) << serverAddress << " was removed from the topology.";
+            LOGV2_DEBUG(4333225,
+                        kLogLevel,
+                        "{addr} was removed from the topology.",
+                        "addr"_attr = serverAddress);
             it = _singleMonitors.erase(it, ++it);
         } else {
             ++it;
@@ -333,7 +363,10 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
         bool isMissing =
             _singleMonitors.find(serverDescription->getAddress()) == _singleMonitors.end();
         if (isMissing) {
-            LOG(kLogLevel) << serverAddress << " was added to the topology.";
+            LOGV2_DEBUG(4333226,
+                        kLogLevel,
+                        "{addr} was added to the topology.",
+                        "addr"_attr = serverAddress);
             _singleMonitors[serverAddress] = std::make_shared<SingleServerIsMasterMonitor>(
                 _setUri,
                 serverAddress,

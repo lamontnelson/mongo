@@ -42,7 +42,7 @@ public:
                                            sdam::TopologyDescriptionPtr newDescription) override;
 
 private:
-    static inline const logger::LogSeverity kLogLevel = logger::LogSeverity::Debug(1);
+    static inline const auto kLogLevel = 1;
 
     mutable Mutex _mutex = MONGO_MAKE_LATCH("ReplicaSetMonitorQueryProcessor");
     bool _isShutdown = false;

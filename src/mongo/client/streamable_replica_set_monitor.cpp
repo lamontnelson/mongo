@@ -44,11 +44,11 @@
 #include "mongo/db/repl/bson_extract_optime.h"
 #include "mongo/db/server_options.h"
 #include "mongo/executor/thread_pool_task_executor.h"
+#include "mongo/logv2/log.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/rpc/metadata/egress_metadata_hook_list.h"
 #include "mongo/stdx/condition_variable.h"
-#include "mongo/util/log.h"
 #include "mongo/util/string_map.h"
 #include "mongo/util/timer.h"
 
@@ -161,7 +161,7 @@ ReplicaSetMonitorPtr StreamableReplicaSetMonitor::make(const MongoURI& uri,
 
 void StreamableReplicaSetMonitor::init() {
     stdx::lock_guard lock(_mutex);
-    LOG(kDefaultLogLevel) << _logPrefix() << "Starting Replica Set Monitor with uri: " << _uri;
+    LOGV2(4333206, "Starting Replica Set Monitor {uri}", "uri"_attr = _uri);
 
     _eventsPublisher = std::make_shared<sdam::TopologyEventsPublisher>(_executor);
     _topologyManager = std::make_unique<TopologyManager>(
@@ -182,8 +182,7 @@ void StreamableReplicaSetMonitor::drop() {
     if (_isDropped.swap(true)) {
         return;
     }
-
-    LOG(kDefaultLogLevel) << _logPrefix() << "Closing Replica Set Monitor";
+    LOGV2(4333209, "Closing Replica Set Monitor {name}", "name"_attr = getName());
     _eventsPublisher->close();
     _queryProcessor->shutdown();
     _isMasterMonitor->shutdown();
@@ -191,8 +190,7 @@ void StreamableReplicaSetMonitor::drop() {
         lock, Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
 
     ReplicaSetMonitorManager::get()->getNotifier().onDroppedSet(getName());
-
-    LOG(kDefaultLogLevel) << _logPrefix() << "Done closing Replica Set Monitor";
+    LOGV2(4333210, "Done closing Replica Set Monitor {name}", "name"_attr = getName());
 }
 
 SemiFuture<HostAndPort> StreamableReplicaSetMonitor::getHostOrRefresh(
@@ -228,15 +226,19 @@ SemiFuture<std::vector<HostAndPort>> StreamableReplicaSetMonitor::getHostsOrRefr
     // try to satisfy query immediately
     auto immediateResult = _getHosts(criteria);
     if (immediateResult) {
-        LOG(kLowerLogLevel) << _logPrefix()
-                            << "getHosts: " << readPrefToStringWithMinOpTime(criteria) << " -> "
-                            << hostListToString(immediateResult);
+        LOGV2_DEBUG(4333211,
+                    kLowerLogLevel,
+                    "getHosts: {readPref} -> {result}",
+                    "readPref"_attr = readPrefToStringWithMinOpTime(criteria),
+                    "result"_attr = hostListToString(immediateResult));
         return {*immediateResult};
     }
 
     _isMasterMonitor->requestImmediateCheck();
-    LOG(kDefaultLogLevel) << _logPrefix()
-                          << "start getHosts: " << readPrefToStringWithMinOpTime(criteria);
+    LOGV2_DEBUG(4333212,
+                kLowerLogLevel,
+                "start async getHosts with {readPref}",
+                "readPref"_attr = readPrefToStringWithMinOpTime(criteria));
 
     // fail fast on timeout
     const Date_t& now = _executor->now();
@@ -269,30 +271,32 @@ SemiFuture<std::vector<HostAndPort>> StreamableReplicaSetMonitor::_enqueueOutsta
     auto pf = makePromiseFuture<HostAndPortList>();
     query->promise = std::move(pf.promise);
 
-    auto deadlineCb =
-        [this, query, self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
-            stdx::lock_guard lock(_mutex);
-            if (query->done) {
-                return;
-            }
+    auto deadlineCb = [this, query, self = shared_from_this()](
+                          const TaskExecutor::CallbackArgs& cbArgs) {
+        stdx::lock_guard lock(_mutex);
+        if (query->done) {
+            return;
+        }
 
-            const auto cbStatus = cbArgs.status;
-            if (!cbStatus.isOK()) {
-                query->promise.setError(cbStatus);
-                query->done = true;
-                return;
-            }
-
-            const auto errorStatus = _makeUnsatisfiedReadPrefError(query->criteria);
-            query->promise.setError(errorStatus);
+        const auto cbStatus = cbArgs.status;
+        if (!cbStatus.isOK()) {
+            query->promise.setError(cbStatus);
             query->done = true;
-            LOG(kDefaultLogLevel) << _logPrefix()
-                                  << "host selection timeout: " << errorStatus.toString();
-        };
+            return;
+        }
+
+        const auto errorStatus = _makeUnsatisfiedReadPrefError(query->criteria);
+        query->promise.setError(errorStatus);
+        query->done = true;
+        LOGV2_INFO(
+            4333208, "host selection timeout: {status}", "status"_attr = errorStatus.toString());
+    };
     auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
 
     if (!swDeadlineHandle.isOK()) {
-        log() << "error scheduling deadline handler: " << swDeadlineHandle.getStatus();
+        LOGV2_INFO(4333207,
+                   "error scheduling deadline handler: {status}",
+                   "status"_attr = swDeadlineHandle.getStatus());
         return SemiFuture<HostAndPortList>::makeReady(swDeadlineHandle.getStatus());
     }
     query->deadlineHandle = swDeadlineHandle.getValue();
@@ -303,7 +307,7 @@ SemiFuture<std::vector<HostAndPort>> StreamableReplicaSetMonitor::_enqueueOutsta
     _eventsPublisher->registerListener(_queryProcessor);
 
     return std::move(pf.future).semi();
-}
+}  // namespace mongo
 
 boost::optional<std::vector<HostAndPort>> StreamableReplicaSetMonitor::_getHosts(
     const TopologyDescriptionPtr& topology, const ReadPreferenceSetting& criteria) {
@@ -477,7 +481,9 @@ void StreamableReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     // notify external components, if there are membership
     // changes in the topology.
     if (_hasMembershipChange(previousDescription, newDescription)) {
-        LOG(kDefaultLogLevel) << _logPrefix() << "Topology Change: " << newDescription->toString();
+        LOGV2(4333213,
+              "Topology Change: {topologyDescription}",
+              "topologyDescription"_attr = newDescription->toString());
 
         // TODO SERVER-45395: remove when HostAndPort conversion is done
         std::vector<HostAndPort> servers = _extractHosts(newDescription->getServers());
@@ -587,10 +593,12 @@ void StreamableReplicaSetMonitor::_processOutstanding(
                 _executor->cancel(query->deadlineHandle);
                 query->done = true;
                 query->promise.emplaceValue(std::move(*result));
-                LOG(kDefaultLogLevel)
-                    << _logPrefix()
-                    << "finish getHosts: " << readPrefToStringWithMinOpTime(query->criteria) << " ("
-                    << _executor->now() - query->start << ")";
+                const auto latency = _executor->now() - query->start;
+                LOGV2_DEBUG(433214,
+                            kLowerLogLevel,
+                            "finish async getHosts: {readPref} ({latency})",
+                            "readPref"_attr = readPrefToStringWithMinOpTime(query->criteria),
+                            "latency"_attr = latency.toString());
                 shouldRemove = true;
             }
         }

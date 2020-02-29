@@ -32,7 +32,7 @@
 #include <memory>
 
 #include "mongo/client/global_conn_pool.h"
-#include "mongo/util/log.h"
+#include "mongo/logv2/log.h"
 
 namespace mongo {
 void StreamableReplicaSetMonitor::StreamableReplicaSetMonitorQueryProcessor::shutdown() {
@@ -55,8 +55,10 @@ void StreamableReplicaSetMonitor::StreamableReplicaSetMonitorQueryProcessor::
         auto replicaSetMonitor = std::static_pointer_cast<StreamableReplicaSetMonitor>(
             ReplicaSetMonitorManager::get()->getMonitor(*setName));
         if (!replicaSetMonitor) {
-            LOG(kLogLevel) << "could not find rsm instance " << *setName
-                           << " for query processing.";
+            LOGV2_DEBUG(4333215,
+                        kLogLevel,
+                        "could not find rsm instance {setName} for query processing.",
+                        "setName"_attr = *setName);
             return;
         }
         replicaSetMonitor->_processOutstanding(newDescription);
