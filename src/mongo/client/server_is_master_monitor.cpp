@@ -83,7 +83,7 @@ void SingleServerIsMasterMonitor::requestImmediateCheck() {
     // remain in expedited mode until the replica set recovers
     if (!_isExpedited) {
         // save some log lines.
-        LOGV2_DEBUG(4333216,
+        LOGV2_DEBUG(4333227,
                     kLogLevel,
                     "SingleServerIsMasterMonitor Monitoring {host} in expedited mode until we "
                     "detect a primary.",
@@ -187,7 +187,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
                 self->_lastIsMasterAt = self->_executor->now();
                 nextRefreshPeriod = self->_currentRefreshPeriod(lk);
-                LOGV2_DEBUG(4333220,
+                LOGV2_DEBUG(4333228,
                             kLogLevel + 1,
                             "[SingleServerIsMasterMonitor] next refresh period in {period}",
                             "period"_attr = nextRefreshPeriod.toString());
@@ -225,7 +225,8 @@ void SingleServerIsMasterMonitor::shutdown() {
     _cancelOutstandingRequest(lock);
 
     _executor = nullptr;
-    LOGV2_DEBUG(4333221,
+
+    LOGV2_DEBUG(4333229,
                 kLogLevel + 1,
                 "Done Closing Replica Set SingleServerIsMasterMonitor for host {host}",
                 "host"_attr = _host);
