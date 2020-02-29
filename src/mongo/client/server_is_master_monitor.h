@@ -85,7 +85,6 @@ private:
 
     bool _isShutdown;
     MongoURI _setUri;
-    std::string _setName;
 };
 using SingleServerIsMasterMonitorPtr = std::shared_ptr<SingleServerIsMasterMonitor>;
 
