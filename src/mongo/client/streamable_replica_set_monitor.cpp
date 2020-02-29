@@ -182,7 +182,7 @@ void StreamableReplicaSetMonitor::drop() {
     if (_isDropped.swap(true)) {
         return;
     }
-    LOGV2(4333209, "Closing Replica Set Monitor {name}", "name"_attr = getName());
+    LOGV2(4333209, "Closing Replica Set Monitor {setName}", "setName"_attr = getName());
     _eventsPublisher->close();
     _queryProcessor->shutdown();
     _isMasterMonitor->shutdown();
@@ -190,7 +190,7 @@ void StreamableReplicaSetMonitor::drop() {
         lock, Status{ErrorCodes::ShutdownInProgress, "the ReplicaSetMonitor is shutting down"});
 
     ReplicaSetMonitorManager::get()->getNotifier().onDroppedSet(getName());
-    LOGV2(4333210, "Done closing Replica Set Monitor {name}", "name"_attr = getName());
+    LOGV2(4333210, "Done closing Replica Set Monitor {setName}", "setName"_attr = getName());
 }
 
 SemiFuture<HostAndPort> StreamableReplicaSetMonitor::getHostOrRefresh(
@@ -228,8 +228,9 @@ SemiFuture<std::vector<HostAndPort>> StreamableReplicaSetMonitor::getHostsOrRefr
     if (immediateResult) {
         LOGV2_DEBUG(4333211,
                     kLowerLogLevel,
-                    "getHosts: {readPref} -> {result}",
+                    "RSM {setName} getHosts: {readPref} -> {result}",
                     "readPref"_attr = readPrefToStringWithMinOpTime(criteria),
+                    "setName"_attr = getName(),
                     "result"_attr = hostListToString(immediateResult));
         return {*immediateResult};
     }
@@ -237,7 +238,8 @@ SemiFuture<std::vector<HostAndPort>> StreamableReplicaSetMonitor::getHostsOrRefr
     _isMasterMonitor->requestImmediateCheck();
     LOGV2_DEBUG(4333212,
                 kLowerLogLevel,
-                "start async getHosts with {readPref}",
+                "RSM {setName} start async getHosts with {readPref}",
+                "setName"_attr = getName(),
                 "readPref"_attr = readPrefToStringWithMinOpTime(criteria));
 
     // fail fast on timeout
@@ -271,31 +273,34 @@ SemiFuture<std::vector<HostAndPort>> StreamableReplicaSetMonitor::_enqueueOutsta
     auto pf = makePromiseFuture<HostAndPortList>();
     query->promise = std::move(pf.promise);
 
-    auto deadlineCb = [this, query, self = shared_from_this()](
-                          const TaskExecutor::CallbackArgs& cbArgs) {
-        stdx::lock_guard lock(_mutex);
-        if (query->done) {
-            return;
-        }
+    auto deadlineCb =
+        [this, query, self = shared_from_this()](const TaskExecutor::CallbackArgs& cbArgs) {
+            stdx::lock_guard lock(_mutex);
+            if (query->done) {
+                return;
+            }
 
-        const auto cbStatus = cbArgs.status;
-        if (!cbStatus.isOK()) {
-            query->promise.setError(cbStatus);
+            const auto cbStatus = cbArgs.status;
+            if (!cbStatus.isOK()) {
+                query->promise.setError(cbStatus);
+                query->done = true;
+                return;
+            }
+
+            const auto errorStatus = _makeUnsatisfiedReadPrefError(query->criteria);
+            query->promise.setError(errorStatus);
             query->done = true;
-            return;
-        }
-
-        const auto errorStatus = _makeUnsatisfiedReadPrefError(query->criteria);
-        query->promise.setError(errorStatus);
-        query->done = true;
-        LOGV2_INFO(
-            4333208, "host selection timeout: {status}", "status"_attr = errorStatus.toString());
-    };
+            LOGV2_INFO(4333208,
+                       "RSM {setName} host selection timeout: {status}",
+                       "setName"_attr = getName(),
+                       "status"_attr = errorStatus.toString());
+        };
     auto swDeadlineHandle = _executor->scheduleWorkAt(query->deadline, deadlineCb);
 
     if (!swDeadlineHandle.isOK()) {
         LOGV2_INFO(4333207,
-                   "error scheduling deadline handler: {status}",
+                   "RSM {setName} error scheduling deadline handler: {status}",
+                   "setName"_attr = getName(),
                    "status"_attr = swDeadlineHandle.getStatus());
         return SemiFuture<HostAndPortList>::makeReady(swDeadlineHandle.getStatus());
     }
@@ -482,7 +487,8 @@ void StreamableReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     // changes in the topology.
     if (_hasMembershipChange(previousDescription, newDescription)) {
         LOGV2(4333213,
-              "Topology Change: {topologyDescription}",
+              "RSM {setName} Topology Change: {topologyDescription}",
+              "setName"_attr = getName(),
               "topologyDescription"_attr = newDescription->toString());
 
         // TODO SERVER-45395: remove when HostAndPort conversion is done
@@ -575,7 +581,7 @@ void StreamableReplicaSetMonitor::_processOutstanding(
 
     // Note that a possible performance optimization is:
     // instead of calling _getHosts for every outstanding query, we could
-    // first group them by equivalence classes then call _getHosts once per class.
+    // first group into equivalence classes then call _getHosts once per class.
 
     stdx::lock_guard lock(_mutex);
 
@@ -596,7 +602,8 @@ void StreamableReplicaSetMonitor::_processOutstanding(
                 const auto latency = _executor->now() - query->start;
                 LOGV2_DEBUG(433214,
                             kLowerLogLevel,
-                            "finish async getHosts: {readPref} ({latency})",
+                            "RSM {setName} finished async getHosts: {readPref} ({latency})",
+                            "setName"_attr = getName(),
                             "readPref"_attr = readPrefToStringWithMinOpTime(query->criteria),
                             "latency"_attr = latency.toString());
                 shouldRemove = true;

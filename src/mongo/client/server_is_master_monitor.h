@@ -67,7 +67,7 @@ private:
     Milliseconds _currentRefreshPeriod(WithLock);
     void _cancelOutstandingRequest(WithLock);
 
-    static inline const auto kLogLevel = 1;
+    static constexpr auto kLogLevel = 0;
 
     Mutex _mutex =
         MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(4), "SingleServerIsMasterMonitor::mutex");
@@ -85,6 +85,7 @@ private:
 
     bool _isShutdown;
     MongoURI _setUri;
+    std::string _setName;
 };
 using SingleServerIsMasterMonitorPtr = std::shared_ptr<SingleServerIsMasterMonitor>;
 
@@ -121,7 +122,7 @@ private:
         const std::shared_ptr<executor::TaskExecutor>& executor);
     void _disableExpeditedChecking(WithLock);
 
-    static inline const auto kLogLevel = 0;
+    static constexpr auto kLogLevel = 0;
 
     Mutex _mutex =
         MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(5), "ServerIsMasterMonitor::mutex");

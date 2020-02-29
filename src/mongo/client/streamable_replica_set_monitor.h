@@ -203,8 +203,8 @@ private:
 
     static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
-    static inline const auto kDefaultLogLevel = 0;
-    static inline const auto kLowerLogLevel = 2;
+    static constexpr auto kDefaultLogLevel = 0;
+    static constexpr auto kLowerLogLevel = 1;
     static constexpr auto kLogPrefix = "[ReplicaSetMonitor]";
 };
 
