@@ -103,8 +103,9 @@ private:
 
             // topologyType == kReplicaSetWithPrimary implies the validity of the primary server
             // description.
-            invariant(topologyDescription->getPrimary());
-            const auto& primaryDescription = *topologyDescription->getPrimary();
+            const auto primary = topologyDescription->getPrimary();
+            invariant(primary);
+            const auto& primaryDescription = *primary;
 
             const auto& primaryLastWriteDate = primaryDescription->getLastWriteDate()
                 ? *primaryDescription->getLastWriteDate()
