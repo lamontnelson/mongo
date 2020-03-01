@@ -104,6 +104,7 @@ public:
                            .withRtt(latency)
                            .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
                            .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                           .withLastWriteDate(Date_t::now())
                            .withLastUpdateTime(Date_t::now());
 
         for (auto it = tags.begin(); it != tags.end(); ++it) {
@@ -192,6 +193,7 @@ TEST_F(ServerSelectorTestFixture, ShouldSelectRandomlyWhenMultipleOptionsAreAvai
     auto primary = ServerDescriptionBuilder()
                        .withAddress("s0")
                        .withType(ServerType::kRSPrimary)
+                       .withLastWriteDate(Date_t::now())
                        .withRtt(s0Latency)
                        .withSetName("set")
                        .withHost("s0")
