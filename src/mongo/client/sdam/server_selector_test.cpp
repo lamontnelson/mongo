@@ -193,6 +193,7 @@ TEST_F(ServerSelectorTestFixture, ShouldSelectRandomlyWhenMultipleOptionsAreAvai
     auto primary = ServerDescriptionBuilder()
                        .withAddress("s0")
                        .withType(ServerType::kRSPrimary)
+                       .withLastUpdateTime(Date_t::now())
                        .withLastWriteDate(Date_t::now())
                        .withRtt(s0Latency)
                        .withSetName("set")
@@ -255,6 +256,7 @@ TEST_F(ServerSelectorTestFixture, ShouldFilterByLastWriteTime) {
                         .withHost("s2")
                         .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
                         .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                        .withLastUpdateTime(now)
                         .withLastWriteDate(d0)
                         .instance();
     stateMachine.onServerDescription(*topologyDescription, s0);
@@ -267,6 +269,7 @@ TEST_F(ServerSelectorTestFixture, ShouldFilterByLastWriteTime) {
                         .withSetName("set")
                         .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
                         .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                        .withLastUpdateTime(now)
                         .withLastWriteDate(d1)
                         .instance();
     stateMachine.onServerDescription(*topologyDescription, s1);
@@ -280,6 +283,7 @@ TEST_F(ServerSelectorTestFixture, ShouldFilterByLastWriteTime) {
                         .withSetName("set")
                         .withMinWireVersion(WireVersion::SUPPORTS_OP_MSG)
                         .withMaxWireVersion(WireVersion::LATEST_WIRE_VERSION)
+                        .withLastUpdateTime(now)
                         .withLastWriteDate(d2)
                         .instance();
     stateMachine.onServerDescription(*topologyDescription, s2);
