@@ -157,7 +157,7 @@ public:
         Promise<std::vector<HostAndPort>> promise;
     };
 
-    SetState(const MongoURI& uri, ReplicaSetChangeNotifier*, executor::TaskExecutor*);
+    SetState(const MongoURI& uri, ReplicaSetChangeNotifier*, std::shared_ptr<mongo::executor::TaskExecutor> executor);
 
     bool isUsable() const;
 
@@ -248,7 +248,7 @@ public:
     const std::string name;
 
     ReplicaSetChangeNotifier* const notifier;
-    executor::TaskExecutor* const executor;
+    std::shared_ptr<mongo::executor::TaskExecutor> const executor;
 
     bool isDropped = false;
 
