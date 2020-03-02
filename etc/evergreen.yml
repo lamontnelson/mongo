@@ -11996,7 +11996,7 @@ buildvariants:
     distros:
     - ubuntu1804-build
 
-- name: enterprise-ubuntu-task-executor-pool-size-1604-64-bit
+- name: enterprise-ubuntu-scanning-replica-set-monitor-1604-64-bit
   display_name: "~ Enterprise Ubuntu 16.04 (with ScanningReplicaSetMonitor)"
   batchtime: 1440 # 1 day
   run_on:
