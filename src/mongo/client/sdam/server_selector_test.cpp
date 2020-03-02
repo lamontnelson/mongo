@@ -240,8 +240,8 @@ TEST_F(ServerSelectorTestFixture, ShouldFilterByLastWriteTime) {
     TopologyStateMachine stateMachine(sdamConfiguration);
     auto topologyDescription = std::make_shared<TopologyDescription>(sdamConfiguration);
 
-    const int MAX_STALENESS = 60;
-    const auto sixtySeconds = Seconds(MAX_STALENESS);
+    const int MAX_STALENESS = 90;
+    const auto ninetySeconds = Seconds(MAX_STALENESS);
     const auto now = Date_t::now();
 
 
@@ -275,7 +275,7 @@ TEST_F(ServerSelectorTestFixture, ShouldFilterByLastWriteTime) {
     stateMachine.onServerDescription(*topologyDescription, s1);
 
     // d2 is stale, so s2 should not be selected.
-    const auto d2 = now - sixtySeconds - sixtySeconds;
+    const auto d2 = now - ninetySeconds - ninetySeconds;
     const auto s2 = ServerDescriptionBuilder()
                         .withAddress("s2")
                         .withType(ServerType::kRSSecondary)
@@ -289,7 +289,7 @@ TEST_F(ServerSelectorTestFixture, ShouldFilterByLastWriteTime) {
     stateMachine.onServerDescription(*topologyDescription, s2);
 
     const auto readPref =
-        ReadPreferenceSetting(ReadPreference::Nearest, TagSets::emptySet, sixtySeconds);
+        ReadPreferenceSetting(ReadPreference::Nearest, TagSets::emptySet, ninetySeconds);
 
     std::map<ServerAddress, int> frequencyInfo{{"s0", 0}, {"s1", 0}, {"s2", 0}};
     for (int i = 0; i < NUM_ITERATIONS; i++) {
