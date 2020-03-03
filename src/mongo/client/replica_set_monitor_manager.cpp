@@ -72,6 +72,7 @@ const auto getGlobalRSMMonitorManager =
 }  // namespace
 
 ReplicaSetMonitorManager::~ReplicaSetMonitorManager() {
+	LOGV2(4333299, "~ReplicaSetMonitorManager");
     shutdown();
 }
 

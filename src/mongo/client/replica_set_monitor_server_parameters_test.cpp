@@ -47,7 +47,6 @@ class ReplicaSetMonitorProtocolTest : public ReplicaSetMonitorProtocolTestFixtur
 protected:
     void setUp() {
         setGlobalServiceContext(ServiceContext::make());
-        ReplicaSetMonitor::cleanup();
     }
 
     void tearDown() {
