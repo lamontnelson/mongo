@@ -201,7 +201,7 @@ private:
     std::vector<HostQueryPtr> _outstandingQueries;
     mutable PseudoRandom _random;
 
-	static inline const auto kServerSelectionConfig =
+    static inline const auto kServerSelectionConfig =
         sdam::ServerSelectionConfiguration::defaultConfiguration();
     static constexpr auto kDefaultLogLevel = 0;
     static constexpr auto kLowerLogLevel = 1;

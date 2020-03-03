@@ -38,8 +38,8 @@
 #include "mongo/bson/bsonobjbuilder.h"
 #include "mongo/client/connection_string.h"
 #include "mongo/client/mongo_uri.h"
-#include "mongo/client/replica_set_monitor_server_parameters.h"
 #include "mongo/client/replica_set_monitor.h"
+#include "mongo/client/replica_set_monitor_server_parameters.h"
 #include "mongo/client/scanning_replica_set_monitor.h"
 #include "mongo/client/streamable_replica_set_monitor.h"
 #include "mongo/executor/network_connection_hook.h"
@@ -131,7 +131,7 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
     }
 
     std::shared_ptr<ReplicaSetMonitor> newMonitor;
-	if (gReplicaSetMonitorProtocol == ReplicaSetMonitorProtocol::kScanning) {
+    if (gReplicaSetMonitorProtocol == ReplicaSetMonitorProtocol::kScanning) {
         LOGV2(4333204, "Starting Scanning ReplicaSetMonitor", "uri"_attr = uri.toString());
         newMonitor = std::make_shared<ScanningReplicaSetMonitor>(uri);
         newMonitor->init();
