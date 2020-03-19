@@ -122,9 +122,10 @@ void DatabaseShardingState::setDbVersion(OperationContext* opCtx,
     invariant(opCtx->lockState()->isDbLockedForMode(_dbName, MODE_X));
     LOGV2(21950,
           "setting this node's cached database version for {dbName} to "
-          "{newDbVersion_newDbVersion_BSONObj}",
+          "{newDbVersion}",
+          "setting this node's cached database version",
           "dbName"_attr = _dbName,
-          "newDbVersion_newDbVersion_BSONObj"_attr =
+          "newDbVersion"_attr =
               (newDbVersion ? newDbVersion->toBSON() : BSONObj()));
     _dbVersion = newDbVersion;
 }

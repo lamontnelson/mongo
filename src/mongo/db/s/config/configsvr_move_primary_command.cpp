@@ -159,11 +159,12 @@ public:
             auto toShardStatus = shardRegistry->getShard(opCtx, to);
             if (!toShardStatus.isOK()) {
                 LOGV2(21921,
-                      "Could not move database '{dbname}' to shard "
-                      "'{to}{causedBy_toShardStatus_getStatus}",
-                      "dbname"_attr = dbname,
-                      "to"_attr = to,
-                      "causedBy_toShardStatus_getStatus"_attr =
+                      "Could not move database '{db}' to shard "
+                      "{shardName}: {error}",
+                      "Could not move database to shard",
+                      "db"_attr = dbname,
+                      "shardName"_attr = to,
+                      "error"_attr =
                           causedBy(toShardStatus.getStatus()));
                 uassertStatusOKWithContext(toShardStatus.getStatus(),
                                            str::stream() << "Could not move database '" << dbname

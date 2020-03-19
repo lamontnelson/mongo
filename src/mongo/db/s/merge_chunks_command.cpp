@@ -230,6 +230,7 @@ void mergeChunks(OperationContext* opCtx,
         LOGV2_DEBUG(21983,
                     1,
                     "mergeChunk [{minKey},{maxKey}) has already been committed.",
+                    "mergeChunk has already been committed.",
                     "minKey"_attr = redact(minKey),
                     "maxKey"_attr = redact(maxKey));
         return;

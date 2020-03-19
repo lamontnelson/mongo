@@ -422,16 +422,16 @@ void ShardingCatalogManager::dropCollection(OperationContext* opCtx, const Names
         BSONObj(),
         ShardingCatalogClient::kMajorityWriteConcern));
 
-    LOGV2_DEBUG(21924, 1, "dropCollection {nss_ns} started", "nss_ns"_attr = nss.ns());
+    LOGV2_DEBUG(21924, 1, "dropCollection {namespace} started","dropCollection started", "namespace"_attr = nss.ns());
 
     sendDropCollectionToAllShards(opCtx, nss);
 
-    LOGV2_DEBUG(21925, 1, "dropCollection {nss_ns} shard data deleted", "nss_ns"_attr = nss.ns());
+    LOGV2_DEBUG(21925, 1, "dropCollection {namespace} shard data deleted", "dropCollection shard data deleted", "namespace"_attr = nss.ns());
 
     removeChunksAndTagsForDroppedCollection(opCtx, nss);
 
     LOGV2_DEBUG(
-        21926, 1, "dropCollection {nss_ns} chunk and tag data deleted", "nss_ns"_attr = nss.ns());
+        21926, 1, "dropCollection {namespace} chunk and tag data deleted","dropCollection chunk and tag data deleted", "namespace"_attr = nss.ns());
 
     // Mark the collection as dropped
     CollectionType coll;
@@ -445,11 +445,11 @@ void ShardingCatalogManager::dropCollection(OperationContext* opCtx, const Names
         opCtx, nss, coll, upsert));
 
     LOGV2_DEBUG(
-        21927, 1, "dropCollection {nss_ns} collection marked as dropped", "nss_ns"_attr = nss.ns());
+        21927, 1, "dropCollection {namespace} collection marked as dropped", "dropCollection collection marked as dropped", "namespace"_attr = nss.ns());
 
     sendSSVToAllShards(opCtx, nss);
 
-    LOGV2_DEBUG(21928, 1, "dropCollection {nss_ns} completed", "nss_ns"_attr = nss.ns());
+    LOGV2_DEBUG(21928, 1, "dropCollection {namespace} completed","dropCollection completed", "namespace"_attr = nss.ns());
 
     ShardingLogging::get(opCtx)->logChange(
         opCtx, "dropCollection", nss.ns(), BSONObj(), ShardingCatalogClient::kMajorityWriteConcern);
@@ -460,8 +460,9 @@ void ShardingCatalogManager::ensureDropCollectionCompleted(OperationContext* opC
 
     LOGV2_DEBUG(21929,
                 1,
-                "Ensuring config entries for {nss_ns} from previous dropCollection are cleared",
-                "nss_ns"_attr = nss.ns());
+                "Ensuring config entries for {namespace} from previous dropCollection are cleared",
+                "Ensuring config entries from previous dropCollection are cleared",
+                "namespace"_attr = nss.ns());
     sendDropCollectionToAllShards(opCtx, nss);
     removeChunksAndTagsForDroppedCollection(opCtx, nss);
     sendSSVToAllShards(opCtx, nss);
@@ -498,8 +499,9 @@ void ShardingCatalogManager::generateUUIDsForExistingShardedCollections(Operatio
     // Generate and persist a new UUID for each collection that did not have a UUID.
     LOGV2(
         21931,
-        "generating UUIDs for {shardedColls_size} sharded collections that do not yet have a UUID",
-        "shardedColls_size"_attr = shardedColls.size());
+        "generating UUIDs for {numCollections} sharded collections that do not yet have a UUID",
+        "generating UUIDs for sharded collections that do not yet have a UUID",
+        "numCollections"_attr = shardedColls.size());
     for (auto& coll : shardedColls) {
         auto collType = uassertStatusOK(CollectionType::fromBSON(coll));
         invariant(!collType.getUUID());
@@ -511,9 +513,10 @@ void ShardingCatalogManager::generateUUIDsForExistingShardedCollections(Operatio
             opCtx, collType.getNs(), collType, false /* upsert */));
         LOGV2_DEBUG(21932,
                     2,
-                    "updated entry in config.collections for sharded collection {collType_getNs} "
+                    "updated entry in config.collections for sharded collection {namespace} "
                     "with generated UUID {uuid}",
-                    "collType_getNs"_attr = collType.getNs(),
+                    "updated entry in config.collections for sharded collection with generated UUID",
+                    "namespace"_attr = collType.getNs(),
                     "uuid"_attr = uuid);
     }
 }
@@ -629,11 +632,12 @@ void ShardingCatalogManager::refineCollectionShardKey(OperationContext* opCtx,
                                                                      txnNumber));
 
         LOGV2(21933,
-              "refineCollectionShardKey: updated collection entry for '{nss_ns}': took "
-              "{executionTimer_millis} ms. Total time taken: {totalTimer_millis} ms.",
-              "nss_ns"_attr = nss.ns(),
-              "executionTimer_millis"_attr = executionTimer.millis(),
-              "totalTimer_millis"_attr = totalTimer.millis());
+              "refineCollectionShardKey: updated collection entry for '{namespace}': took "
+              "{updateTime} ms. Total time taken: {totalTime} ms.",
+              "refineCollectionShardKey: updated collection entry"
+              "namespace"_attr = nss.ns(),
+              "updateTime"_attr = executionTimer.millis(),
+              "totalTime"_attr = totalTimer.millis());
         executionTimer.reset();
 
         // Update all config.chunks entries for the given namespace by setting (i) their epoch to
@@ -668,11 +672,11 @@ void ShardingCatalogManager::refineCollectionShardKey(OperationContext* opCtx,
             txnNumber));
 
         LOGV2(21935,
-              "refineCollectionShardKey: updated chunk entries for '{nss_ns}': took "
-              "{executionTimer_millis} ms. Total time taken: {totalTimer_millis} ms.",
-              "nss_ns"_attr = nss.ns(),
-              "executionTimer_millis"_attr = executionTimer.millis(),
-              "totalTimer_millis"_attr = totalTimer.millis());
+              "refineCollectionShardKey: updated chunk entries for '{namespace}': took "
+              "{updateTime} ms. Total time taken: {totalTime} ms.",
+              "namespace"_attr = nss.ns(),
+              "updateTime"_attr = executionTimer.millis(),
+              "totalTime"_attr = totalTimer.millis());
         executionTimer.reset();
 
         // Update all config.tags entries for the given namespace by setting their bounds for each
@@ -698,11 +702,12 @@ void ShardingCatalogManager::refineCollectionShardKey(OperationContext* opCtx,
                                                   txnNumber));
 
         LOGV2(21936,
-              "refineCollectionShardKey: updated zone entries for '{nss_ns}': took "
-              "{executionTimer_millis} ms. Total time taken: {totalTimer_millis} ms.",
-              "nss_ns"_attr = nss.ns(),
-              "executionTimer_millis"_attr = executionTimer.millis(),
-              "totalTimer_millis"_attr = totalTimer.millis());
+              "refineCollectionShardKey: updated zone entries for '{namespace}': took "
+              "{updateTime} ms. Total time taken: {totalTime} ms.",
+              "refineCollectionShardKey: updated zone entries",
+              "namespace"_attr = nss.ns(),
+              "updateTime"_attr = executionTimer.millis(),
+              "totalTime"_attr = totalTimer.millis());
 
         if (MONGO_unlikely(hangRefineCollectionShardKeyBeforeCommit.shouldFail())) {
             LOGV2(21937, "Hit hangRefineCollectionShardKeyBeforeCommit failpoint");
@@ -725,9 +730,10 @@ void ShardingCatalogManager::refineCollectionShardKey(OperationContext* opCtx,
     } catch (const DBException& ex) {
         LOGV2(51798,
               "refineCollectionShardKey: failed to best-effort refresh all shards containing "
-              "chunks in '{ns}'",
+              "chunks in '{namespace}'",
+              "refineCollectionShardKey: failed to best-effort refresh all shards containing chunks",
               "error"_attr = ex.toStatus(),
-              "ns"_attr = nss.ns());
+              "namespace"_attr = nss.ns());
     }
 }
 

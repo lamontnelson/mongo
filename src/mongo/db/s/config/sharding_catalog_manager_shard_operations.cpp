@@ -163,7 +163,8 @@ StatusWith<Shard::CommandResponse> ShardingCatalogManager::_runCommandForAddShar
     if (response.status == ErrorCodes::ExceededTimeLimit) {
         LOGV2(21941,
               "Operation timed out with status {response_status}",
-              "response_status"_attr = redact(response.status));
+              "Operation timed out",
+              "error"_attr = redact(response.status));
     }
 
     if (!response.isOK()) {
@@ -676,6 +677,7 @@ StatusWith<std::string> ShardingCatalogManager::addShard(
 
         LOGV2(21942,
               "going to insert new entry for shard into config.shards: {shardType}",
+              "going to insert new entry for shard into config.shards",
               "shardType"_attr = shardType.toString());
 
         Status result = Grid::get(opCtx)->catalogClient()->insertConfigDocument(
@@ -685,9 +687,10 @@ StatusWith<std::string> ShardingCatalogManager::addShard(
             ShardingCatalogClient::kLocalWriteConcern);
         if (!result.isOK()) {
             LOGV2(21943,
-                  "error adding shard: {shardType} err: {result_reason}",
+                  "error adding shard: {shardType} err: {error}",
+                  "error adding shard",
                   "shardType"_attr = shardType.toBSON(),
-                  "result_reason"_attr = result.reason());
+                  "error"_attr = result.reason());
             return result;
         }
     }
@@ -706,10 +709,10 @@ StatusWith<std::string> ShardingCatalogManager::addShard(
                 ShardingCatalogClient::kLocalWriteConcern);
             if (!status.isOK()) {
                 LOGV2(21944,
-                      "adding shard {shardConnectionString} even though could not add database "
-                      "{dbName}",
+                      "adding shard {shardConnectionString} even though could not add database {db}",
+                      "adding shard even though we could not add database",
                       "shardConnectionString"_attr = shardConnectionString.toString(),
-                      "dbName"_attr = dbName);
+                      "db"_attr = dbName);
             }
         }
     }
@@ -785,7 +788,7 @@ RemoveShardProgress ShardingCatalogManager::removeShard(OperationContext* opCtx,
     auto* const catalogClient = Grid::get(opCtx)->catalogClient();
 
     if (!isShardCurrentlyDraining) {
-        LOGV2(21945, "going to start draining shard: {name}", "name"_attr = name);
+        LOGV2(21945, "going to start draining shard: {shardName}", "going to start draining shard", "shardName"_attr = name);
 
         // Record start in changelog
         uassertStatusOK(ShardingLogging::get(opCtx)->logChangeChecked(
@@ -823,9 +826,9 @@ RemoveShardProgress ShardingCatalogManager::removeShard(OperationContext* opCtx,
 
     if (chunkCount > 0 || databaseCount > 0) {
         // Still more draining to do
-        LOGV2(21946, "chunkCount: {chunkCount}", "chunkCount"_attr = chunkCount);
-        LOGV2(21947, "databaseCount: {databaseCount}", "databaseCount"_attr = databaseCount);
-        LOGV2(21948, "jumboCount: {jumboCount}", "jumboCount"_attr = jumboCount);
+        LOGV2(21946, "removeShard: chunkCount {chunkCount}","removeShard: chunkCount", "chunkCount"_attr = chunkCount);
+        LOGV2(21947, "removeShard: databaseCount {databaseCount}", "removeShard: databaseCount","databaseCount"_attr = databaseCount);
+        LOGV2(21948, "removeShard: jumboCount: {jumboCount}", "removeShard: jumboCount", "jumboCount"_attr = jumboCount);
 
         return {RemoveShardProgress::ONGOING,
                 boost::optional<RemoveShardProgress::DrainingShardUsage>(
@@ -833,7 +836,7 @@ RemoveShardProgress ShardingCatalogManager::removeShard(OperationContext* opCtx,
     }
 
     // Draining is done, now finish removing the shard.
-    LOGV2(21949, "going to remove shard: {name}", "name"_attr = name);
+    LOGV2(21949, "going to remove shard: {shardName}","going to remove shard", "shardName"_attr = name);
     audit::logRemoveShard(opCtx->getClient(), name);
 
     uassertStatusOKWithContext(
