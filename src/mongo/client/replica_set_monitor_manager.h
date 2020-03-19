@@ -35,6 +35,7 @@
 #include "mongo/client/replica_set_change_notifier.h"
 #include "mongo/executor/network_connection_hook.h"
 #include "mongo/executor/task_executor.h"
+#include "mongo/executor/thread_pool_task_executor.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/util/hierarchical_acquisition.h"
 #include "mongo/util/string_map.h"
@@ -116,7 +117,7 @@ public:
     /**
      * Returns an executor for running RSM tasks.
      */
-    std::shared_ptr<executor::TaskExecutor> getExecutor();
+    std::shared_ptr<executor::ThreadPoolTaskExecutor> getExecutor();
 
     ReplicaSetChangeNotifier& getNotifier();
 
@@ -130,7 +131,7 @@ private:
         MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(6), "ReplicaSetMonitorManager::_mutex");
 
     // Executor for monitoring replica sets.
-    std::shared_ptr<executor::TaskExecutor> _taskExecutor;
+    std::shared_ptr<executor::ThreadPoolTaskExecutor> _taskExecutor;
 
     // Widget to notify listeners when a RSM notices a change
     ReplicaSetChangeNotifier _notifier;

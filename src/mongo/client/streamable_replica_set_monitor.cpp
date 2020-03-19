@@ -64,6 +64,7 @@ using std::vector;
 namespace {
 // Pull nested types to top-level scope
 using executor::TaskExecutor;
+using executor::ThreadPoolTaskExecutor;
 using CallbackArgs = TaskExecutor::CallbackArgs;
 using CallbackHandle = TaskExecutor::CallbackHandle;
 
@@ -135,8 +136,8 @@ constexpr auto kZeroMs = Milliseconds(0);
  * functionality. Once they are shutdown in the drop() method the operations exposed via their api
  * are effectively no-ops.
  */
-StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(const MongoURI& uri,
-                                                         std::shared_ptr<TaskExecutor> executor)
+StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(
+    const MongoURI& uri, std::shared_ptr<ThreadPoolTaskExecutor> executor)
     : _serverSelector(std::make_unique<SdamServerSelector>(kServerSelectionConfig)),
       _queryProcessor(std::make_shared<StreamableReplicaSetMonitorQueryProcessor>()),
       _uri(uri),
@@ -152,8 +153,8 @@ StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(const MongoURI& uri,
     _sdamConfig = SdamConfiguration(seeds);
 }
 
-ReplicaSetMonitorPtr StreamableReplicaSetMonitor::make(const MongoURI& uri,
-                                                       std::shared_ptr<TaskExecutor> executor) {
+ReplicaSetMonitorPtr StreamableReplicaSetMonitor::make(
+    const MongoURI& uri, std::shared_ptr<ThreadPoolTaskExecutor> executor) {
     auto result = std::make_shared<StreamableReplicaSetMonitor>(uri, executor);
     result->init();
     return result;
@@ -343,6 +344,11 @@ void StreamableReplicaSetMonitor::failedHost(const HostAndPort& host, const Stat
 void StreamableReplicaSetMonitor::failedHost(const HostAndPort& host,
                                              BSONObj bson,
                                              const Status& status) {
+	if (ErrorCodes::isA<ErrorCategory::ExceededTimeLimitError>(status))
+		return;
+
+    _executor->dropConnections(host);
+	_isMasterMonitor->requestImmediateCheck();
     IsMasterOutcome outcome(host.toString(), bson, status.toString());
     _topologyManager->onServerDescription(outcome);
 }

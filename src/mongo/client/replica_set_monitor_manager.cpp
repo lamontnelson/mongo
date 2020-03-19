@@ -273,7 +273,7 @@ void ReplicaSetMonitorManager::report(BSONObjBuilder* builder, bool forFTDC) {
     }
 }
 
-std::shared_ptr<executor::TaskExecutor> ReplicaSetMonitorManager::getExecutor() {
+std::shared_ptr<executor::ThreadPoolTaskExecutor> ReplicaSetMonitorManager::getExecutor() {
     invariant(_taskExecutor);
     return _taskExecutor;
 }

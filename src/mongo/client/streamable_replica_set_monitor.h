@@ -40,7 +40,7 @@
 #include "mongo/client/replica_set_monitor.h"
 #include "mongo/client/sdam/sdam.h"
 #include "mongo/client/server_is_master_monitor.h"
-#include "mongo/executor/task_executor.h"
+#include "mongo/executor/thread_pool_task_executor.h"
 #include "mongo/logger/log_component.h"
 #include "mongo/util/concurrency/with_lock.h"
 #include "mongo/util/duration.h"
@@ -75,14 +75,14 @@ public:
     static constexpr auto kCheckTimeout = Seconds(5);
 
     StreamableReplicaSetMonitor(const MongoURI& uri,
-                                std::shared_ptr<executor::TaskExecutor> executor);
+                                std::shared_ptr<executor::ThreadPoolTaskExecutor> executor);
 
     void init();
 
     void drop();
 
-    static ReplicaSetMonitorPtr make(const MongoURI& uri,
-                                     std::shared_ptr<executor::TaskExecutor> executor = nullptr);
+    static ReplicaSetMonitorPtr make(
+        const MongoURI& uri, std::shared_ptr<executor::ThreadPoolTaskExecutor> executor = nullptr);
 
     SemiFuture<HostAndPort> getHostOrRefresh(const ReadPreferenceSetting& readPref,
                                              Milliseconds maxWait = kDefaultFindHostTimeout);
@@ -199,7 +199,7 @@ private:
 
     const MongoURI _uri;
 
-    std::shared_ptr<executor::TaskExecutor> _executor;
+    std::shared_ptr<executor::ThreadPoolTaskExecutor> _executor;
 
     AtomicWord<bool> _isDropped{true};
 
