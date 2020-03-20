@@ -28,6 +28,8 @@
  */
 #include "mongo/client/server_is_master_monitor.h"
 
+#include <memory>
+
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kDefault
 #include "mongo/client/replica_set_monitor.h"
 #include "mongo/client/sdam/sdam.h"
@@ -203,7 +205,18 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
             if (result.response.isOK()) {
                 self->_onIsMasterSuccess(latency, result.response.data);
             } else {
-                self->_onIsMasterFailure(latency, result.response.status, result.response.data);
+				const auto& status = result.response.status;
+				if (ErrorCodes::isA<ErrorCategory::NetworkError>(status)) {
+					// TODO: update this to use egressTagCloser
+					auto threadExecutor = std::dynamic_pointer_cast<ThreadPoolTaskExecutor>(_executor);
+					invariant(threadExecutor);
+					threadExecutor->dropConnections(HostAndPort(_host));
+				}
+
+				if (!ErrorCodes::isA<ErrorCategory::ExceededTimeLimitError>(status)) {
+					// skip updating server description for timeouts
+					self->_onIsMasterFailure(latency, result.response.status, result.response.data);
+				}
             }
         });
 

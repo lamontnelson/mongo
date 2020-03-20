@@ -347,8 +347,9 @@ void StreamableReplicaSetMonitor::failedHost(const HostAndPort& host,
 	if (ErrorCodes::isA<ErrorCategory::ExceededTimeLimitError>(status))
 		return;
 
-    _executor->dropConnections(host);
-	_isMasterMonitor->requestImmediateCheck();
+	if (!ErrorCodes::isA<ErrorCategory::NetworkError>(status))
+		_isMasterMonitor->requestImmediateCheck();
+
     IsMasterOutcome outcome(host.toString(), bson, status.toString());
     _topologyManager->onServerDescription(outcome);
 }
