@@ -83,7 +83,7 @@ bool secondaryPredicate(const ServerDescriptionPtr& server) {
 }
 
 bool primaryOrSecondaryPredicate(const ServerDescriptionPtr& server) {
-    const auto& serverType = server->getType();
+    const auto serverType = server->getType();
     return serverType == ServerType::kRSPrimary || serverType == ServerType::kRSSecondary;
 }
 
