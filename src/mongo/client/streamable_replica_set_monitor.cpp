@@ -483,8 +483,7 @@ sdam::TopologyDescriptionPtr StreamableReplicaSetMonitor::_currentTopology() con
 }
 
 void StreamableReplicaSetMonitor::_setConfirmedNotifierState(
-	WithLock,
-    const ServerDescriptionPtr& primaryDescription) {
+    WithLock, const ServerDescriptionPtr& primaryDescription) {
     invariant(primaryDescription && primaryDescription->getType() == sdam::ServerType::kRSPrimary);
 
     const auto& hosts = primaryDescription->getHosts();
