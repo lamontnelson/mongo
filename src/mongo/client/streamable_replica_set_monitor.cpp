@@ -519,8 +519,7 @@ void StreamableReplicaSetMonitor::onTopologyDescriptionChangedEvent(
     if (_isDropped.load())
         return;
 
-    // notify external components, if there are membership
-    // changes in the topology.
+    // Notify external components if there are membership changes in the topology.
     if (_hasMembershipChange(previousDescription, newDescription)) {
         LOGV2(4333213,
               "RSM {setName} Topology Change: {topologyDescription}",
@@ -540,7 +539,7 @@ void StreamableReplicaSetMonitor::onTopologyDescriptionChangedEvent(
                 const auto& connectionString = _confirmedNotifierState->connectionString;
                 ReplicaSetMonitorManager::get()->getNotifier().onPossibleSet(connectionString);
             } else {
-                // no confirmed hosts yet, just send list of hosts that are routable base on type.
+                // No confirmed hosts yet, just send list of hosts that are routable base on type.
                 const auto& primaryAndSecondaries =
                     newDescription->findServers(primaryOrSecondaryPredicate);
                 if (primaryAndSecondaries.size() == 0) {

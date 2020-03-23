@@ -133,8 +133,8 @@ private:
     };
     using HostQueryPtr = std::shared_ptr<HostQuery>;
 
-    // Information collected from the primary server description to be published via the replica set
-    // change notifier.
+    // Information collected from the primary ServerDescription to be published via the
+    // ReplicaSetChangeNotifier
     struct ChangeNotifierState {
         HostAndPort primaryAddress;
         std::set<HostAndPort> passives;
