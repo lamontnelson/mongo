@@ -41,6 +41,8 @@
 #include "mongo/client/sdam/sdam.h"
 #include "mongo/client/server_is_master_monitor.h"
 #include "mongo/client/server_ping_monitor.h"
+#include "mongo/client/streamable_replica_set_monitor_error_handler.h"
+#include "mongo/executor/egress_tag_closer.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/logger/log_component.h"
 #include "mongo/util/concurrency/with_lock.h"
@@ -76,14 +78,16 @@ public:
     static constexpr auto kCheckTimeout = Seconds(5);
 
     StreamableReplicaSetMonitor(const MongoURI& uri,
-                                std::shared_ptr<executor::TaskExecutor> executor);
+                                std::shared_ptr<executor::TaskExecutor> executor,
+                                std::shared_ptr<executor::EgressTagCloser> connectionManager);
 
     void init();
 
     void drop();
 
     static ReplicaSetMonitorPtr make(const MongoURI& uri,
-                                     std::shared_ptr<executor::TaskExecutor> executor = nullptr);
+                                     std::shared_ptr<executor::TaskExecutor> executor,
+                                     std::shared_ptr<executor::EgressTagCloser> connectionCloser);
 
     SemiFuture<HostAndPort> getHostOrRefresh(const ReadPreferenceSetting& readPref,
                                              Milliseconds maxWait = kDefaultFindHostTimeout);
@@ -93,8 +97,13 @@ public:
 
     HostAndPort getMasterOrUassert();
 
-    void failedHost(const HostAndPort& host, const Status& status);
-    void failedHost(const HostAndPort& host, BSONObj bson, const Status& status);
+    void failedHost(const HostAndPort& host, const Status& status) override;
+    void failedHostPreHandshake(const HostAndPort& host,
+                                const Status& status,
+                                boost::optional<BSONObj> bson = boost::none) override;
+    void failedHostPostHandshake(const HostAndPort& host,
+                                 const Status& status,
+                                 boost::optional<BSONObj> bson = boost::none) override;
 
     bool isPrimary(const HostAndPort& host) const;
 
@@ -147,10 +156,12 @@ private:
 
     std::vector<HostAndPort> _extractHosts(
         const std::vector<sdam::ServerDescriptionPtr>& serverDescriptions);
+
     boost::optional<std::vector<HostAndPort>> _getHosts(const TopologyDescriptionPtr& topology,
                                                         const ReadPreferenceSetting& criteria);
     boost::optional<std::vector<HostAndPort>> _getHosts(const ReadPreferenceSetting& criteria);
 
+    // Incoming Events
     void onTopologyDescriptionChangedEvent(UUID topologyId,
                                            sdam::TopologyDescriptionPtr previousDescription,
                                            sdam::TopologyDescriptionPtr newDescription) override;
@@ -158,6 +169,10 @@ private:
     void onServerHeartbeatSucceededEvent(sdam::IsMasterRTT durationMs,
                                          const sdam::ServerAddress& hostAndPort,
                                          const BSONObj reply) override;
+
+    void onServerHandshakeFailedEvent(const sdam::ServerAddress& address,
+                                      const Status& status,
+                                      const BSONObj reply) override;
 
     void onServerHeartbeatFailureEvent(IsMasterRTT durationMs,
                                        Status errorStatus,
@@ -201,6 +216,7 @@ private:
     sdam::TopologyManagerPtr _topologyManager;
     sdam::ServerSelectorPtr _serverSelector;
     sdam::TopologyEventsPublisherPtr _eventsPublisher;
+    std::unique_ptr<StreamableReplicaSetMonitorErrorHandler> _errorHandler;
     ServerIsMasterMonitorPtr _isMasterMonitor;
     std::shared_ptr<ServerPingMonitor> _pingMonitor;
 
@@ -211,6 +227,7 @@ private:
     const MongoURI _uri;
 
     std::shared_ptr<executor::TaskExecutor> _executor;
+    std::shared_ptr<executor::EgressTagCloser> _connectionManager;
 
     AtomicWord<bool> _isDropped{true};
 
@@ -224,5 +241,15 @@ private:
     static constexpr auto kDefaultLogLevel = 0;
     static constexpr auto kLowerLogLevel = 1;
     static constexpr auto kLogPrefix = "[ReplicaSetMonitor]";
+
+    void doErrorActions(
+        const HostAndPort& host,
+        const StreamableReplicaSetMonitorErrorHandler::ErrorActions& errorActions) const;
+
+    void _failedHost(const HostAndPort& host,
+                     const Status& status,
+                     boost::optional<BSONObj> bson,
+                     StreamableReplicaSetMonitorErrorHandler::HandshakeStage stage,
+                     bool isApplicationOperation);
 };
 }  // namespace mongo

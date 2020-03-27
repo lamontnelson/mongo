@@ -112,7 +112,8 @@ TEST(AssertUtils, UassertNamedCodeWithOneCategory) {
 // InterruptedDueToReplStateChange - NotMasterError, Interruption, RetriableError
 MONGO_STATIC_ASSERT(
     std::is_same<error_details::ErrorCategoriesFor<ErrorCodes::InterruptedDueToReplStateChange>,
-                 error_details::CategoryList<ErrorCategory::Interruption,
+                 error_details::CategoryList<ErrorCategory::NodeIsRecoveringError,
+                                             ErrorCategory::Interruption,
                                              ErrorCategory::NotMasterError,
                                              ErrorCategory::RetriableError>>());
 MONGO_STATIC_ASSERT(std::is_base_of<AssertionException,
@@ -122,6 +123,8 @@ MONGO_STATIC_ASSERT(!std::is_base_of<ExceptionForCat<ErrorCategory::NetworkError
 MONGO_STATIC_ASSERT(std::is_base_of<ExceptionForCat<ErrorCategory::NotMasterError>,
                                     ExceptionFor<ErrorCodes::InterruptedDueToReplStateChange>>());
 MONGO_STATIC_ASSERT(std::is_base_of<ExceptionForCat<ErrorCategory::Interruption>,
+                                    ExceptionFor<ErrorCodes::InterruptedDueToReplStateChange>>());
+MONGO_STATIC_ASSERT(std::is_base_of<ExceptionForCat<ErrorCategory::NodeIsRecoveringError>,
                                     ExceptionFor<ErrorCodes::InterruptedDueToReplStateChange>>());
 
 TEST(AssertUtils, UassertNamedCodeWithTwoCategories) {

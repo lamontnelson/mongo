@@ -356,6 +356,18 @@ void ScanningReplicaSetMonitor::failedHost(const HostAndPort& host, const Status
         _state->checkInvariants();
 }
 
+void ScanningReplicaSetMonitor::failedHostPreHandshake(const HostAndPort& host,
+                                                       const Status& status,
+                                                       boost::optional<BSONObj> bson) {
+    failedHost(host, status);
+}
+
+void ScanningReplicaSetMonitor::failedHostPostHandshake(const HostAndPort& host,
+                                                        const Status& status,
+                                                        boost::optional<BSONObj> bson) {
+    failedHost(host, status);
+}
+
 bool ScanningReplicaSetMonitor::isPrimary(const HostAndPort& host) const {
     stdx::lock_guard<Latch> lk(_state->mutex);
     Node* node = _state->findNode(host);
@@ -481,6 +493,7 @@ void ScanningReplicaSetMonitor::runScanForMockReplicaSet() {
 void ScanningReplicaSetMonitor::_ensureScanInProgress(const SetStatePtr& state) {
     Refresher(state).scheduleNetworkRequests();
 }
+
 
 Refresher::Refresher(const SetStatePtr& setState) : _set(setState), _scan(setState->currentScan) {
     if (_scan) {
