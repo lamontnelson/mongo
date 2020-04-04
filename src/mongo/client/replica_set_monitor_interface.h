@@ -104,10 +104,10 @@ public:
     virtual void failedHost(const HostAndPort& host, const Status& status) = 0;
     virtual void failedHostPreHandshake(const HostAndPort& host,
                                         const Status& status,
-                                        boost::optional<BSONObj> bson = boost::none) = 0;
+                                        BSONObj bson) = 0;
     virtual void failedHostPostHandshake(const HostAndPort& host,
                                          const Status& status,
-                                         boost::optional<BSONObj> bson = boost::none) = 0;
+                                         BSONObj bson) = 0;
 
     /**
      * Returns true if this node is the master based ONLY on local data. Be careful, return may

@@ -79,11 +79,11 @@ public:
 
     void failedHostPreHandshake(const HostAndPort& host,
                                 const Status& status,
-                                boost::optional<BSONObj> bson) override;
+                                BSONObj bson) override;
 
     void failedHostPostHandshake(const HostAndPort& host,
                                  const Status& status,
-                                 boost::optional<BSONObj> bson) override;
+                                 BSONObj bson) override;
 
     bool isPrimary(const HostAndPort& host) const override;
 

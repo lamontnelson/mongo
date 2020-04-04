@@ -2,8 +2,6 @@
 error_categories:
     - NetworkError
     - NetworkTimeoutError
-    # NodeIsRecoveringError is defined by the Server Discovery and Monitoring Specification
-    - NodeIsRecoveringError
     - Interruption
     # isNotMasterError() includes all codes that indicate that the node that received the request
     # was not master at some point during command processing,regardless of whether some write may
@@ -115,7 +113,7 @@ error_codes:
     - {code: 88,name: SplitFailed_OBSOLETE}
     - {code: 89,name: NetworkTimeout,categories: [NetworkError,RetriableError,NetworkTimeoutError]}
     - {code: 90,name: CallbackCanceled,categories: [CancelationError]}
-    - {code: 91,name: ShutdownInProgress,categories: [ShutdownError,CancelationError,RetriableError,NodeIsRecoveringError]}
+    - {code: 91,name: ShutdownInProgress,categories: [ShutdownError,CancelationError,RetriableError]}
     - {code: 92,name: SecondaryAheadOfPrimary}
     - {code: 93,name: InvalidReplicaSetConfig}
     - {code: 94,name: NotYetInitialized}
@@ -212,7 +210,7 @@ error_codes:
     - {code: 186,name: ClientMetadataCannotBeMutated}
     - {code: 187,name: LinearizableReadConcernError}
     - {code: 188,name: IncompatibleServerVersion}
-    - {code: 189,name: PrimarySteppedDown,categories: [NotMasterError,RetriableError,NodeIsRecoveringError]}
+    - {code: 189,name: PrimarySteppedDown,categories: [NotMasterError,RetriableError]}
     - {code: 190,name: MasterSlaveConnectionFailure}
     - {code: 191,name: OBSOLETE_BalancerLostDistributedLock}
     - {code: 192,name: FailPointEnabled}
@@ -364,9 +362,9 @@ error_codes:
     - {code: 10107,name: NotMaster,categories: [NotMasterError,RetriableError]}
     - {code: 10334,name: BSONObjectTooLarge}
     - {code: 11000,name: DuplicateKey,extra: DuplicateKeyErrorInfo}
-    - {code: 11600,name: InterruptedAtShutdown,categories: [Interruption,ShutdownError,CancelationError,RetriableError,NodeIsRecoveringError]}
+    - {code: 11600,name: InterruptedAtShutdown,categories: [Interruption,ShutdownError,CancelationError,RetriableError]}
     - {code: 11601,name: Interrupted,categories: [Interruption]}
-    - {code: 11602,name: InterruptedDueToReplStateChange,categories: [Interruption,NotMasterError,RetriableError,NodeIsRecoveringError]}
+    - {code: 11602,name: InterruptedDueToReplStateChange,categories: [Interruption,NotMasterError,RetriableError]}
     - {code: 12586,name: BackgroundOperationInProgressForDatabase}
     - {code: 12587,name: BackgroundOperationInProgressForNamespace}
     - {code: 13104,name: OBSOLETE_PrepareConfigsFailed}
@@ -376,7 +374,7 @@ error_codes:
                     extra: StaleConfigInfo,
                     categories: [StaleShardVersionError,NeedRetargettingError]}
     - {code: 13435,name: NotMasterNoSlaveOk,categories: [NotMasterError,RetriableError]}
-    - {code: 13436,name: NotMasterOrSecondary,categories: [NotMasterError,RetriableError,NodeIsRecoveringError]}
+    - {code: 13436,name: NotMasterOrSecondary,categories: [NotMasterError,RetriableError]}
     - {code: 14031,name: OutOfDiskSpace}
     - {code: 17280,name: OSBELETE_KeyTooLong}
     - {code: 46841,name: ClientMarkedKilled,categories: [Interruption,CancelationError]}

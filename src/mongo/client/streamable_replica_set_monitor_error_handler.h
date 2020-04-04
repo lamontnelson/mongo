@@ -45,7 +45,7 @@ public:
         BSONObj toBSON() const;
     };
 
-    // Indicates whether the initial handshake has completed
+    // Indicates whether the initial handshake has completed.
     enum class HandshakeStage { kPreHandshake, kPostHandshake };
 
     /**
@@ -56,7 +56,7 @@ public:
                                                    const Status& status,
                                                    HandshakeStage handshakeStage,
                                                    bool isApplicationOperation,
-                                                   boost::optional<BSONObj> bson) = 0;
+                                                   BSONObj bson) noexcept = 0;
 
 protected:
     sdam::IsMasterOutcome _createErrorIsMasterOutcome(const HostAndPort& host,
@@ -67,7 +67,7 @@ protected:
     }
 };
 
-class SdamErrorHandler : public StreamableReplicaSetMonitorErrorHandler {
+class SdamErrorHandler final : public StreamableReplicaSetMonitorErrorHandler {
 public:
     SdamErrorHandler(std::string setName) : _setName(setName){};
 
@@ -75,7 +75,7 @@ public:
                                            const Status& status,
                                            HandshakeStage handshakeStage,
                                            bool isApplicationOperation,
-                                           boost::optional<BSONObj> bson) override;
+                                           BSONObj bson) noexcept override;
 
 private:
     const std::string _setName;

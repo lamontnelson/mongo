@@ -73,12 +73,12 @@ public:
 
     void dropConnections(const HostAndPort& hostAndPort) override;
 
-    // not supported
-    void dropConnections(transport::Session::TagMask tags) override;
-    // not supported
+    // Not supported.
+    void dropConnections(transport::Session::TagMask tags) override { MONGO_UNREACHABLE; };
+    // Not supported.
     void mutateTags(const HostAndPort& hostAndPort,
                     const std::function<transport::Session::TagMask(transport::Session::TagMask)>&
-                        mutateFunc) override;
+                        mutateFunc) override { MONGO_UNREACHABLE; };
 
 private:
     std::shared_ptr<executor::NetworkInterface> _network;
@@ -149,7 +149,7 @@ private:
     /**
      * Returns an EgressTagCloser controlling the executor's network interface.
      */
-    std::shared_ptr<executor::EgressTagCloser> getConnectionManager();
+    std::shared_ptr<executor::EgressTagCloser> _getConnectionManager();
 
     using ReplicaSetMonitorsMap = StringMap<std::weak_ptr<ReplicaSetMonitor>>;
 

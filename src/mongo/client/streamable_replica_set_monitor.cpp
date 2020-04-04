@@ -150,8 +150,8 @@ StreamableReplicaSetMonitor::StreamableReplicaSetMonitor(
       _errorHandler(std::make_unique<SdamErrorHandler>(uri.getSetName())),
       _queryProcessor(std::make_shared<StreamableReplicaSetMonitorQueryProcessor>()),
       _uri(uri),
-      _executor(executor),
       _connectionManager(connectionManager),
+      _executor(executor),
       _random(PseudoRandom(SecureRandom().nextInt64())) {
 
     // TODO SERVER-45395: sdam should use the HostAndPort type for ServerAddress
@@ -357,30 +357,30 @@ void StreamableReplicaSetMonitor::failedHost(const HostAndPort& host, const Stat
 
 void StreamableReplicaSetMonitor::failedHostPreHandshake(const HostAndPort& host,
                                                          const Status& status,
-                                                         boost::optional<BSONObj> bson) {
+                                                         BSONObj bson) {
     _failedHost(host, status, bson, HandshakeStage::kPreHandshake, true);
 }
 
 void StreamableReplicaSetMonitor::failedHostPostHandshake(const HostAndPort& host,
                                                           const Status& status,
-                                                          boost::optional<BSONObj> bson) {
+                                                          BSONObj bson) {
     _failedHost(host, status, bson, HandshakeStage::kPostHandshake, true);
 }
 
 void StreamableReplicaSetMonitor::_failedHost(const HostAndPort& host,
                                               const Status& status,
-                                              boost::optional<BSONObj> bson,
+                                              BSONObj bson,
                                               HandshakeStage stage,
                                               bool isApplicationOperation) {
     if (_isDropped.load())
         return;
 
-    doErrorActions(
-        host,
-        _errorHandler->computeErrorActions(host, status, stage, isApplicationOperation, bson));
+    _doErrorActions(
+            host,
+            _errorHandler->computeErrorActions(host, status, stage, isApplicationOperation, bson));
 }
 
-void StreamableReplicaSetMonitor::doErrorActions(
+void StreamableReplicaSetMonitor::_doErrorActions(
     const HostAndPort& host,
     const StreamableReplicaSetMonitorErrorHandler::ErrorActions& errorActions) const {
     {
@@ -632,7 +632,7 @@ void StreamableReplicaSetMonitor::onServerHeartbeatFailureEvent(IsMasterRTT dura
 void StreamableReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress& hostAndPort,
                                                           const Status& status) {
     _failedHost(
-        HostAndPort(hostAndPort), status, boost::none, HandshakeStage::kPostHandshake, false);
+        HostAndPort(hostAndPort), status, BSONObj(), HandshakeStage::kPostHandshake, false);
 }
 
 void StreamableReplicaSetMonitor::onServerHandshakeFailedEvent(const sdam::ServerAddress& address,

@@ -159,7 +159,6 @@ void ReplicaSetMonitorManager::_setupTaskExecutorInLock() {
     _taskExecutor->startup();
 }
 
-
 namespace {
 void uassertNotMixingSSL(transport::ConnectSSLMode a, transport::ConnectSSLMode b) {
     uassert(51042, "Mixing ssl modes with a single replica set is disallowed", a == b);
@@ -193,7 +192,7 @@ shared_ptr<ReplicaSetMonitor> ReplicaSetMonitorManager::getOrCreateMonitor(const
         newMonitor->init();
     } else {
         LOGV2(4333205, "Starting Streamable ReplicaSetMonitor", "uri"_attr = uri.toString());
-        newMonitor = StreamableReplicaSetMonitor::make(uri, getExecutor(), getConnectionManager());
+        newMonitor = StreamableReplicaSetMonitor::make(uri, getExecutor(), _getConnectionManager());
     }
     _monitors[setName] = newMonitor;
     return newMonitor;
@@ -248,8 +247,8 @@ void ReplicaSetMonitorManager::shutdown() {
         }
 
         monitors = std::exchange(_monitors, {});
-        taskExecutor = std::exchange(_taskExecutor, {});
         connectionManager = std::exchange(_connectionManager, {});
+        taskExecutor = std::exchange(_taskExecutor, {});
     }
 
     for (auto& [name, monitor] : monitors) {
@@ -300,7 +299,7 @@ std::shared_ptr<executor::TaskExecutor> ReplicaSetMonitorManager::getExecutor() 
     return _taskExecutor;
 }
 
-std::shared_ptr<executor::EgressTagCloser> ReplicaSetMonitorManager::getConnectionManager() {
+std::shared_ptr<executor::EgressTagCloser> ReplicaSetMonitorManager::_getConnectionManager() {
     invariant(_connectionManager);
     return _connectionManager;
 }
@@ -314,17 +313,7 @@ bool ReplicaSetMonitorManager::isShutdown() const {
     return _isShutdown;
 }
 
-void ReplicaSetMonitorConnectionManager::dropConnections(transport::Session::TagMask tags) {
-    MONGO_UNREACHABLE;
-}
-
 void ReplicaSetMonitorConnectionManager::dropConnections(const HostAndPort& hostAndPort) {
     _network->dropConnections(hostAndPort);
-}
-
-void ReplicaSetMonitorConnectionManager::mutateTags(
-    const HostAndPort& hostAndPort,
-    const std::function<transport::Session::TagMask(transport::Session::TagMask)>& mutateFunc) {
-    MONGO_UNREACHABLE;
 }
 }  // namespace mongo

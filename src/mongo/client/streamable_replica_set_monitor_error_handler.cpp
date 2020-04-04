@@ -37,62 +37,69 @@ const SdamErrorHandler::ErrorActions SdamErrorHandler::computeErrorActions(
     const Status& status,
     HandshakeStage handshakeStage,
     bool isApplicationOperation,
-    boost::optional<BSONObj> bson) {
-    // Initial state: don't drop connections, no immediate check, don't generate an error server
-    // description
+    BSONObj bson) noexcept {
+    // Initial state: don't drop connections, no immediate check, and don't generate an error server description.
     ErrorActions result;
+    ON_BLOCK_EXIT([this, &result, &host, &status] {
+        LOGV2(4712102,
+              "Host failed in replica set",
+              "setName"_attr = _setName,
+              "host"_attr = host,
+              "error"_attr = status,
+              "action"_attr = result);
+    });
 
-    const auto errorServerDescription = [&]() {
+    const auto setCreateServerDescriptionAction = [this, &result, &host, &status, bson]() {
         result.isMasterOutcome = _createErrorIsMasterOutcome(host, bson, status);
     };
-    const auto immediateCheck = [&]() { result.requestImmediateCheck = true; };
-    const auto dropConnections = [&]() { result.dropConnections = true; };
+    const auto setImmediateCheckAction = [&result]() { result.requestImmediateCheck = true; };
+    const auto setDropConnectionsAction = [&result]() { result.dropConnections = true; };
 
-    // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#not-master-and-node-is-recovering
-    if (_isNotMasterOrNotRecovering(status) && isApplicationOperation) {
-        errorServerDescription();
-        immediateCheck();
-        if (_isNodeShuttingDown(status)) {
-            dropConnections();
+    if (isApplicationOperation) {
+        if (_isNotMasterOrNotRecovering(status)) {
+            // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#not-master-and-node-is-recovering
+            setCreateServerDescriptionAction();
+            setImmediateCheckAction();
+            if (_isNodeShuttingDown(status)) {
+                setDropConnectionsAction();
+            }
+        } else if (_isNetworkError(status)) {
+            // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#network-error-when-reading-or-writing
+            switch (handshakeStage) {
+                case HandshakeStage::kPreHandshake:
+                    setCreateServerDescriptionAction();
+                    break;
+                case HandshakeStage::kPostHandshake:
+                    if (!_isNetworkTimeout(status)) {
+                        setCreateServerDescriptionAction();
+                    }
+                    break;
+            }
+            setDropConnectionsAction();
         }
+    } else if (_isNetworkError(status)) {
+        // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-monitoring.rst#network-error-during-server-check
+        setDropConnectionsAction();
+        setCreateServerDescriptionAction();
+    } else {
+        setCreateServerDescriptionAction();
     }
 
-    // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#network-error-when-reading-or-writing
-    else if (_isNetworkError(status) && isApplicationOperation) {
-        switch (handshakeStage) {
-            case HandshakeStage::kPreHandshake:
-                errorServerDescription();
-                break;
-            case HandshakeStage::kPostHandshake:
-                if (!_isNetworkTimeout(status)) {
-                    errorServerDescription();
-                }
-                break;
-        }
-        dropConnections();
-    }
-
-    // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-monitoring.rst#network-error-during-server-check
-    else if (_isNetworkError(status) && !isApplicationOperation) {
-        dropConnections();
-        errorServerDescription();
-    }
-
-    else if (!status.isOK()) {
-        errorServerDescription();
-    }
-
-    LOGV2(4712102,
-          "Host failed in replica set",
-          "setName"_attr = _setName,
-          "host"_attr = host,
-          "error"_attr = status,
-          "action"_attr = result);
     return result;
 }
 
+BSONObj StreamableReplicaSetMonitorErrorHandler::ErrorActions::toBSON() const {
+        BSONObjBuilder builder;
+        builder.append("dropConnections", dropConnections);
+        builder.append("requestImmediateCheck", requestImmediateCheck);
+        if (isMasterOutcome) {
+            builder.append("outcome", isMasterOutcome->toBSON());
+        }
+        return builder.obj();
+    }
+
 bool SdamErrorHandler::_isNodeRecovering(const Status& status) {
-    return ErrorCodes::isA<ErrorCategory::NodeIsRecoveringError>(status.code());
+    return ErrorCodes::isA<ErrorCategory::RetriableError>(status.code());
 }
 
 bool SdamErrorHandler::_isNetworkTimeout(const Status& status) {
@@ -112,20 +119,6 @@ bool SdamErrorHandler::_isNotMasterOrNotRecovering(const Status& status) {
 }
 
 bool SdamErrorHandler::_isNotMaster(const Status& status) {
-    // There is a broader definition of "NotMaster" errors defined in error_codes.yml
-    // Sticking to the strict spec interpretation for now.
-    static std::set<int32_t> notMasterErrors = {ErrorCodes::NotMaster,
-                                                ErrorCodes::NotMasterNoSlaveOk};
-    return notMasterErrors.find(status.code()) != notMasterErrors.end();
-}
-
-BSONObj StreamableReplicaSetMonitorErrorHandler::ErrorActions::toBSON() const {
-    BSONObjBuilder builder;
-    builder.append("dropConnections", dropConnections);
-    builder.append("requestImmediateCheck", requestImmediateCheck);
-    if (isMasterOutcome) {
-        builder.append("outcome", isMasterOutcome->toBSON());
-    }
-    return builder.obj();
+    return ErrorCodes::isA<ErrorCategory::NotMasterError>(status.code());
 }
 }  // namespace mongo

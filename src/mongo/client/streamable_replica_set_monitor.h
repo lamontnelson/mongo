@@ -100,10 +100,10 @@ public:
     void failedHost(const HostAndPort& host, const Status& status) override;
     void failedHostPreHandshake(const HostAndPort& host,
                                 const Status& status,
-                                boost::optional<BSONObj> bson = boost::none) override;
+                                BSONObj bson) override;
     void failedHostPostHandshake(const HostAndPort& host,
                                  const Status& status,
-                                 boost::optional<BSONObj> bson = boost::none) override;
+                                 BSONObj bson) override;
 
     bool isPrimary(const HostAndPort& host) const;
 
@@ -212,6 +212,17 @@ private:
     // Try to satisfy the outstanding queries for this instance with the given topology information.
     void _processOutstanding(const TopologyDescriptionPtr& topologyDescription);
 
+    // Take action on error for the given host.
+    void _doErrorActions(
+            const HostAndPort& host,
+            const StreamableReplicaSetMonitorErrorHandler::ErrorActions& errorActions) const;
+
+    void _failedHost(const HostAndPort& host,
+                     const Status& status,
+                     BSONObj bson,
+                     StreamableReplicaSetMonitorErrorHandler::HandshakeStage stage,
+                     bool isApplicationOperation);
+
     sdam::SdamConfiguration _sdamConfig;
     sdam::TopologyManagerPtr _topologyManager;
     sdam::ServerSelectorPtr _serverSelector;
@@ -226,8 +237,8 @@ private:
 
     const MongoURI _uri;
 
-    std::shared_ptr<executor::TaskExecutor> _executor;
     std::shared_ptr<executor::EgressTagCloser> _connectionManager;
+    std::shared_ptr<executor::TaskExecutor> _executor;
 
     AtomicWord<bool> _isDropped{true};
 
@@ -241,15 +252,5 @@ private:
     static constexpr auto kDefaultLogLevel = 0;
     static constexpr auto kLowerLogLevel = 1;
     static constexpr auto kLogPrefix = "[ReplicaSetMonitor]";
-
-    void doErrorActions(
-        const HostAndPort& host,
-        const StreamableReplicaSetMonitorErrorHandler::ErrorActions& errorActions) const;
-
-    void _failedHost(const HostAndPort& host,
-                     const Status& status,
-                     boost::optional<BSONObj> bson,
-                     StreamableReplicaSetMonitorErrorHandler::HandshakeStage stage,
-                     bool isApplicationOperation);
 };
 }  // namespace mongo
