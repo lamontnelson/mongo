@@ -376,8 +376,8 @@ void StreamableReplicaSetMonitor::_failedHost(const HostAndPort& host,
         return;
 
     _doErrorActions(
-            host,
-            _errorHandler->computeErrorActions(host, status, stage, isApplicationOperation, bson));
+        host,
+        _errorHandler->computeErrorActions(host, status, stage, isApplicationOperation, bson));
 }
 
 void StreamableReplicaSetMonitor::_doErrorActions(
@@ -631,8 +631,7 @@ void StreamableReplicaSetMonitor::onServerHeartbeatFailureEvent(IsMasterRTT dura
 
 void StreamableReplicaSetMonitor::onServerPingFailedEvent(const ServerAddress& hostAndPort,
                                                           const Status& status) {
-    _failedHost(
-        HostAndPort(hostAndPort), status, BSONObj(), HandshakeStage::kPostHandshake, false);
+    _failedHost(HostAndPort(hostAndPort), status, BSONObj(), HandshakeStage::kPostHandshake, false);
 }
 
 void StreamableReplicaSetMonitor::onServerHandshakeFailedEvent(const sdam::ServerAddress& address,

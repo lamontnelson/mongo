@@ -38,7 +38,8 @@ const SdamErrorHandler::ErrorActions SdamErrorHandler::computeErrorActions(
     HandshakeStage handshakeStage,
     bool isApplicationOperation,
     BSONObj bson) noexcept {
-    // Initial state: don't drop connections, no immediate check, and don't generate an error server description.
+    // Initial state: don't drop connections, no immediate check, and don't generate an error server
+    // description.
     ErrorActions result;
     ON_BLOCK_EXIT([this, &result, &host, &status] {
         LOGV2(4712102,
@@ -89,14 +90,14 @@ const SdamErrorHandler::ErrorActions SdamErrorHandler::computeErrorActions(
 }
 
 BSONObj StreamableReplicaSetMonitorErrorHandler::ErrorActions::toBSON() const {
-        BSONObjBuilder builder;
-        builder.append("dropConnections", dropConnections);
-        builder.append("requestImmediateCheck", requestImmediateCheck);
-        if (isMasterOutcome) {
-            builder.append("outcome", isMasterOutcome->toBSON());
-        }
-        return builder.obj();
+    BSONObjBuilder builder;
+    builder.append("dropConnections", dropConnections);
+    builder.append("requestImmediateCheck", requestImmediateCheck);
+    if (isMasterOutcome) {
+        builder.append("outcome", isMasterOutcome->toBSON());
     }
+    return builder.obj();
+}
 
 bool SdamErrorHandler::_isNodeRecovering(const Status& status) {
     return ErrorCodes::isA<ErrorCategory::RetriableError>(status.code());
