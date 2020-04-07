@@ -57,14 +57,7 @@ const SdamErrorHandler::ErrorActions SdamErrorHandler::computeErrorActions(
     const auto setDropConnectionsAction = [&result]() { result.dropConnections = true; };
 
     if (isApplicationOperation) {
-        if (_isNotMasterOrNotRecovering(status)) {
-            // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#not-master-and-node-is-recovering
-            setCreateServerDescriptionAction();
-            setImmediateCheckAction();
-            if (_isNodeShuttingDown(status)) {
-                setDropConnectionsAction();
-            }
-        } else if (_isNetworkError(status)) {
+        if (_isNetworkError(status)) {
             // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#network-error-when-reading-or-writing
             switch (handshakeStage) {
                 case HandshakeStage::kPreHandshake:
@@ -77,14 +70,37 @@ const SdamErrorHandler::ErrorActions SdamErrorHandler::computeErrorActions(
                     break;
             }
             setDropConnectionsAction();
+        } else if (_isNotMasterOrNotRecovering(status)) {
+            // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst#not-master-and-node-is-recovering
+            setCreateServerDescriptionAction();
+            setImmediateCheckAction();
+            if (_isNodeShuttingDown(status)) {
+                setDropConnectionsAction();
+            }
         }
     } else if (_isNetworkError(status)) {
         // https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-monitoring.rst#network-error-during-server-check
         setDropConnectionsAction();
-        setCreateServerDescriptionAction();
+        switch (handshakeStage) {
+            case HandshakeStage::kPreHandshake:
+                setCreateServerDescriptionAction();
+                break;
+            case HandshakeStage::kPostHandshake:
+                int errorCount = _getConsecutiveErrorsWithoutIsMasterOutcome(host);
+                if (errorCount == 1) {
+                    setCreateServerDescriptionAction();
+                } else {
+                    setImmediateCheckAction();
+                    _incrementConsecutiveErrorsWithoutIsMasterOutcome(host);
+                }
+                break;
+        }
     } else {
         setCreateServerDescriptionAction();
     }
+
+    if (result.isMasterOutcome)
+        _clearConsecutiveErrorsWithoutIsMasterOutcome(host);
 
     return result;
 }
@@ -121,5 +137,29 @@ bool SdamErrorHandler::_isNotMasterOrNotRecovering(const Status& status) {
 
 bool SdamErrorHandler::_isNotMaster(const Status& status) {
     return ErrorCodes::isA<ErrorCategory::NotMasterError>(status.code());
+}
+
+int SdamErrorHandler::_getConsecutiveErrorsWithoutIsMasterOutcome(const HostAndPort& host) {
+    if (auto it = _consecutiveErrorsWithoutIsMasterOutcome.find(host);
+        it != _consecutiveErrorsWithoutIsMasterOutcome.end()) {
+        return it->second;
+    }
+    return 0;
+}
+
+void SdamErrorHandler::_incrementConsecutiveErrorsWithoutIsMasterOutcome(const HostAndPort& host) {
+    if (auto it = _consecutiveErrorsWithoutIsMasterOutcome.find(host);
+        it != _consecutiveErrorsWithoutIsMasterOutcome.end()) {
+        _consecutiveErrorsWithoutIsMasterOutcome[host]++;
+    } else {
+        _consecutiveErrorsWithoutIsMasterOutcome[host] = 1;
+    }
+}
+
+void SdamErrorHandler::_clearConsecutiveErrorsWithoutIsMasterOutcome(const HostAndPort& host) {
+    if (auto it = _consecutiveErrorsWithoutIsMasterOutcome.find(host);
+        it != _consecutiveErrorsWithoutIsMasterOutcome.end()) {
+        _consecutiveErrorsWithoutIsMasterOutcome.erase(it);
+    }
 }
 }  // namespace mongo

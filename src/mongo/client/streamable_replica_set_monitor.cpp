@@ -352,7 +352,7 @@ sdam::TopologyEventsPublisherPtr StreamableReplicaSetMonitor::getEventsPublisher
 }
 
 void StreamableReplicaSetMonitor::failedHost(const HostAndPort& host, const Status& status) {
-    failedHostPostHandshake(host, status);
+    failedHostPostHandshake(host, status, BSONObj());
 }
 
 void StreamableReplicaSetMonitor::failedHostPreHandshake(const HostAndPort& host,

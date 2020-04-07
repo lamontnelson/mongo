@@ -31,12 +31,12 @@
 
 #include "mongo/client/sdam/sdam.h"
 #include "mongo/executor/network_interface.h"
+#include "mongo/stdx/unordered_map.h"
 
 namespace mongo {
 class StreamableReplicaSetMonitorErrorHandler {
 public:
     virtual ~StreamableReplicaSetMonitorErrorHandler(){};
-
 
     struct ErrorActions {
         bool dropConnections = false;
@@ -79,6 +79,12 @@ public:
 
 private:
     const std::string _setName;
+    stdx::unordered_map<HostAndPort, int> _consecutiveErrorsWithoutIsMasterOutcome;
+
+    int _getConsecutiveErrorsWithoutIsMasterOutcome(const HostAndPort& host);
+    void _incrementConsecutiveErrorsWithoutIsMasterOutcome(const HostAndPort& host);
+    void _clearConsecutiveErrorsWithoutIsMasterOutcome(const HostAndPort& host);
+
     bool _isNodeRecovering(const Status& status);
     bool _isNetworkTimeout(const Status& status);
     bool _isNodeShuttingDown(const Status& status);
