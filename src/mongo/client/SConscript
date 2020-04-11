@@ -200,6 +200,7 @@ clientDriverEnv.Library(
         'streamable_replica_set_monitor.cpp',
         'streamable_replica_set_monitor_query_processor.cpp',
         'streamable_replica_set_monitor_error_handler.cpp',
+        'server_is_master_monitor_test.cpp',
         'server_is_master_monitor.cpp',
         'server_ping_monitor.cpp',
     ],
