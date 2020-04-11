@@ -134,7 +134,9 @@ boost::optional<Milliseconds> SingleServerIsMasterMonitor::_calculateExpeditedDe
     Milliseconds delayUntilNextCheck = expeditedRefreshPeriod - timeSinceLastCheck;
 
     // Do nothing if the time would be greater-than or equal to the existing request.
-    return (delayUntilNextCheck >= delayUntilExistingRequest) ? boost::none : boost::optional<Milliseconds>(delayUntilNextCheck);
+    return (delayUntilNextCheck >= delayUntilExistingRequest)
+        ? boost::none
+        : boost::optional<Milliseconds>(delayUntilNextCheck);
 }
 
 boost::optional<Milliseconds> SingleServerIsMasterMonitor::_timeSinceLastCheck() const {
