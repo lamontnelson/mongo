@@ -124,14 +124,16 @@ boost::optional<Milliseconds> SingleServerIsMasterMonitor::_calculateExpeditedDe
         (maybeTimeSinceLastCheck) ? *maybeTimeSinceLastCheck : Milliseconds::max();
     invariant(timeSinceLastCheck.count() >= 0);
 
-    if (timeSinceLastCheck > expeditedRefreshPeriod) {
+    if (timeSinceLastCheck == previousRefreshPeriod)
+        return boost::none;
+
+    if (timeSinceLastCheck > expeditedRefreshPeriod)
         return Milliseconds(0);
-    }
 
     const auto delayUntilExistingRequest = previousRefreshPeriod - timeSinceLastCheck;
 
     // Calculate when the next isMaster should be scheduled.
-    Milliseconds delayUntilNextCheck = expeditedRefreshPeriod - timeSinceLastCheck;
+    const Milliseconds delayUntilNextCheck = expeditedRefreshPeriod - timeSinceLastCheck;
 
     // Do nothing if the time would be greater-than or equal to the existing request.
     return (delayUntilNextCheck >= delayUntilExistingRequest)

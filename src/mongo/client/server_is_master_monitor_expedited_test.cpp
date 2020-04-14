@@ -77,7 +77,7 @@ TEST_F(SingleServerIsMasterMonitorExpeditedFixture,
 }
 
 TEST_F(SingleServerIsMasterMonitorExpeditedFixture, PreviousRequestEqualLongRefreshPeriod) {
-    verifyTestCase(TestCase{kLongRefreshPeriod, kLongRefreshPeriod, Milliseconds(0)});
+    verifyTestCase(TestCase{kLongRefreshPeriod, kLongRefreshPeriod, boost::none});
     verifyTestCase(TestCase{kLongRefreshPeriod, kExpeditedRefreshPeriod, Milliseconds(0)});
 }
 
