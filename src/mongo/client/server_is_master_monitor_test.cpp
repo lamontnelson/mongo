@@ -38,6 +38,7 @@
 #include "mongo/client/replica_set_monitor.h"
 #include "mongo/client/replica_set_monitor_protocol_test_util.h"
 #include "mongo/client/sdam/sdam.h"
+#include "mongo/client/sdam/sdam_configuration_parameters_gen.h"
 #include "mongo/client/sdam/topology_description.h"
 #include "mongo/client/sdam/topology_listener_mock.h"
 #include "mongo/client/server_is_master_monitor.h"
@@ -109,14 +110,6 @@ protected:
         return _startDate;
     }
 
-    Milliseconds getTimeoutMS() {
-        return _timeoutMS;
-    }
-
-    Milliseconds getHeartbeatFrequency() {
-        return _heartbeatFrequency;
-    }
-
     bool hasReadyRequests() {
         NetworkInterfaceMock::InNetworkGuard ing(_net);
         return _net->hasReadyRequests();
@@ -130,11 +123,13 @@ protected:
      * Sets up a SingleServerIsMasterMonitor that starts sending isMasters to the server.
      */
     std::shared_ptr<SingleServerIsMasterMonitor> initSingleServerIsMasterMonitor(
-        const sdam::ServerAddress& hostAndPort, MockReplicaSet* replSet) {
+        const sdam::SdamConfiguration& sdamConfiguration,
+        const sdam::ServerAddress& hostAndPort,
+        MockReplicaSet* replSet) {
         auto ssIsMasterMonitor = std::make_shared<SingleServerIsMasterMonitor>(replSet->getURI(),
                                                                                hostAndPort,
                                                                                boost::none,
-                                                                               _heartbeatFrequency,
+                                                                               sdamConfiguration,
                                                                                _eventsPublisher,
                                                                                _executor);
         ssIsMasterMonitor->init();
@@ -282,11 +277,6 @@ private:
     std::shared_ptr<sdam::TopologyListenerMock> _topologyListener;
     std::shared_ptr<executor::ThreadPoolTaskExecutor> _executor;
     executor::NetworkInterfaceMock* _net;
-
-    Milliseconds _heartbeatFrequency = sdam::SdamConfiguration::kDefaultHeartbeatFrequencyMs;
-
-    // The ServerIsMasterMonitor hard codes this to be it's _timeoutMS.
-    Milliseconds _timeoutMS = SdamConfiguration::kDefaultConnectTimeoutMS;
 };
 
 /**
@@ -298,12 +288,13 @@ TEST_F(ServerIsMasterMonitorTestFixture, heartbeatFrequencyCheck) {
         "test", 1, /* hasPrimary = */ false, /* dollarPrefixHosts = */ false);
     auto hostAndPort = HostAndPort(replSet->getSecondaries()[0]).toString();
 
-    auto ssIsMasterMonitor = initSingleServerIsMasterMonitor(hostAndPort, replSet.get());
+    const auto config = SdamConfiguration(std::vector<ServerAddress>{hostAndPort});
+    auto ssIsMasterMonitor = initSingleServerIsMasterMonitor(config, hostAndPort, replSet.get());
     ssIsMasterMonitor->disableExpeditedChecking();
 
     // An isMaster command fails if it takes as long or longer than timeoutMS.
-    auto timeoutMS = getTimeoutMS();
-    auto heartbeatFrequency = getHeartbeatFrequency();
+    auto timeoutMS = config.getConnectionTimeout();
+    auto heartbeatFrequency = config.getHeartBeatFrequency();
 
     checkSingleIsMaster(heartbeatFrequency, hostAndPort, replSet.get());
     waitForNextIsMaster(timeoutMS);
@@ -333,12 +324,13 @@ TEST_F(ServerIsMasterMonitorTestFixture, singleServerIsMasterMonitorReportsFailu
         replSet->kill(hostAndPort);
     }
 
-    auto ssIsMasterMonitor = initSingleServerIsMasterMonitor(hostAndPort, replSet.get());
+    const auto config = SdamConfiguration(std::vector<ServerAddress>{hostAndPort});
+    auto ssIsMasterMonitor = initSingleServerIsMasterMonitor(config, hostAndPort, replSet.get());
     ssIsMasterMonitor->disableExpeditedChecking();
 
     processIsMasterRequest(replSet.get(), hostAndPort);
     auto topologyListener = getTopologyListener();
-    auto timeoutMS = getTimeoutMS();
+    auto timeoutMS = config.getConnectionTimeout();
     while (elapsed() < timeoutMS && !topologyListener->hasIsMasterResponse(hostAndPort)) {
         // Advance time in small increments to ensure we stop before another isMaster is sent.
         advanceTime(Milliseconds(1));
@@ -381,9 +373,9 @@ TEST_F(ServerIsMasterMonitorTestFixture, serverIsMasterMonitorOnTopologyDescript
     isMasterMonitor->disableExpeditedChecking();
 
     // Confirm host0 and host1 are monitored.
-    auto heartbeatFrequency = getHeartbeatFrequency();
+    auto heartbeatFrequency = sdamConfigAllHosts.getHeartBeatFrequency();
     checkSingleIsMaster(heartbeatFrequency - host1Delay, host1, replSet.get());
-    waitForNextIsMaster(getTimeoutMS());
+    waitForNextIsMaster(sdamConfigAllHosts.getConnectionTimeout());
     checkSingleIsMaster(host1Delay, host0, replSet.get());
 }
 
@@ -407,7 +399,7 @@ TEST_F(ServerIsMasterMonitorTestFixture,
     isMasterMonitor->disableExpeditedChecking();
 
     // Confirm that both hosts are monitored.
-    auto heartbeatFrequency = getHeartbeatFrequency();
+    auto heartbeatFrequency = sdamConfigAllHosts.getHeartBeatFrequency();
     while (hasReadyRequests()) {
         processIsMasterRequest(replSet.get());
     }
@@ -431,10 +423,10 @@ TEST_F(ServerIsMasterMonitorTestFixture,
                                                        topologyDescription0);
 
     checkNoActivityBefore(deadline);
-    waitForNextIsMaster(getTimeoutMS());
+    waitForNextIsMaster(sdamConfig0.getConnectionTimeout());
 
     checkSingleIsMaster(heartbeatFrequency, host0, replSet.get());
-    waitForNextIsMaster(getTimeoutMS());
+    waitForNextIsMaster(sdamConfig0.getConnectionTimeout());
 
     // Confirm the next isMaster request is sent to host0 and not host1.
     checkSingleIsMaster(heartbeatFrequency, host0, replSet.get());
@@ -451,7 +443,7 @@ TEST_F(ServerIsMasterMonitorTestFixture, serverIsMasterMonitorShutdownStopsIsMas
     auto isMasterMonitor = initServerIsMasterMonitor(uri, sdamConfig, topologyDescription);
     isMasterMonitor->disableExpeditedChecking();
 
-    auto heartbeatFrequency = getHeartbeatFrequency();
+    auto heartbeatFrequency = sdamConfig.getHeartBeatFrequency();
     checkSingleIsMaster(heartbeatFrequency - Milliseconds(200), hostVec[0], replSet.get());
 
     isMasterMonitor->shutdown();
@@ -519,7 +511,7 @@ TEST_F(ServerIsMasterMonitorTestFixture,
     checkSingleIsMaster(minHeartbeatFrequency, hostVec[0], replSet.get());
 
     // Confirm expedited requests continue since there is no primary.
-    waitForNextIsMaster(getTimeoutMS());
+    waitForNextIsMaster(sdamConfig0.getConnectionTimeout());
     checkSingleIsMaster(minHeartbeatFrequency, hostVec[0], replSet.get());
 }
 
@@ -553,7 +545,7 @@ TEST_F(ServerIsMasterMonitorTestFixture, serverIsMasterMonitorRequestImmediateCh
     checkSingleIsMaster(minHeartbeatFrequency, hostVec[0], replSet.get());
 
     // Confirm expedited requests continue since there is no primary.
-    waitForNextIsMaster(getTimeoutMS());
+    waitForNextIsMaster(sdamConfig0.getConnectionTimeout());
     checkSingleIsMaster(minHeartbeatFrequency, hostVec[0], replSet.get());
 }
 

@@ -65,14 +65,15 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
     const MongoURI& setUri,
     const sdam::ServerAddress& host,
     boost::optional<TopologyVersion> topologyVersion,
-    Milliseconds heartbeatFrequencyMS,
+    const SdamConfiguration& sdamConfig,
     sdam::TopologyEventsPublisherPtr eventListener,
     std::shared_ptr<executor::TaskExecutor> executor)
     : _host(host),
       _topologyVersion(topologyVersion),
       _eventListener(eventListener),
       _executor(executor),
-      _heartbeatFrequencyMS(_overrideRefreshPeriod(heartbeatFrequencyMS)),
+      _heartbeatFrequencyMS(_overrideRefreshPeriod(sdamConfig.getHeartBeatFrequency())),
+      _connectTimeoutMS(sdamConfig.getConnectionTimeout()),
       _isExpedited(true),
       _isShutdown(true),
       _setUri(setUri) {
@@ -233,9 +234,9 @@ SingleServerIsMasterMonitor::_scheduleStreamableIsMaster() {
         WireSpec::appendInternalClientWireVersion(WireSpec::instance().outgoing, &bob);
     }
 
-    _timeoutMS = SdamConfiguration::kDefaultConnectTimeoutMS + kMaxAwaitTimeMs;
+    const auto timeoutMS = _connectTimeoutMS + kMaxAwaitTimeMs;
     auto request =
-        executor::RemoteCommandRequest(HostAndPort(_host), "admin", bob.obj(), nullptr, _timeoutMS);
+        executor::RemoteCommandRequest(HostAndPort(_host), "admin", bob.obj(), nullptr, timeoutMS);
     request.sslMode = _setUri.getSSLMode();
 
     auto swCbHandle = _executor->scheduleExhaustRemoteCommand(
@@ -283,16 +284,14 @@ SingleServerIsMasterMonitor::_scheduleStreamableIsMaster() {
 }
 
 StatusWith<TaskExecutor::CallbackHandle> SingleServerIsMasterMonitor::_scheduleSingleIsMaster() {
-    _timeoutMS = SdamConfiguration::kDefaultConnectTimeoutMS;
-
     BSONObjBuilder bob;
     bob.append("isMaster", 1);
     if (WireSpec::instance().isInternalClient) {
         WireSpec::appendInternalClientWireVersion(WireSpec::instance().outgoing, &bob);
     }
 
-    auto request =
-        executor::RemoteCommandRequest(HostAndPort(_host), "admin", bob.obj(), nullptr, _timeoutMS);
+    auto request = executor::RemoteCommandRequest(
+        HostAndPort(_host), "admin", bob.obj(), nullptr, _connectTimeoutMS);
     request.sslMode = _setUri.getSSLMode();
 
     auto swCbHandle = _executor->scheduleRemoteCommand(
@@ -508,7 +507,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
                 _setUri,
                 serverAddress,
                 serverDescription->getTopologyVersion(),
-                _sdamConfiguration.getHeartBeatFrequency(),
+                _sdamConfiguration,
                 _eventPublisher,
                 _executor);
             _singleMonitors[serverAddress]->init();

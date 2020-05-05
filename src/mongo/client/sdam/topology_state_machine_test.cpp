@@ -42,19 +42,27 @@ protected:
     static inline const auto kLocalServer = "localhost:123";
     static inline const auto kLocalServer2 = "localhost:456";
 
+    static inline const auto kNotUsedMs = Milliseconds(100);
+    static inline const auto kFiveHundredMs = Milliseconds(500);
+
     static inline const auto kTwoSeedConfig =
         SdamConfiguration(std::vector<ServerAddress>{kLocalServer, kLocalServer2},
                           TopologyType::kUnknown,
-                          mongo::Milliseconds(500));
+                          kFiveHundredMs);
+
     static inline const auto kTwoSeedReplicaSetNoPrimaryConfig =
         SdamConfiguration(std::vector<ServerAddress>{kLocalServer, kLocalServer2},
                           TopologyType::kReplicaSetNoPrimary,
-                          mongo::Milliseconds(500),
+                          kFiveHundredMs,
+                          Milliseconds(kNotUsedMs),
+                          Milliseconds(kNotUsedMs),
+                          Milliseconds(kNotUsedMs),
                           std::string("setName"));
+
     static inline const auto kSingleConfig =
         SdamConfiguration(std::vector<ServerAddress>{kLocalServer}, TopologyType::kSingle);
 
-    // Given we in 'starting' state with initial config 'initialConfig'. We receive a
+    // Given we are in 'starting' state with initial config 'initialConfig'. We receive a
     // ServerDescription with type 'incoming', and expected the ending topology state to be
     // 'ending'.
     struct TopologyTypeTestCase {

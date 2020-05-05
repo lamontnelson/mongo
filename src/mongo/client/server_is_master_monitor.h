@@ -41,7 +41,7 @@ public:
     explicit SingleServerIsMasterMonitor(const MongoURI& setUri,
                                          const ServerAddress& host,
                                          boost::optional<TopologyVersion> topologyVersion,
-                                         Milliseconds heartbeatFrequencyMS,
+                                         const SdamConfiguration& sdamConfig,
                                          TopologyEventsPublisherPtr eventListener,
                                          std::shared_ptr<executor::TaskExecutor> executor);
 
@@ -101,7 +101,7 @@ private:
     TopologyEventsPublisherPtr _eventListener;
     std::shared_ptr<executor::TaskExecutor> _executor;
     Milliseconds _heartbeatFrequencyMS;
-    Milliseconds _timeoutMS = SdamConfiguration::kDefaultConnectTimeoutMS;
+    Milliseconds _connectTimeoutMS;
 
     boost::optional<Date_t> _lastIsMasterAt;
     bool _isMasterOutstanding = false;
