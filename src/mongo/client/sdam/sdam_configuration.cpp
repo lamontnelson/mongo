@@ -66,7 +66,7 @@ SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>>
 
     uassert(ErrorCodes::InvalidHeartBeatFrequency,
             "topology heartbeat must be >= 500ms",
-            _heartbeatFrequency >= kMinHeartbeatFrequencyMS);
+            _heartbeatFrequency >= kMinHeartbeatFrequency);
 }
 
 const boost::optional<std::vector<ServerAddress>>& SdamConfiguration::getSeedList() const {

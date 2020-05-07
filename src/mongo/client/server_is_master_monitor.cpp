@@ -291,7 +291,7 @@ StatusWith<TaskExecutor::CallbackHandle> SingleServerIsMasterMonitor::_scheduleS
     }
 
     auto request = executor::RemoteCommandRequest(
-            HostAndPort(_host), "admin", bob.obj(), nullptr, _connectTimeout);
+        HostAndPort(_host), "admin", bob.obj(), nullptr, _connectTimeout);
     request.sslMode = _setUri.getSSLMode();
 
     auto swCbHandle = _executor->scheduleRemoteCommand(
@@ -420,8 +420,7 @@ Milliseconds SingleServerIsMasterMonitor::_currentRefreshPeriod(WithLock,
     if (scheduleImmediately)
         return Milliseconds(0);
 
-    return (_isExpedited) ? sdam::SdamConfiguration::kMinHeartbeatFrequencyMS
-                          : _heartbeatFrequency;
+    return (_isExpedited) ? sdam::SdamConfiguration::kMinHeartbeatFrequency : _heartbeatFrequency;
 }
 
 void SingleServerIsMasterMonitor::disableExpeditedChecking() {

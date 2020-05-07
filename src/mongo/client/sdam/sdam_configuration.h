@@ -28,8 +28,8 @@
  */
 #pragma once
 
-#include "mongo/client/sdam/sdam_datatypes.h"
 #include "mongo/client/sdam/sdam_configuration_parameters_gen.h"
+#include "mongo/client/sdam/sdam_datatypes.h"
 
 namespace mongo::sdam {
 class SdamConfiguration {
@@ -103,7 +103,7 @@ public:
         return _bsonDoc;
     }
 
-    static constexpr Milliseconds kMinHeartbeatFrequencyMS = Milliseconds(500);
+    static constexpr Milliseconds kMinHeartbeatFrequency = Milliseconds(500);
 
 private:
     BSONObj _toBson() const;

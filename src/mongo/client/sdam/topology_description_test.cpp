@@ -184,7 +184,7 @@ TEST_F(TopologyDescriptionTestFixture, ShouldAllowSettingTheHeartbeatFrequency) 
 
 TEST_F(TopologyDescriptionTestFixture, ShouldNotAllowChangingTheHeartbeatFrequencyBelow500Ms) {
     auto belowThresholdFrequency =
-        mongo::Milliseconds(SdamConfiguration::kMinHeartbeatFrequencyMS.count() - 1);
+        mongo::Milliseconds(SdamConfiguration::kMinHeartbeatFrequency.count() - 1);
     ASSERT_THROWS_CODE(
         SdamConfiguration(boost::none, TopologyType::kUnknown, belowThresholdFrequency),
         DBException,
