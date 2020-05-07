@@ -29,7 +29,6 @@
 #pragma once
 
 #include "mongo/client/sdam/sdam_datatypes.h"
-
 #include "mongo/client/sdam/sdam_configuration_parameters_gen.h"
 
 namespace mongo::sdam {
@@ -65,13 +64,39 @@ public:
         Milliseconds serverSelectionTimeoutMs = Milliseconds(sdamServerSelectionTimeoutMs),
         boost::optional<std::string> setName = boost::none);
 
+    /**
+     * The initial set of servers to monitor in the replica set.
+     */
     const boost::optional<std::vector<ServerAddress>>& getSeedList() const;
+
+    /**
+     * The initial type of the replica set.
+     */
     TopologyType getInitialType() const;
+
+    /**
+     * The replica set name.
+     */
     const boost::optional<std::string>& getSetName() const;
 
+    /**
+     * The frequency at which we measure RTT and IsMaster responses.
+     */
     Milliseconds getHeartBeatFrequency() const;
+
+    /**
+     * How long to wait to obtain a connection.
+     */
     Milliseconds getConnectionTimeout() const;
+
+    /**
+     * The width of the latency window used in server selection.
+     */
     Milliseconds getLocalThreshold() const;
+
+    /**
+     * How long to wait for a getHost(s) request in the RSM before a timeout occurs.
+     */
     Milliseconds getServerSelectionTimeout() const;
 
     const BSONObj& toBson() const {
@@ -85,10 +110,12 @@ private:
 
     boost::optional<std::vector<ServerAddress>> _seedList;
     TopologyType _initialType;
+
     Milliseconds _heartbeatFrequency;
     Milliseconds _connectionTimeout;
     Milliseconds _localThreshold;
     Milliseconds _serverSelectionTimeout;
+
     boost::optional<std::string> _setName;
     BSONObj _bsonDoc;
 };
