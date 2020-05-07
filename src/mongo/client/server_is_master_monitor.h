@@ -50,8 +50,8 @@ public:
 
     /**
      * Request an immediate check. The server will be checked immediately if we haven't completed
-     * an isMaster less than SdamConfiguration::kMinHeartbeatFrequencyMS ago. Otherwise,
-     * we schedule a check that runs after SdamConfiguration::kMinHeartbeatFrequencyMS since
+     * an isMaster less than SdamConfiguration::kMinHeartbeatFrequency ago. Otherwise,
+     * we schedule a check that runs after SdamConfiguration::kMinHeartbeatFrequency since
      * the last isMaster.
      */
     void requestImmediateCheck();

@@ -471,7 +471,7 @@ TEST_F(ServerIsMasterMonitorTestFixture, serverIsMasterMonitorShutdownStopsIsMas
 }
 
 /**
- * Tests that the ServerIsMasterMonitor waits until SdamConfiguration::kMinHeartbeatFrequencyMS has
+ * Tests that the ServerIsMasterMonitor waits until SdamConfiguration::kMinHeartbeatFrequency has
  * passed since the last isMaster was received if requestImmediateCheck() is called before enough
  * time has passed.
  */
@@ -493,13 +493,13 @@ TEST_F(ServerIsMasterMonitorTestFixture,
 
     // Check that there is only one isMaster request at time t=0 up until
     // timeAdvanceFromFirstIsMaster.
-    auto minHeartbeatFrequency = SdamConfiguration::kMinHeartbeatFrequencyMS;
+    auto minHeartbeatFrequency = SdamConfiguration::kMinHeartbeatFrequency;
     auto timeAdvanceFromFirstIsMaster = Milliseconds(10);
     ASSERT_LT(timeAdvanceFromFirstIsMaster, minHeartbeatFrequency);
     checkSingleIsMaster(timeAdvanceFromFirstIsMaster, hostVec[0], replSet.get());
 
-    // It's been less than SdamConfiguration::kMinHeartbeatFrequencyMS since the last isMaster was
-    // received. The next isMaster should be sent SdamConfiguration::kMinHeartbeatFrequencyMS since
+    // It's been less than SdamConfiguration::kMinHeartbeatFrequency since the last isMaster was
+    // received. The next isMaster should be sent SdamConfiguration::kMinHeartbeatFrequency since
     // the last isMaster was recieved rather than immediately.
     auto timeRequestImmediateSent = elapsed();
     isMasterMonitor->requestImmediateCheck();
@@ -516,7 +516,7 @@ TEST_F(ServerIsMasterMonitorTestFixture,
 }
 
 /**
- * Tests that if more than SdamConfiguration::kMinHeartbeatFrequencyMS has passed since the last
+ * Tests that if more than SdamConfiguration::kMinHeartbeatFrequency has passed since the last
  * isMaster response was received, the ServerIsMasterMonitor sends an isMaster immediately after
  * requestImmediateCheck() is called.
  */
@@ -535,10 +535,10 @@ TEST_F(ServerIsMasterMonitorTestFixture, serverIsMasterMonitorRequestImmediateCh
     // Ensure the server is not in expedited mode *before* requestImmediateCheck().
     isMasterMonitor->disableExpeditedChecking();
 
-    // No less than SdamConfiguration::kMinHeartbeatFrequencyMS must pass before
+    // No less than SdamConfiguration::kMinHeartbeatFrequency must pass before
     // requestImmediateCheck() is called in order to ensure the server reschedules for an immediate
     // check.
-    auto minHeartbeatFrequency = SdamConfiguration::kMinHeartbeatFrequencyMS;
+    auto minHeartbeatFrequency = SdamConfiguration::kMinHeartbeatFrequency;
     checkSingleIsMaster(minHeartbeatFrequency + Milliseconds(10), hostVec[0], replSet.get());
 
     isMasterMonitor->requestImmediateCheck();
