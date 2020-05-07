@@ -72,8 +72,8 @@ SingleServerIsMasterMonitor::SingleServerIsMasterMonitor(
       _topologyVersion(topologyVersion),
       _eventListener(eventListener),
       _executor(executor),
-      _heartbeatFrequencyMS(_overrideRefreshPeriod(sdamConfig.getHeartBeatFrequency())),
-      _connectTimeoutMS(sdamConfig.getConnectionTimeout()),
+      _heartbeatFrequency(_overrideRefreshPeriod(sdamConfig.getHeartBeatFrequency())),
+      _connectTimeout(sdamConfig.getConnectionTimeout()),
       _isExpedited(true),
       _isShutdown(true),
       _setUri(setUri) {
@@ -219,7 +219,7 @@ void SingleServerIsMasterMonitor::_doRemoteCommand() {
 
 StatusWith<TaskExecutor::CallbackHandle>
 SingleServerIsMasterMonitor::_scheduleStreamableIsMaster() {
-    auto maxAwaitTimeMS = durationCount<Milliseconds>(kMaxAwaitTimeMs);
+    auto maxAwaitTimeMS = durationCount<Milliseconds>(kMaxAwaitTime);
     overrideMaxAwaitTimeMS.execute([&](const BSONObj& data) {
         maxAwaitTimeMS =
             durationCount<Milliseconds>(Milliseconds(data["maxAwaitTimeMS"].numberInt()));
@@ -234,7 +234,7 @@ SingleServerIsMasterMonitor::_scheduleStreamableIsMaster() {
         WireSpec::appendInternalClientWireVersion(WireSpec::instance().outgoing, &bob);
     }
 
-    const auto timeoutMS = _connectTimeoutMS + kMaxAwaitTimeMs;
+    const auto timeoutMS = _connectTimeout + kMaxAwaitTime;
     auto request =
         executor::RemoteCommandRequest(HostAndPort(_host), "admin", bob.obj(), nullptr, timeoutMS);
     request.sslMode = _setUri.getSSLMode();
@@ -291,7 +291,7 @@ StatusWith<TaskExecutor::CallbackHandle> SingleServerIsMasterMonitor::_scheduleS
     }
 
     auto request = executor::RemoteCommandRequest(
-        HostAndPort(_host), "admin", bob.obj(), nullptr, _connectTimeoutMS);
+            HostAndPort(_host), "admin", bob.obj(), nullptr, _connectTimeout);
     request.sslMode = _setUri.getSSLMode();
 
     auto swCbHandle = _executor->scheduleRemoteCommand(
@@ -421,7 +421,7 @@ Milliseconds SingleServerIsMasterMonitor::_currentRefreshPeriod(WithLock,
         return Milliseconds(0);
 
     return (_isExpedited) ? sdam::SdamConfiguration::kMinHeartbeatFrequencyMS
-                          : _heartbeatFrequencyMS;
+                          : _heartbeatFrequency;
 }
 
 void SingleServerIsMasterMonitor::disableExpeditedChecking() {
