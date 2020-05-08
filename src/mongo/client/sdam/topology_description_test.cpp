@@ -60,7 +60,7 @@ protected:
                                      TopologyType topologyType,
                                      boost::optional<std::string> setName) {
         return SdamConfiguration(
-            servers, topologyType, kNotUsedMs, kNotUsedMs, kNotUsedMs, kNotUsedMs, setName);
+            servers, topologyType, kNotUsedMs, kNotUsedMs, kNotUsedMs, setName);
     }
 
     static inline const auto kSetName = std::string("mySetName");

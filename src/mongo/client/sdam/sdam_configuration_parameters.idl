@@ -53,11 +53,3 @@ server_parameters:
         validator:
             gte: 500
         default: 10000
-    serverSelectionTimeoutMs:
-        description: Determines how long to wait during server selection before throwing an exception.
-        set_at: startup
-        cpp_vartype: int
-        cpp_varname: sdamServerSelectionTimeoutMs
-        validator:
-            gt: 0
-        default: 30000

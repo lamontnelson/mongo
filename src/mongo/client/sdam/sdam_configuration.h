@@ -61,7 +61,6 @@ public:
         Milliseconds heartBeatFrequencyMs = Milliseconds(sdamHeartBeatFrequencyMs),
         Milliseconds connectTimeoutMs = Milliseconds(sdamConnectTimeoutMs),
         Milliseconds localThreshholdMs = Milliseconds(sdamLocalThreshholdMs),
-        Milliseconds serverSelectionTimeoutMs = Milliseconds(sdamServerSelectionTimeoutMs),
         boost::optional<std::string> setName = boost::none);
 
     /**
@@ -94,11 +93,6 @@ public:
      */
     Milliseconds getLocalThreshold() const;
 
-    /**
-     * How long to wait for a getHost(s) request in the RSM before a timeout occurs.
-     */
-    Milliseconds getServerSelectionTimeout() const;
-
     const BSONObj& toBson() const {
         return _bsonDoc;
     }
@@ -114,7 +108,6 @@ private:
     Milliseconds _heartbeatFrequency;
     Milliseconds _connectionTimeout;
     Milliseconds _localThreshold;
-    Milliseconds _serverSelectionTimeout;
 
     boost::optional<std::string> _setName;
     BSONObj _bsonDoc;

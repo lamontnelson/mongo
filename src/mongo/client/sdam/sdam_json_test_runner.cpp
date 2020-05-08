@@ -460,7 +460,6 @@ public:
                                                 Milliseconds{kHeartBeatFrequencyMsDefault},
                                                 Milliseconds{kConnectTimeoutMsDefault},
                                                 Milliseconds{kLocalThresholdMsDefault},
-                                                Milliseconds{kServerSelectionTimeoutMsDefault},
                                                 _replicaSetName);
 
         auto clockSource = std::make_unique<ClockSourceMock>();

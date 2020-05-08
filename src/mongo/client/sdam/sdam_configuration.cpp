@@ -35,14 +35,12 @@ SdamConfiguration::SdamConfiguration(boost::optional<std::vector<ServerAddress>>
                                      Milliseconds heartBeatFrequencyMs,
                                      Milliseconds connectTimeoutMs,
                                      Milliseconds localThreshholdMs,
-                                     Milliseconds serverSelectionTimeoutMs,
                                      boost::optional<std::string> setName)
     : _seedList(seedList),
       _initialType(initialType),
       _heartbeatFrequency(heartBeatFrequencyMs),
       _connectionTimeout(connectTimeoutMs),
       _localThreshold(localThreshholdMs),
-      _serverSelectionTimeout(serverSelectionTimeoutMs),
       _setName(setName),
       _bsonDoc(_toBson()) {
     uassert(ErrorCodes::InvalidSeedList,
@@ -91,10 +89,6 @@ Milliseconds SdamConfiguration::getConnectionTimeout() const {
 
 Milliseconds SdamConfiguration::getLocalThreshold() const {
     return _localThreshold;
-}
-
-Milliseconds SdamConfiguration::getServerSelectionTimeout() const {
-    return _serverSelectionTimeout;
 }
 
 BSONObj SdamConfiguration::_toBson() const {
