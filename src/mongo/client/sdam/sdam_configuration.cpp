@@ -107,7 +107,6 @@ BSONObj SdamConfiguration::_toBson() const {
     builder.append("heartbeatFrequency", _heartbeatFrequency.toBSON());
     builder.append("connectionTimeout", _connectionTimeout.toBSON());
     builder.append("localThreshhold", _localThreshold.toBSON());
-    builder.append("serverSelectionTimeout", _serverSelectionTimeout.toBSON());
 
     return builder.obj();
 }
