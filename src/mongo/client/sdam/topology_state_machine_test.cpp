@@ -54,9 +54,8 @@ protected:
         SdamConfiguration(std::vector<ServerAddress>{kLocalServer, kLocalServer2},
                           TopologyType::kReplicaSetNoPrimary,
                           kFiveHundredMs,
-                          Milliseconds(kNotUsedMs),
-                          Milliseconds(kNotUsedMs),
-                          Milliseconds(kNotUsedMs),
+                          kNotUsedMs,
+                          kNotUsedMs,
                           std::string("setName"));
 
     static inline const auto kSingleConfig =
