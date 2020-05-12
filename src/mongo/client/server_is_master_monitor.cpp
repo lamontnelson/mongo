@@ -26,9 +26,12 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kDefault
+
 #include "mongo/client/server_is_master_monitor.h"
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kDefault
+#include <iterator>
+
 #include "mongo/client/replica_set_monitor.h"
 #include "mongo/client/replica_set_monitor_server_parameters.h"
 #include "mongo/client/sdam/sdam.h"
@@ -487,7 +490,7 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
                         "RSM {replicaSet} host {addr} was removed from the topology.",
                         "replicaSet"_attr = _setUri.getSetName(),
                         "addr"_attr = serverAddress);
-            it = _singleMonitors.erase(it, ++it);
+            it = _singleMonitors.erase(it, std::next(it));
         } else {
             ++it;
         }
@@ -515,6 +518,9 @@ void ServerIsMasterMonitor::onTopologyDescriptionChangedEvent(
         }
         return isMissing;
     });
+
+    const auto expectedSize = newDescription->getServers().size();
+    invariant(_singleMonitors.size() == expectedSize);
 }
 
 std::shared_ptr<executor::TaskExecutor> ServerIsMasterMonitor::_setupExecutor(
