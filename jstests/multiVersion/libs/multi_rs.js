@@ -68,7 +68,7 @@ ReplSetTest.prototype.upgradePrimary = function(primary, options, user, pwd) {
     // Merge new options into node settings.
     this.nodeOptions = mergeNodeOptions(this.nodeOptions, options);
 
-    let oldPrimary = this.stepdown(primary);
+    let oldPrimary = this.stepdown(primary, noDowntimePossible);
     this.waitForState(oldPrimary, ReplSetTest.State.SECONDARY);
 
     // stepping down the node can close the connection and lose the authentication state, so
@@ -122,9 +122,12 @@ ReplSetTest.prototype.upgradeNode = function(node, opts = {}, user, pwd) {
     return newNode;
 };
 
-ReplSetTest.prototype.stepdown = function(nodeId) {
+ReplSetTest.prototype.stepdown = function(nodeId, verifyPrimaryIsNode = true) {
     nodeId = this.getNodeId(nodeId);
-    assert.eq(this.getNodeId(this.getPrimary()), nodeId);
+    if (verifyPrimaryIsNode) {
+        assert.eq(this.getNodeId(this.getPrimary()), nodeId);
+    }
+
     var node = this.nodes[nodeId];
 
     assert.soonNoExcept(function() {
