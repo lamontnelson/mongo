@@ -270,6 +270,8 @@ env.Library(
         '$BUILD_DIR/mongo/s/catalog/sharding_catalog_client',
         '$BUILD_DIR/mongo/s/client/sharding_client',
         '$BUILD_DIR/mongo/s/coreshard',
+	'$BUILD_DIR/mongo/s/query/cluster_aggregate',
+        'balancer',
         'type_shard_identity',
     ],
     LIBDEPS_PRIVATE=[
