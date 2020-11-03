@@ -72,6 +72,7 @@
 #include "mongo/s/query/establish_cursors.h"
 #include "mongo/s/query/owned_remote_cursor.h"
 #include "mongo/s/query/router_stage_pipeline.h"
+#include "mongo/s/query/sharded_agg_util.h"
 #include "mongo/s/query/store_possible_cursor.h"
 #include "mongo/s/stale_exception.h"
 #include "mongo/s/transaction_router.h"
@@ -82,51 +83,6 @@ namespace mongo {
 constexpr unsigned ClusterAggregate::kMaxViewRetries;
 
 namespace {
-
-// "Resolve" involved namespaces into a map. We won't try to execute anything on a mongos, but we
-// still have to populate this map so that any $lookups, etc. will be able to have a resolved view
-// definition. It's okay that this is incorrect, we will repopulate the real namespace map on the
-// mongod. Note that this function must be called before forwarding an aggregation command on an
-// unsharded collection, in order to verify that the involved namespaces are allowed to be sharded.
-auto resolveInvolvedNamespaces(stdx::unordered_set<NamespaceString> involvedNamespaces) {
-    StringMap<ExpressionContext::ResolvedNamespace> resolvedNamespaces;
-    for (auto&& nss : involvedNamespaces) {
-        resolvedNamespaces.try_emplace(nss.coll(), nss, std::vector<BSONObj>{});
-    }
-    return resolvedNamespaces;
-}
-
-// Build an appropriate ExpressionContext for the pipeline. This helper instantiates an appropriate
-// collator, creates a MongoProcessInterface for use by the pipeline's stages, and sets the
-// collection UUID if provided.
-boost::intrusive_ptr<ExpressionContext> makeExpressionContext(
-    OperationContext* opCtx,
-    const AggregationRequest& request,
-    BSONObj collationObj,
-    boost::optional<UUID> uuid,
-    StringMap<ExpressionContext::ResolvedNamespace> resolvedNamespaces) {
-
-    std::unique_ptr<CollatorInterface> collation;
-    if (!collationObj.isEmpty()) {
-        // This will be null if attempting to build an interface for the simple collator.
-        collation = uassertStatusOK(
-            CollatorFactoryInterface::get(opCtx->getServiceContext())->makeFromBSON(collationObj));
-    }
-
-    // Create the expression context, and set 'inMongos' to true. We explicitly do *not* set
-    // mergeCtx->tempDir.
-    auto mergeCtx = make_intrusive<ExpressionContext>(
-        opCtx,
-        request,
-        std::move(collation),
-        std::make_shared<MongosProcessInterface>(
-            Grid::get(opCtx)->getExecutorPool()->getArbitraryExecutor()),
-        std::move(resolvedNamespaces),
-        uuid);
-
-    mergeCtx->inMongos = true;
-    return mergeCtx;
-}
 
 void appendEmptyResultSetWithStatus(OperationContext* opCtx,
                                     const NamespaceString& nss,
@@ -265,8 +221,13 @@ Status ClusterAggregate::runAggregate(OperationContext* opCtx,
         // Build an ExpressionContext for the pipeline. This instantiates an appropriate collator,
         // resolves all involved namespaces, and creates a shared MongoProcessInterface for use by
         // the pipeline's stages.
-        expCtx = makeExpressionContext(
-            opCtx, request, collationObj, uuid, resolveInvolvedNamespaces(involvedNamespaces));
+        expCtx = sharded_agg_util::makeExpressionContext(
+            opCtx,
+            request,
+            collationObj,
+            uuid,
+            sharded_agg_util::resolveInvolvedNamespaces(involvedNamespaces),
+            true /* inMongos*/);
 
         // Parse and optimize the full pipeline.
         auto pipeline = Pipeline::parse(request.getPipeline(), expCtx);

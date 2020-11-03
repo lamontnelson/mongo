@@ -37,6 +37,7 @@
 #include "mongo/s/catalog/type_chunk.h"
 #include "mongo/s/catalog/type_tags.h"
 #include "mongo/s/request_types/shard_collection_gen.h"
+#include "mongo/s/resharded_chunk_gen.h"
 #include "mongo/s/shard_id.h"
 #include "mongo/s/shard_key_pattern.h"
 #include "mongo/util/string_map.h"
@@ -282,13 +283,23 @@ private:
  */
 class ReshardingSplitPolicy : public InitialSplitPolicy {
 public:
+    static ReshardingSplitPolicy make(OperationContext* opCtx,
+                                      const NamespaceString& nss,
+                                      const ShardKeyPattern& shardKey,
+                                      int numInitialChunks,
+                                      const std::vector<ShardId>& recipientShardIds,
+                                      BSONObj collationObj,
+                                      boost::optional<UUID> collUUID,
+                                      int samplingRatio = 10);
+
     ReshardingSplitPolicy(OperationContext* opCtx,
                           const NamespaceString& nss,
-                          const ShardKeyPattern& shardKey,
+                          std::vector<BSONObj>& rawPipeline,
                           int numInitialChunks,
                           const std::vector<ShardId>& recipientShardIds,
                           const boost::intrusive_ptr<ExpressionContext>& expCtx,
-                          int samplingRatio = 10);
+                          int samplingRatio);
+
     ShardCollectionConfig createFirstChunks(OperationContext* opCtx,
                                             const ShardKeyPattern& shardKeyPattern,
                                             SplitPolicyParams params);
@@ -296,8 +307,13 @@ public:
      * Creates the aggregation pipeline BSON to get documents for sampling from shards.
      */
     static std::vector<BSONObj> createRawPipeline(const ShardKeyPattern& shardKey,
-                                                  int samplingRatio,
-                                                  int numSplitPoints);
+                                                  int numSplitPoints,
+                                                  int samplingRatio);
+
+    static ShardCollectionConfig createChunksFromPresetReshardedChunks(
+        OperationContext* opCtx,
+        const NamespaceString& nss,
+        std::vector<ReshardedChunk> presetChunks);
 
 private:
     std::vector<BSONObj> _splitPoints;
