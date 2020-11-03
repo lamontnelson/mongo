@@ -34,11 +34,14 @@
 #include "mongo/db/s/config/initial_split_policy.h"
 
 #include "mongo/client/read_preference.h"
+#include "mongo/db/catalog/collection_catalog.h"
+#include "mongo/db/pipeline/lite_parsed_pipeline.h"
 #include "mongo/db/pipeline/sharded_agg_helpers.h"
 #include "mongo/db/vector_clock.h"
 #include "mongo/s/balancer_configuration.h"
 #include "mongo/s/catalog/type_shard.h"
 #include "mongo/s/grid.h"
+#include "mongo/s/query/sharded_agg_util.h"
 #include "mongo/s/shard_util.h"
 
 namespace mongo {
@@ -599,8 +602,8 @@ void PresplitHashedZonesSplitPolicy::_validate(const ShardKeyPattern& shardKeyPa
 }
 
 std::vector<BSONObj> ReshardingSplitPolicy::createRawPipeline(const ShardKeyPattern& shardKey,
-                                                              int samplingRatio,
-                                                              int numSplitPoints) {
+                                                              int numSplitPoints,
+                                                              int samplingRatio) {
 
     std::vector<BSONObj> res;
     const auto& shardKeyFields = shardKey.getKeyPatternFields();
@@ -636,30 +639,87 @@ std::vector<BSONObj> ReshardingSplitPolicy::createRawPipeline(const ShardKeyPatt
     return res;
 }
 
+ReshardingSplitPolicy ReshardingSplitPolicy::make(OperationContext* opCtx,
+                                                  const NamespaceString& nss,
+                                                  const ShardKeyPattern& shardKey,
+                                                  int numInitialChunks,
+                                                  const std::vector<ShardId>& recipientShardIds,
+                                                  BSONObj collationObj,
+                                                  boost::optional<UUID> collUUID,
+                                                  int samplingRatio) {
+    invariant(!recipientShardIds.empty());
+
+    auto rawPipeline = createRawPipeline(shardKey, numInitialChunks - 1, samplingRatio);
+    const auto aggRequest = AggregationRequest(nss, rawPipeline);
+    const auto expCtx = sharded_agg_util::makeExpressionContext(
+        opCtx,
+        aggRequest,
+        collationObj,
+        collUUID,
+        sharded_agg_util::resolveInvolvedNamespaces(
+            LiteParsedPipeline(aggRequest).getInvolvedNamespaces()),
+        false /* inMongos */);
+    return ReshardingSplitPolicy(
+        opCtx, nss, rawPipeline, numInitialChunks, recipientShardIds, expCtx, samplingRatio);
+}
+
 ReshardingSplitPolicy::ReshardingSplitPolicy(OperationContext* opCtx,
                                              const NamespaceString& nss,
-                                             const ShardKeyPattern& shardKey,
+                                             std::vector<BSONObj>& rawPipeline,
                                              int numInitialChunks,
                                              const std::vector<ShardId>& recipientShardIds,
                                              const boost::intrusive_ptr<ExpressionContext>& expCtx,
                                              int samplingRatio) {
 
-    invariant(!recipientShardIds.empty());
-
     auto pipelineCursor = sharded_agg_helpers::attachCursorToPipeline(
-        Pipeline::parse(createRawPipeline(shardKey, samplingRatio, numInitialChunks - 1), expCtx)
-            .release(),
-        true);
+        Pipeline::parse(rawPipeline, expCtx).release(), true);
 
     auto sampledDocument = pipelineCursor->getNext();
-    size_t idx = 0;
+    std::vector<BSONObj> sampledDocs;
     while (sampledDocument) {
-        if (idx % samplingRatio == 0) {
-            _splitPoints.push_back(sampledDocument.get().toBson());
-        }
+        sampledDocs.push_back(sampledDocument.get().toBson());
         sampledDocument = pipelineCursor->getNext();
-        ++idx;
     }
+    size_t numSplitPointsNeeded = numInitialChunks - 1;
+    int actualSamplingRatio = samplingRatio;
+
+    // Check if it is possible to make numInitialChunks split points given the samplingRatio and
+    // number of docs.
+    if (sampledDocs.size() < (numSplitPointsNeeded * samplingRatio)) {
+        // If not, pick a new sampling ratio.
+        double res =
+            static_cast<double>(sampledDocs.size()) / static_cast<double>(numSplitPointsNeeded);
+        actualSamplingRatio = ceil(res);
+    }
+
+    uassert(ErrorCodes::BadValue,
+            "Must not have less than (numInitialChunks - 1) documents in sharded collection.",
+            actualSamplingRatio != 0);
+
+    BSONObj lastSplitPoint = BSONObj();
+    size_t i = 0;
+    while (i < sampledDocs.size()) {
+        if (i % actualSamplingRatio == 0) {
+            BSONObj currentDoc = sampledDocs[i];
+            // If the current sampled document is the same as the last split point, skip it.
+            while (i < sampledDocs.size() && !lastSplitPoint.isEmpty() &&
+                   SimpleBSONObjComparator::kInstance.evaluate(currentDoc == lastSplitPoint)) {
+                ++i;
+            }
+
+            if (i >= sampledDocs.size()) {
+                break;
+            }
+            _splitPoints.push_back(currentDoc);
+            lastSplitPoint = currentDoc;
+        }
+        ++i;
+    }
+
+    uassert(ErrorCodes::BadValue,
+            "The shard key provided does not have enough cardinality to make the required amount "
+            "of chunks",
+            _splitPoints.size() >= numSplitPointsNeeded);
 
     _numContiguousChunksPerShard =
         std::max(numInitialChunks / recipientShardIds.size(), static_cast<size_t>(1));
@@ -676,6 +736,26 @@ InitialSplitPolicy::ShardCollectionConfig ReshardingSplitPolicy::createFirstChun
                         _recipientShardIds,
                         _splitPoints,
                         currentTime.clusterTime().asTimestamp());
+}
+
+InitialSplitPolicy::ShardCollectionConfig
+ReshardingSplitPolicy::createChunksFromPresetReshardedChunks(
+    OperationContext* opCtx, const NamespaceString& nss, std::vector<ReshardedChunk> presetChunks) {
+    std::vector<ChunkType> chunks;
+    ChunkVersion version(1, 0, OID::gen());
+    for (auto&& chunk : presetChunks) {
+ 	// TODO: do we need to get new cluster time each time? ie does appendChunk change cluster time? 
+	auto currentTime = VectorClock::get(opCtx)->getTime();
+        appendChunk(nss,
+                    chunk.getMin(),
+                    chunk.getMax(),
+                    &version,
+                    currentTime.clusterTime().asTimestamp(),
+                    chunk.getRecipientShardId(),
+                    &chunks);
+    }
+
+    return {chunks};
 }
 
 }  // namespace mongo

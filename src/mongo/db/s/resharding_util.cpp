@@ -200,9 +200,9 @@ void checkForHolesAndOverlapsInChunks(std::vector<ReshardedChunk>& chunks,
     }
 }
 
-void validateReshardedChunks(const std::vector<mongo::BSONObj>& chunks,
-                             OperationContext* opCtx,
-                             const KeyPattern& keyPattern) {
+std::vector<ReshardedChunk> validateAndGetReshardedChunks(const std::vector<mongo::BSONObj>& chunks,
+                                                          OperationContext* opCtx,
+                                                          const KeyPattern& keyPattern) {
     std::vector<ReshardedChunk> validChunks;
     for (const BSONObj& obj : chunks) {
         auto chunk = ReshardedChunk::parse(IDLParserErrorContext("reshardedChunks"), obj);
@@ -212,6 +212,8 @@ void validateReshardedChunks(const std::vector<mongo::BSONObj>& chunks,
     }
 
     checkForHolesAndOverlapsInChunks(validChunks, keyPattern);
+
+    return validChunks;
 }
 
 Timestamp getHighestMinFetchTimestamp(const std::vector<DonorShardEntry>& donorShards) {

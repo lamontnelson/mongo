@@ -132,7 +132,7 @@ public:
 
             if (presetReshardedChunksSpecified) {
                 const auto chunks = request().get_presetReshardedChunks().get();
-                validateReshardedChunks(
+                validateAndGetReshardedChunks(
                     chunks, opCtx, ShardKeyPattern(request().getKey()).getKeyPattern());
                 numInitialChunks = chunks.size();
 

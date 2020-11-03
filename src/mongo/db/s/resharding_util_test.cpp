@@ -213,7 +213,7 @@ TEST_F(ReshardingUtilTest, SuccessfulValidateReshardedChunkCase) {
     chunks.push_back(makeReshardedChunk(chunkRanges[0], "a"));
     chunks.push_back(makeReshardedChunk(chunkRanges[1], "b"));
 
-    validateReshardedChunks(chunks, operationContext(), keyPattern());
+    validateAndGetReshardedChunks(chunks, operationContext(), keyPattern());
 }
 
 TEST_F(ReshardingUtilTest, FailWhenHoleInChunkRange) {
@@ -224,7 +224,7 @@ TEST_F(ReshardingUtilTest, FailWhenHoleInChunkRange) {
     };
     chunks.push_back(makeReshardedChunk(chunkRanges[0], "a"));
     chunks.push_back(makeReshardedChunk(chunkRanges[1], "b"));
-    ASSERT_THROWS_CODE(validateReshardedChunks(chunks, operationContext(), keyPattern()),
+    ASSERT_THROWS_CODE(validateAndGetReshardedChunks(chunks, operationContext(), keyPattern()),
                        DBException,
                        ErrorCodes::BadValue);
 }
@@ -237,7 +237,7 @@ TEST_F(ReshardingUtilTest, FailWhenOverlapInChunkRange) {
     std::vector<mongo::BSONObj> chunks;
     chunks.push_back(makeReshardedChunk(overlapChunkRanges[0], "a"));
     chunks.push_back(makeReshardedChunk(overlapChunkRanges[1], "b"));
-    ASSERT_THROWS_CODE(validateReshardedChunks(chunks, operationContext(), keyPattern()),
+    ASSERT_THROWS_CODE(validateAndGetReshardedChunks(chunks, operationContext(), keyPattern()),
                        DBException,
                        ErrorCodes::BadValue);
 }
@@ -250,7 +250,7 @@ TEST_F(ReshardingUtilTest, FailWhenChunkRangeDoesNotStartAtGlobalMin) {
     };
     chunks.push_back(makeReshardedChunk(chunkRanges[0], "a"));
     chunks.push_back(makeReshardedChunk(chunkRanges[1], "b"));
-    ASSERT_THROWS_CODE(validateReshardedChunks(chunks, operationContext(), keyPattern()),
+    ASSERT_THROWS_CODE(validateAndGetReshardedChunks(chunks, operationContext(), keyPattern()),
                        DBException,
                        ErrorCodes::BadValue);
 }
@@ -264,7 +264,7 @@ TEST_F(ReshardingUtilTest, FailWhenChunkRangeDoesNotEndAtGlobalMax) {
     chunks.push_back(makeReshardedChunk(chunkRanges[0], "a"));
     chunks.push_back(makeReshardedChunk(chunkRanges[1], "b"));
 
-    ASSERT_THROWS_CODE(validateReshardedChunks(chunks, operationContext(), keyPattern()),
+    ASSERT_THROWS_CODE(validateAndGetReshardedChunks(chunks, operationContext(), keyPattern()),
                        DBException,
                        ErrorCodes::BadValue);
 }

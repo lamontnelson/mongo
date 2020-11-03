@@ -121,9 +121,9 @@ void checkForHolesAndOverlapsInChunks(std::vector<ReshardedChunk>& chunks,
  * ReshardedChunk and asserts that each chunk's shardId is associated with an existing entry in
  * the shardRegistry. Then, asserts that there is not a hole or overlap in the chunks.
  */
-void validateReshardedChunks(const std::vector<mongo::BSONObj>& chunks,
-                             OperationContext* opCtx,
-                             const KeyPattern& keyPattern);
+std::vector<ReshardedChunk> validateAndGetReshardedChunks(const std::vector<mongo::BSONObj>& chunks,
+                                                          OperationContext* opCtx,
+                                                          const KeyPattern& keyPattern);
 
 /**
  * Selects the highest minFetchTimestamp from the list of donors.

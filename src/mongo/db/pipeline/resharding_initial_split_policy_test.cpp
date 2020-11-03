@@ -31,6 +31,7 @@
 
 #include "mongo/platform/basic.h"
 
+#include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/pipeline/document_source_mock.h"
 #include "mongo/db/pipeline/sharded_agg_helpers.h"
 #include "mongo/db/s/config/initial_split_policy.h"
@@ -188,6 +189,13 @@ TEST_F(ReshardingSplitPolicyTest, SamplingSuceeds) {
         BSON("a" << 20 << "$sortKey" << BSON_ARRAY(20)),
         BSON("a" << 21 << "$sortKey" << BSON_ARRAY(21)),
         BSON("a" << 22 << "$sortKey" << BSON_ARRAY(22)),
+        BSON("a" << 23 << "$sortKey" << BSON_ARRAY(22)),
+        BSON("a" << 24 << "$sortKey" << BSON_ARRAY(22)),
+        BSON("a" << 25 << "$sortKey" << BSON_ARRAY(22)),
+        BSON("a" << 26 << "$sortKey" << BSON_ARRAY(22)),
+        BSON("a" << 27 << "$sortKey" << BSON_ARRAY(22)),
+        BSON("a" << 28 << "$sortKey" << BSON_ARRAY(22)),
+        BSON("a" << 29 << "$sortKey" << BSON_ARRAY(22)),
     };
 
     auto shardKeyPattern = ShardKeyPattern(BSON("a" << 1));
@@ -195,14 +203,18 @@ TEST_F(ReshardingSplitPolicyTest, SamplingSuceeds) {
     for (auto&& shard : shards) {
         shardIds.push_back(ShardId(shard.getName()));
     }
-
     auto future = launchAsync([&] {
+        const int numInitialChunks = 4;
+        const int samplingRatio = 10;
+        auto rawPipeline = ReshardingSplitPolicy::createRawPipeline(
+            shardKeyPattern, numInitialChunks - 1, samplingRatio);
         auto policy = ReshardingSplitPolicy(operationContext(),
                                             kTestAggregateNss,
-                                            shardKeyPattern,
-                                            4 /* numInitialChunks */,
+                                            rawPipeline,
+                                            numInitialChunks,
                                             shardIds,
-                                            expCtx());
+                                            expCtx(),
+                                            samplingRatio);
         const auto chunks = policy
                                 .createFirstChunks(operationContext(),
                                                    shardKeyPattern,
