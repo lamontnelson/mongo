@@ -35,6 +35,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/query/collation/collator_factory_interface.h"
 #include "mongo/db/repl/primary_only_service.h"
+#include "mongo/db/s/config/initial_split_policy.h"
 #include "mongo/db/s/resharding/coordinator_document_gen.h"
 #include "mongo/db/s/resharding/resharding_coordinator_service.h"
 #include "mongo/db/s/resharding_util.h"
@@ -66,7 +67,8 @@ public:
         using InvocationBase::InvocationBase;
 
         void typedRun(OperationContext* opCtx) {
-
+	    try {
+	    LOGV2_DEBUG(1234567, 0, "xxx start ConfigsvrReshardCollection");
             uassert(ErrorCodes::IllegalOperation,
                     "_configsvrReshardCollection can only be run on config servers",
                     serverGlobalParams.clusterRole == ClusterRole::ConfigServer);
@@ -111,6 +113,8 @@ public:
                                                                                              nss));
 
             bool presetReshardedChunksSpecified = bool(request().get_presetReshardedChunks());
+	    bool numInitialChunksSpecified = bool(request().getNumInitialChunks());
+
             uassert(ErrorCodes::BadValue,
                     "Test commands must be enabled when a value is provided for field: "
                     "_presetReshardedChunks",
@@ -118,22 +122,23 @@ public:
 
             uassert(ErrorCodes::BadValue,
                     "Must specify only one of _presetReshardedChunks or numInitialChunks",
-                    !(presetReshardedChunksSpecified && bool(request().getNumInitialChunks())));
+                    !(presetReshardedChunksSpecified && numInitialChunksSpecified));
 
             std::set<ShardId> donorShardIds;
             cm.getAllShardIds(&donorShardIds);
 
-            int numInitialChunks;
+            long int numInitialChunks;
             std::set<ShardId> recipientShardIds;
             std::vector<ChunkType> initialChunks;
             ChunkVersion version(1, 0, OID::gen());
-            auto tempReshardingNss = constructTemporaryReshardingNss(
-                nss.db(), getCollectionUUIDFromChunkManger(nss, cm));
+
+            const auto shardKey = ShardKeyPattern(request().getKey());
+            const auto existingUUID = getCollectionUUIDFromChunkManger(nss, cm);
+            auto tempReshardingNss = constructTemporaryReshardingNss(nss.db(), existingUUID);
 
             if (presetReshardedChunksSpecified) {
                 const auto chunks = request().get_presetReshardedChunks().get();
-                validateAndGetReshardedChunks(
-                    chunks, opCtx, ShardKeyPattern(request().getKey()).getKeyPattern());
+                validateAndGetReshardedChunks(chunks, opCtx, shardKey.getKeyPattern());
                 numInitialChunks = chunks.size();
 
                 // Use the provided shardIds from presetReshardedChunks to construct the
@@ -152,20 +157,26 @@ public:
                     version.incMinor();
                 }
             } else {
-                numInitialChunks = request().getNumInitialChunks().get_value_or(cm.numChunks());
+	    	LOGV2_DEBUG(1234569, 0, "xxx in code");
+                const auto& collation = request().getCollation().get();
 
-                // No presetReshardedChunks were provided, make the recipients list be the same as
-                // the donors list by default.
-                recipientShardIds = donorShardIds;
+		invariant(donorShardIds.size());
+		recipientShardIds = donorShardIds;
+                const std::vector<ShardId> rsIds(recipientShardIds.begin(),
+                                                 recipientShardIds.end());
 
-                cm.forEachChunk([&](const auto& chunk) {
-                    initialChunks.emplace_back(tempReshardingNss,
-                                               ChunkRange{chunk.getMin(), chunk.getMax()},
-                                               version,
-                                               chunk.getShardId());
-                    version.incMinor();
-                    return true;
-                });
+                const SplitPolicyParams splitPolicyParams{nss, *rsIds.begin()};
+		
+		invariant(request().getNumInitialChunks());
+                numInitialChunks = *request().getNumInitialChunks();
+
+	    	LOGV2_DEBUG(1234568, 0, "xxx ReshardingSplitPolicy::make");
+                auto reshardPolicy = ReshardingSplitPolicy::make(
+                    opCtx, nss, shardKey, numInitialChunks, rsIds, collation, existingUUID);
+                auto shardCollectionConfig =
+                    reshardPolicy.createFirstChunks(opCtx, shardKey, splitPolicyParams);
+
+                initialChunks = std::move(shardCollectionConfig.chunks);
             }
 
             // Construct the lists of donor and recipient shard entries, where each ShardEntry is
@@ -197,7 +208,6 @@ public:
 
             // Generate the resharding metadata for the ReshardingCoordinatorDocument.
             auto reshardingUUID = UUID::gen();
-            auto existingUUID = getCollectionUUIDFromChunkManger(ns(), cm);
             auto commonMetadata = CommonReshardingMetadata(
                 std::move(reshardingUUID), ns(), std::move(existingUUID), request().getKey());
             coordinatorDoc.setCommonReshardingMetadata(std::move(commonMetadata));
@@ -216,6 +226,10 @@ public:
 
             instance->interrupt(
                 {ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
+	    } 
+	    catch (const DBException& e) {
+		    LOGV2_DEBUG(1234570, 0, "xxx exception", "ex"_attr=e);
+	    }
         }
 
     private:
