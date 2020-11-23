@@ -161,9 +161,9 @@ public:
                     cmdRequest.getCollation() ? cmdRequest.getCollation().get() : BSONObj();
 
                 invariant(donorShardIds.size());
-		
+
                 std::vector<ShardId> rsIds;
-		Grid::get(opCtx)->shardRegistry()->getAllShardIds(opCtx, &rsIds);		
+                Grid::get(opCtx)->shardRegistry()->getAllShardIds(opCtx, &rsIds);
 
                 numInitialChunks =
                     (numInitialChunksSpecified) ? *cmdRequest.getNumInitialChunks() : rsIds.size();

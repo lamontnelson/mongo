@@ -147,7 +147,7 @@ let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
         const configChunksArray = mongosConfig.chunks.find({'ns': ns});
         verifyTemporaryReshardingChunksMatchExpected(numInitialChunks);
     }
-	
+
     resetPersistedData();
 };
 
@@ -155,16 +155,17 @@ let presetReshardedChunks =
     [{recipientShardId: st.shard1.shardName, min: {_id: MinKey}, max: {_id: MaxKey}}];
 const existingZoneName = 'x1';
 
-let resetPersistedData = () => {
-    removeAllReshardingCollections();
-    
-    assert(mongos.getDB(kDbName)[collName].drop());
-    insertData();
-}
+let resetPersistedData =
+    () => {
+        removeAllReshardingCollections();
+
+        assert(mongos.getDB(kDbName)[collName].drop());
+        insertData();
+    }
 
 let insertData = (numDocs) => {
     numDocs = numDocs || 1000;
-   	
+
     let bulk = db.getCollection(collName).initializeOrderedBulkOp();
     Array.from(Array(numDocs).keys()).map((i) => {
         bulk.insert({_id: i});

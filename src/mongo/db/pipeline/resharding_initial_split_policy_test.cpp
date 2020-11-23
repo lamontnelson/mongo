@@ -164,13 +164,13 @@ TEST_F(ReshardingSplitPolicyTest, SamplingSuceeds) {
     // from different shards.
     //
     std::vector<BSONObj> firstShardChunks;
-    for (int a=0; a<11; a++) {
-	firstShardChunks.emplace_back(BSON("a" << a << "$sortKey" << BSON_ARRAY(a)));
+    for (int a = 0; a < 11; a++) {
+        firstShardChunks.emplace_back(BSON("a" << a << "$sortKey" << BSON_ARRAY(a)));
     }
-    
+
     std::vector<BSONObj> secondShardChunks;
-    for (int a=11; a<30; a++) {
-	secondShardChunks.emplace_back(BSON("a" << a << "$sortKey" << BSON_ARRAY(a)));
+    for (int a = 11; a < 30; a++) {
+        secondShardChunks.emplace_back(BSON("a" << a << "$sortKey" << BSON_ARRAY(a)));
     }
 
     auto shardKeyPattern = ShardKeyPattern(BSON("a" << 1));
