@@ -162,47 +162,23 @@ TEST_F(ReshardingSplitPolicyTest, SamplingSuceeds) {
     loadRoutingTableWithTwoChunksAndTwoShards(kTestAggregateNss);
     // We add a $sortKey field since AsyncResultsMerger expects it in order to merge the batches
     // from different shards.
-    std::vector<BSONObj> firstShardChunks{
-        BSON("a" << 0 << "$sortKey" << BSON_ARRAY(1)),
-        BSON("a" << 1 << "$sortKey" << BSON_ARRAY(1)),
-        BSON("a" << 2 << "$sortKey" << BSON_ARRAY(2)),
-        BSON("a" << 3 << "$sortKey" << BSON_ARRAY(3)),
-        BSON("a" << 4 << "$sortKey" << BSON_ARRAY(4)),
-        BSON("a" << 5 << "$sortKey" << BSON_ARRAY(5)),
-        BSON("a" << 6 << "$sortKey" << BSON_ARRAY(6)),
-        BSON("a" << 7 << "$sortKey" << BSON_ARRAY(7)),
-        BSON("a" << 8 << "$sortKey" << BSON_ARRAY(8)),
-        BSON("a" << 9 << "$sortKey" << BSON_ARRAY(9)),
-        BSON("a" << 10 << "$sortKey" << BSON_ARRAY(10)),
-    };
-
-    std::vector<BSONObj> secondShardChunks{
-        BSON("a" << 11 << "$sortKey" << BSON_ARRAY(11)),
-        BSON("a" << 12 << "$sortKey" << BSON_ARRAY(12)),
-        BSON("a" << 13 << "$sortKey" << BSON_ARRAY(13)),
-        BSON("a" << 14 << "$sortKey" << BSON_ARRAY(14)),
-        BSON("a" << 15 << "$sortKey" << BSON_ARRAY(15)),
-        BSON("a" << 16 << "$sortKey" << BSON_ARRAY(16)),
-        BSON("a" << 17 << "$sortKey" << BSON_ARRAY(17)),
-        BSON("a" << 18 << "$sortKey" << BSON_ARRAY(18)),
-        BSON("a" << 19 << "$sortKey" << BSON_ARRAY(19)),
-        BSON("a" << 20 << "$sortKey" << BSON_ARRAY(20)),
-        BSON("a" << 21 << "$sortKey" << BSON_ARRAY(21)),
-        BSON("a" << 22 << "$sortKey" << BSON_ARRAY(22)),
-        BSON("a" << 23 << "$sortKey" << BSON_ARRAY(22)),
-        BSON("a" << 24 << "$sortKey" << BSON_ARRAY(22)),
-        BSON("a" << 25 << "$sortKey" << BSON_ARRAY(22)),
-        BSON("a" << 26 << "$sortKey" << BSON_ARRAY(22)),
-        BSON("a" << 27 << "$sortKey" << BSON_ARRAY(22)),
-        BSON("a" << 28 << "$sortKey" << BSON_ARRAY(22)),
-        BSON("a" << 29 << "$sortKey" << BSON_ARRAY(22)),
-    };
+    //
+    std::vector<BSONObj> firstShardChunks;
+    for (int a=0; a<11; a++) {
+	firstShardChunks.emplace_back(BSON("a" << a << "$sortKey" << BSON_ARRAY(a)));
+    }
+    
+    std::vector<BSONObj> secondShardChunks;
+    for (int a=11; a<30; a++) {
+	secondShardChunks.emplace_back(BSON("a" << a << "$sortKey" << BSON_ARRAY(a)));
+    }
 
     auto shardKeyPattern = ShardKeyPattern(BSON("a" << 1));
     std::vector<ShardId> shardIds;
     for (auto&& shard : shards) {
         shardIds.push_back(ShardId(shard.getName()));
     }
+
     auto future = launchAsync([&] {
         const int numInitialChunks = 4;
         const int samplingRatio = 10;
