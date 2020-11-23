@@ -8,12 +8,14 @@ load("jstests/libs/uuid_util.js");
 (function() {
 'use strict';
 
-const st = new ShardingTest({mongos: 1, shards: 2});
+const numShards = 2;
+const st = new ShardingTest({mongos: 1, shards: numShards});
 const kDbName = 'db';
 const collName = 'foo';
 const ns = kDbName + '.' + collName;
 const mongos = st.s0;
 const mongosConfig = mongos.getDB('config');
+const db = mongos.getDB(kDbName);
 
 let shardToRSMap = {};
 shardToRSMap[st.shard0.shardName] = st.rs0;
@@ -41,19 +43,50 @@ let getAllShardIdsFromExpectedChunks = (expectedChunks) => {
     return shardIds;
 };
 
-let verifyTemporaryReshardingChunksMatchExpected = (expectedChunks) => {
+let verifyTemporaryReshardingChunksMatchExpected = (numExpectedChunks, presetExpectedChunks) => {
     const tempReshardingCollNs =
         kDbName + '.' + constructTemporaryReshardingCollName(kDbName, collName);
     const tempReshardingChunks = mongosConfig.chunks.find({ns: tempReshardingCollNs}).toArray();
 
-    expectedChunks.sort();
+    if (presetExpectedChunks) {
+        presetExpectedChunks.sort();
+    }
+
     tempReshardingChunks.sort();
 
-    assert.eq(expectedChunks.size, tempReshardingChunks.size);
-    for (let i = 0; i < expectedChunks.size; i++) {
-        assert.eq(expectedChunks[i].recipientShardId, tempReshardingChunks[i].shard);
-        assert.eq(expectedChunks[i].min, tempReshardingChunks[i].min);
-        assert.eq(expectedChunks[i].max, tempReshardingChunks[i].max);
+    assert.eq(numExpectedChunks, tempReshardingChunks.length);
+
+    let shardChunkCounts = {};
+    let shardChunkCountsIncrement = key => {
+        if (shardChunkCounts.hasOwnProperty(key)) {
+            shardChunkCounts[key]++;
+        } else {
+            shardChunkCounts[key] = 1;
+        }
+    };
+
+    for (let i = 0; i < numExpectedChunks; i++) {
+        shardChunkCountsIncrement(tempReshardingChunks[i].shard);
+
+        if (presetExpectedChunks) {
+            assert.eq(presetExpectedChunks[i].recipientShardId, tempReshardingChunks[i].shard);
+            assert.eq(presetExpectedChunks[i].min, tempReshardingChunks[i].min);
+            assert.eq(presetExpectedChunks[i].max, tempReshardingChunks[i].max);
+        }
+    }
+
+    // if presetChunks not specified, do not match exactly partition boundaries.
+    // assert chunks counts balanced across shards
+    if (!presetExpectedChunks) {
+        let maxDiff = 0;
+        let shards = Object.keys(shardChunkCounts);
+        for (let i = 0; i < shards.length; i++) {
+            for (let j = 0; j < shards.length; j++) {
+                let diff = Math.max(shards[i], shards[j]) - Math.min(shards[i], shards[j]);
+                maxDiff = (diff > maxDiff) ? diff : maxDiff;
+            }
+        }
+        assert.lte(maxDiff, 1);
     }
 };
 
@@ -83,7 +116,7 @@ let verifyTemporaryReshardingCollectionExistsWithCorrectOptions = (expectedRecip
 
 let removeAllReshardingCollections = () => {
     const tempReshardingCollName = constructTemporaryReshardingCollName(kDbName, collName);
-    mongos.getDB(kDbName).foo.drop();
+    mongos.getDB(kDbName).getCollection(collName).drop();
     mongos.getDB(kDbName)[tempReshardingCollName].drop();
     mongosConfig.reshardingOperations.remove({nss: ns});
     mongosConfig.collections.remove({reshardingFields: {$exists: true}});
@@ -94,62 +127,82 @@ let removeAllReshardingCollections = () => {
 };
 
 let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
+    let numInitialChunks = commandObj['numInitialChunks'] || numShards;
+
     assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
 
-    if (presetReshardedChunks) {
+    if (presetReshardedChunks)
         commandObj._presetReshardedChunks = presetReshardedChunks;
-    } else {
-        assert.eq(commandObj._presetReshardedChunks, null);
-        const configChunksArray = mongosConfig.chunks.find({'ns': ns});
-        presetReshardedChunks = [];
-        configChunksArray.forEach(chunk => {
-            presetReshardedChunks.push(
-                {recipientShardId: chunk.shard, min: chunk.min, max: chunk.max});
-        });
-    }
-
     assert.commandWorked(mongos.adminCommand(commandObj));
 
-    verifyTemporaryReshardingCollectionExistsWithCorrectOptions(
-        getAllShardIdsFromExpectedChunks(presetReshardedChunks));
-    verifyTemporaryReshardingChunksMatchExpected(presetReshardedChunks);
-
-    removeAllReshardingCollections();
+    if (presetReshardedChunks) {
+        verifyTemporaryReshardingChunksMatchExpected(presetReshardedChunks.length,
+                                                     presetReshardedChunks);
+        verifyTemporaryReshardingCollectionExistsWithCorrectOptions(
+            getAllShardIdsFromExpectedChunks(presetReshardedChunks));
+    } else {
+        const configChunksArray = mongosConfig.chunks.find({'ns': ns});
+        verifyTemporaryReshardingChunksMatchExpected(numInitialChunks);
+    }
+	
+    resetPersistedData();
 };
 
 let presetReshardedChunks =
     [{recipientShardId: st.shard1.shardName, min: {_id: MinKey}, max: {_id: MaxKey}}];
 const existingZoneName = 'x1';
 
+let resetPersistedData = () => {
+    removeAllReshardingCollections();
+    
+    assert(mongos.getDB(kDbName)[collName].drop());
+    print(tojson(mongosConfig.adminCommand({find: 'tags'})));
+    insertData();
+}
+
+let insertData = (numDocs) => {
+    numDocs = numDocs || 1000;
+   	
+    let db = mongos.getDB(kDbName);
+    let bulk = db.getCollection(collName).initializeOrderedBulkOp();
+    Array.from(Array(numDocs).keys()).map((i) => {
+        bulk.insert({_id: i});
+    });
+    assert.commandWorked(bulk.execute());
+
+    assert.commandWorked(st.s.adminCommand({shardCollection: ns, key: {_id: 1}}));
+    assert.commandWorked(st.s.adminCommand({split: ns, middle: {_id: numDocs / 2}}));
+};
+
 /**
  * Fail cases
  */
 
-// Fail if sharding is disabled.
+jsTest.log("Fail if sharding is disabled.");
 assert.commandFailedWithCode(mongos.adminCommand({reshardCollection: ns, key: {_id: 1}}),
                              ErrorCodes.NamespaceNotFound);
 
 assert.commandWorked(mongos.adminCommand({enableSharding: kDbName}));
 
-// Fail if collection is unsharded.
+jsTest.log("Fail if collection is unsharded.");
 assert.commandFailedWithCode(mongos.adminCommand({reshardCollection: ns, key: {_id: 1}}),
                              ErrorCodes.NamespaceNotSharded);
 
 assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
 
-// Fail if missing required key.
+jsTest.log("Fail if missing required key.");
 assert.commandFailedWithCode(mongos.adminCommand({reshardCollection: ns}), 40414);
 
-// Fail if unique is specified and is true.
+jsTest.log("Fail if unique is specified and is true.");
 assert.commandFailedWithCode(
     mongos.adminCommand({reshardCollection: ns, key: {_id: 1}, unique: true}), ErrorCodes.BadValue);
 
-// Fail if collation is specified and is not {locale: 'simple'}.
+jsTest.log("Fail if collation is specified and is not {locale: 'simple'}.");
 assert.commandFailedWithCode(
     mongos.adminCommand({reshardCollection: ns, key: {_id: 1}, collation: {locale: 'en_US'}}),
     ErrorCodes.BadValue);
 
-// Fail if both numInitialChunks and _presetReshardedChunks are provided.
+jsTest.log("Fail if both numInitialChunks and _presetReshardedChunks are provided.");
 assert.commandFailedWithCode(mongos.adminCommand({
     reshardCollection: ns,
     key: {_id: 1},
@@ -160,7 +213,8 @@ assert.commandFailedWithCode(mongos.adminCommand({
 }),
                              ErrorCodes.BadValue);
 
-// Fail if authoritative tags exist in config.tags collection and zones are not provided.
+jsTest.log(
+    "Fail if authoritative tags exist in config.tags collection and zones are not provided.");
 assert.commandWorked(
     st.s.adminCommand({addShardToZone: st.shard1.shardName, zone: existingZoneName}));
 assert.commandWorked(st.s.adminCommand(
@@ -175,8 +229,8 @@ assert.commandFailedWithCode(mongos.adminCommand({
 }),
                              ErrorCodes.BadValue);
 
-// Fail if authoritative tags exist in config.tags collection and zones are provided and use a name
-// which does not exist in authoritative tags.
+jsTest.log(
+    "Fail if authoritative tags exist in config.tags collection and zones are provided and use a name which does not exist in authoritative tags.");
 assert.commandFailedWithCode(mongos.adminCommand({
     reshardCollection: ns,
     key: {_id: 1},
@@ -190,20 +244,20 @@ assert.commandFailedWithCode(mongos.adminCommand({
 /**
  * Success cases
  */
+resetPersistedData();
 
-removeAllReshardingCollections();
-
-// Succeed when correct locale is provided.
+jsTest.log("Succeed when correct locale is provided.");
 assertSuccessfulReshardCollection(
     {reshardCollection: ns, key: {_id: 1}, collation: {locale: 'simple'}});
 
-// Succeed base case.
+jsTest.log("Succeed base case.");
 assertSuccessfulReshardCollection({reshardCollection: ns, key: {_id: 1}});
 
-// Succeed if unique is specified and is false.
+jsTest.log("Succeed if unique is specified and is false.");
 assertSuccessfulReshardCollection({reshardCollection: ns, key: {_id: 1}, unique: false});
 
-// Succeed if _presetReshardedChunks is provided and test commands are enabled (default).
+jsTest.log(
+    "Succeed if _presetReshardedChunks is provided and test commands are enabled (default).");
 assertSuccessfulReshardCollection({reshardCollection: ns, key: {_id: 1}}, presetReshardedChunks);
 
 presetReshardedChunks = [
@@ -211,7 +265,7 @@ presetReshardedChunks = [
     {recipientShardId: st.shard1.shardName, min: {_id: 0}, max: {_id: MaxKey}}
 ];
 
-// Succeed if all optional fields and numInitialChunks are provided with correct values.
+jsTest.log("Succeed if all optional fields and numInitialChunks are provided with correct values.");
 assertSuccessfulReshardCollection({
     reshardCollection: ns,
     key: {_id: 1},
@@ -220,14 +274,14 @@ assertSuccessfulReshardCollection({
     numInitialChunks: 2,
 });
 
-// Succeed if all optional fields and _presetReshardedChunks are provided with correct values and
-// test commands are enabled (default).
+jsTest.log(
+    "Succeed if all optional fields and _presetReshardedChunks are provided with correct values and test commands are enabled (default).");
 assertSuccessfulReshardCollection(
     {reshardCollection: ns, key: {_id: 1}, unique: false, collation: {locale: 'simple'}},
     presetReshardedChunks);
 
-// Succeed if authoritative tags exist in config.tags collection and zones are provided and use an
-// existing zone's name.
+jsTest.log(
+    "Succeed if authoritative tags exist in config.tags collection and zones are provided and use an existing zone's name.");
 assertSuccessfulReshardCollection({
     reshardCollection: ns,
     key: {_id: 1},
