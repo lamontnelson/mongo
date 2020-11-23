@@ -67,8 +67,6 @@ public:
         using InvocationBase::InvocationBase;
 
         void typedRun(OperationContext* opCtx) {
-	    try {
-	    LOGV2_DEBUG(1234567, 0, "xxx start ConfigsvrReshardCollection");
             uassert(ErrorCodes::IllegalOperation,
                     "_configsvrReshardCollection can only be run on config servers",
                     serverGlobalParams.clusterRole == ClusterRole::ConfigServer);
@@ -80,13 +78,14 @@ public:
                 repl::ReadConcernArgs(repl::ReadConcernLevel::kLocalReadConcern);
 
             const NamespaceString& nss = ns();
+            const auto& cmdRequest = request();
 
             uassert(ErrorCodes::BadValue,
                     "The unique field must be false",
-                    !request().getUnique().get_value_or(false));
+                    !cmdRequest.getUnique().get_value_or(false));
 
-            if (request().getCollation()) {
-                auto& collation = request().getCollation().get();
+            if (cmdRequest.getCollation()) {
+                auto& collation = cmdRequest.getCollation().get();
                 auto collator =
                     uassertStatusOK(CollatorFactoryInterface::get(opCtx->getServiceContext())
                                         ->makeFromBSON(collation));
@@ -97,23 +96,24 @@ public:
                         !collator);
             }
 
+
             std::vector<TagsType> newZones;
             const auto& authoritativeTags = uassertStatusOK(
                 Grid::get(opCtx)->catalogClient()->getTagsForCollection(opCtx, nss));
             if (!authoritativeTags.empty()) {
                 uassert(ErrorCodes::BadValue,
                         "Must specify value for zones field",
-                        request().getZones());
-                validateZones(request().getZones().get(), authoritativeTags);
-                newZones = convertZones(request().getZones().get());
+                        cmdRequest.getZones());
+                validateZones(cmdRequest.getZones().get(), authoritativeTags);
+                newZones = convertZones(cmdRequest.getZones().get());
             }
 
             const auto cm = uassertStatusOK(
                 Grid::get(opCtx)->catalogCache()->getShardedCollectionRoutingInfoWithRefresh(opCtx,
                                                                                              nss));
 
-            bool presetReshardedChunksSpecified = bool(request().get_presetReshardedChunks());
-	    bool numInitialChunksSpecified = bool(request().getNumInitialChunks());
+            bool presetReshardedChunksSpecified = bool(cmdRequest.get_presetReshardedChunks());
+            bool numInitialChunksSpecified = bool(cmdRequest.getNumInitialChunks());
 
             uassert(ErrorCodes::BadValue,
                     "Test commands must be enabled when a value is provided for field: "
@@ -132,12 +132,12 @@ public:
             std::vector<ChunkType> initialChunks;
             ChunkVersion version(1, 0, OID::gen());
 
-            const auto shardKey = ShardKeyPattern(request().getKey());
+            const auto shardKey = ShardKeyPattern(cmdRequest.getKey());
             const auto existingUUID = getCollectionUUIDFromChunkManger(nss, cm);
             auto tempReshardingNss = constructTemporaryReshardingNss(nss.db(), existingUUID);
 
             if (presetReshardedChunksSpecified) {
-                const auto chunks = request().get_presetReshardedChunks().get();
+                const auto chunks = cmdRequest.get_presetReshardedChunks().get();
                 validateAndGetReshardedChunks(chunks, opCtx, shardKey.getKeyPattern());
                 numInitialChunks = chunks.size();
 
@@ -157,22 +157,21 @@ public:
                     version.incMinor();
                 }
             } else {
-	    	LOGV2_DEBUG(1234569, 0, "xxx in code");
-                const auto& collation = request().getCollation().get();
+                const auto& collation =
+                    cmdRequest.getCollation() ? cmdRequest.getCollation().get() : BSONObj();
 
-		invariant(donorShardIds.size());
-		recipientShardIds = donorShardIds;
-                const std::vector<ShardId> rsIds(recipientShardIds.begin(),
-                                                 recipientShardIds.end());
-
-                const SplitPolicyParams splitPolicyParams{nss, *rsIds.begin()};
+                invariant(donorShardIds.size());
 		
-		invariant(request().getNumInitialChunks());
-                numInitialChunks = *request().getNumInitialChunks();
+                std::vector<ShardId> rsIds;
+		Grid::get(opCtx)->shardRegistry()->getAllShardIds(opCtx, &rsIds);		
 
-	    	LOGV2_DEBUG(1234568, 0, "xxx ReshardingSplitPolicy::make");
+                numInitialChunks =
+                    (numInitialChunksSpecified) ? *cmdRequest.getNumInitialChunks() : rsIds.size();
+
                 auto reshardPolicy = ReshardingSplitPolicy::make(
                     opCtx, nss, shardKey, numInitialChunks, rsIds, collation, existingUUID);
+
+                const SplitPolicyParams splitPolicyParams{tempReshardingNss, *rsIds.begin()};
                 auto shardCollectionConfig =
                     reshardPolicy.createFirstChunks(opCtx, shardKey, splitPolicyParams);
 
@@ -209,7 +208,8 @@ public:
             // Generate the resharding metadata for the ReshardingCoordinatorDocument.
             auto reshardingUUID = UUID::gen();
             auto commonMetadata = CommonReshardingMetadata(
-                std::move(reshardingUUID), ns(), std::move(existingUUID), request().getKey());
+                std::move(reshardingUUID), ns(), std::move(existingUUID), cmdRequest.getKey());
+
             coordinatorDoc.setCommonReshardingMetadata(std::move(commonMetadata));
 
             auto registry = repl::PrimaryOnlyServiceRegistry::get(opCtx->getServiceContext());
@@ -226,10 +226,6 @@ public:
 
             instance->interrupt(
                 {ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
-	    } 
-	    catch (const DBException& e) {
-		    LOGV2_DEBUG(1234570, 0, "xxx exception", "ex"_attr=e);
-	    }
         }
 
     private:
