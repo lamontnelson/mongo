@@ -159,14 +159,12 @@ let resetPersistedData = () => {
     removeAllReshardingCollections();
     
     assert(mongos.getDB(kDbName)[collName].drop());
-    print(tojson(mongosConfig.adminCommand({find: 'tags'})));
     insertData();
 }
 
 let insertData = (numDocs) => {
     numDocs = numDocs || 1000;
    	
-    let db = mongos.getDB(kDbName);
     let bulk = db.getCollection(collName).initializeOrderedBulkOp();
     Array.from(Array(numDocs).keys()).map((i) => {
         bulk.insert({_id: i});
