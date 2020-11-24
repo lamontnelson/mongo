@@ -130,8 +130,11 @@ public:
 
             if (auto serviceInstance = ReshardingCoordinatorService::ReshardingCoordinator::lookup(
                     opCtx, getCoordinatorService(opCtx), reshardingUUID.toBSON())) {
+                // resume previously persisted operation
                 _finishOperation(opCtx, *serviceInstance);
+
             } else {
+                // start new operation
                 std::set<ShardId> donorShardIds;
                 cm.getAllShardIds(&donorShardIds);
 
@@ -234,8 +237,9 @@ public:
             _finishOperation(opCtx, instance);
         }
 
-        void _finishOperation(OperationContext* opCtx,
-                              const std::shared_ptr<ReshardingCoordinatorService::ReshardingCoordinator>& instance) {
+        void _finishOperation(
+            OperationContext* opCtx,
+            const std::shared_ptr<ReshardingCoordinatorService::ReshardingCoordinator>& instance) {
             instance->getObserver()->awaitAllDonorsReadyToDonate().wait(opCtx);
             // This promise is currently automatically filled by recipient shards after creating
             // the temporary resharding collection.
