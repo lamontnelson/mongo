@@ -51,6 +51,7 @@ public:
         void typedRun(OperationContext* opCtx) {
             const NamespaceString& nss = ns();
             ConfigsvrReshardCollection configsvrReshardCollection(nss, request().getKey());
+	    configsvrReshardCollection.setReshardUUID(UUID::gen());
             configsvrReshardCollection.setDbName(request().getDbName());
             configsvrReshardCollection.setUnique(request().getUnique());
             configsvrReshardCollection.setCollation(request().getCollation());

@@ -75,6 +75,11 @@ commands:
     namespace: type
     type: namespacestring
     fields:
+      reshardUUID:
+        type: uuid
+        optional: true
+        description: >-
+          "Unique id for this resharding request."
       key:
         type: object
         description: "The index specification document to use as the new shard key."
