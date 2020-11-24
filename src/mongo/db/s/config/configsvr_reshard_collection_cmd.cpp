@@ -73,13 +73,13 @@ public:
             uassert(ErrorCodes::InvalidOptions,
                     "_configsvrReshardCollection must be called with majority writeConcern",
                     opCtx->getWriteConcern().wMode == WriteConcernOptions::kMajority);
-            
-	    const auto& cmdRequest = request();
+
+            const auto& cmdRequest = request();
 
             uassert(ErrorCodes::BadValue,
                     "resharding operation UUID must be provided",
                     cmdRequest.getReshardUUID());
-	    uassert(ErrorCodes::BadValue,
+            uassert(ErrorCodes::BadValue,
                     "The unique field must be false",
                     !cmdRequest.getUnique().get_value_or(false));
 
@@ -125,111 +125,117 @@ public:
             uassert(ErrorCodes::BadValue,
                     "Must specify only one of _presetReshardedChunks or numInitialChunks",
                     !(presetReshardedChunksSpecified && numInitialChunksSpecified));
-            
-	auto reshardingUUID = *cmdRequest.getReshardUUID(); 
 
-	if (auto serviceInstance = ReshardingCoordinatorService::ReshardingCoordinator::lookup(opCtx, getCoordinatorService(opCtx), reshardingUUID.toBSON())) {
-	   _finishOperation(opCtx, (*serviceInstance).get());
-	} else {
-            std::set<ShardId> donorShardIds;
-            cm.getAllShardIds(&donorShardIds);
+            auto reshardingUUID = *cmdRequest.getReshardUUID();
 
-            long int numInitialChunks;
-            std::set<ShardId> recipientShardIds;
-            std::vector<ChunkType> initialChunks;
-            ChunkVersion version(1, 0, OID::gen());
-	
-            const auto shardKey = ShardKeyPattern(cmdRequest.getKey());
-            const auto existingUUID = getCollectionUUIDFromChunkManger(nss, cm);
-            auto tempReshardingNss = constructTemporaryReshardingNss(nss.db(), existingUUID);
-	
-            if (presetReshardedChunksSpecified) {
-                const auto chunks = cmdRequest.get_presetReshardedChunks().get();
-                validateAndGetReshardedChunks(chunks, opCtx, shardKey.getKeyPattern());
-                numInitialChunks = chunks.size();
-
-                // Use the provided shardIds from presetReshardedChunks to construct the
-                // recipient list.
-                for (const BSONObj& obj : chunks) {
-                    recipientShardIds.emplace(
-                        obj.getStringField(ReshardedChunk::kRecipientShardIdFieldName));
-
-                    auto reshardedChunk =
-                        ReshardedChunk::parse(IDLParserErrorContext("ReshardedChunk"), obj);
-                    initialChunks.emplace_back(
-                        tempReshardingNss,
-                        ChunkRange{reshardedChunk.getMin(), reshardedChunk.getMax()},
-                        version,
-                        reshardedChunk.getRecipientShardId());
-                    version.incMinor();
-                }
+            if (auto serviceInstance = ReshardingCoordinatorService::ReshardingCoordinator::lookup(
+                    opCtx, getCoordinatorService(opCtx), reshardingUUID.toBSON())) {
+                _finishOperation(opCtx, (*serviceInstance).get());
             } else {
-                const auto& collation =
-                    cmdRequest.getCollation() ? cmdRequest.getCollation().get() : BSONObj();
+                std::set<ShardId> donorShardIds;
+                cm.getAllShardIds(&donorShardIds);
 
-                invariant(donorShardIds.size());
+                long int numInitialChunks;
+                std::set<ShardId> recipientShardIds;
+                std::vector<ChunkType> initialChunks;
+                ChunkVersion version(1, 0, OID::gen());
 
-                std::vector<ShardId> rsIds;
-                Grid::get(opCtx)->shardRegistry()->getAllShardIds(opCtx, &rsIds);
+                const auto shardKey = ShardKeyPattern(cmdRequest.getKey());
+                const auto existingUUID = getCollectionUUIDFromChunkManger(nss, cm);
+                auto tempReshardingNss = constructTemporaryReshardingNss(nss.db(), existingUUID);
 
-                numInitialChunks =
-                    (numInitialChunksSpecified) ? *cmdRequest.getNumInitialChunks() : rsIds.size();
+                if (presetReshardedChunksSpecified) {
+                    const auto chunks = cmdRequest.get_presetReshardedChunks().get();
+                    validateAndGetReshardedChunks(chunks, opCtx, shardKey.getKeyPattern());
+                    numInitialChunks = chunks.size();
 
-                auto reshardPolicy = ReshardingSplitPolicy::make(
-                    opCtx, nss, shardKey, numInitialChunks, rsIds, collation, existingUUID);
+                    // Use the provided shardIds from presetReshardedChunks to construct the
+                    // recipient list.
+                    for (const BSONObj& obj : chunks) {
+                        recipientShardIds.emplace(
+                            obj.getStringField(ReshardedChunk::kRecipientShardIdFieldName));
 
-                const SplitPolicyParams splitPolicyParams{tempReshardingNss, *rsIds.begin()};
-                auto shardCollectionConfig =
-                    reshardPolicy.createFirstChunks(opCtx, shardKey, splitPolicyParams);
+                        auto reshardedChunk =
+                            ReshardedChunk::parse(IDLParserErrorContext("ReshardedChunk"), obj);
+                        initialChunks.emplace_back(
+                            tempReshardingNss,
+                            ChunkRange{reshardedChunk.getMin(), reshardedChunk.getMax()},
+                            version,
+                            reshardedChunk.getRecipientShardId());
+                        version.incMinor();
+                    }
+                } else {
+                    const auto& collation =
+                        cmdRequest.getCollation() ? cmdRequest.getCollation().get() : BSONObj();
 
-                initialChunks = std::move(shardCollectionConfig.chunks);
+                    invariant(donorShardIds.size());
+
+                    std::vector<ShardId> rsIds;
+                    Grid::get(opCtx)->shardRegistry()->getAllShardIds(opCtx, &rsIds);
+
+                    numInitialChunks = (numInitialChunksSpecified)
+                        ? *cmdRequest.getNumInitialChunks()
+                        : rsIds.size();
+
+                    auto reshardPolicy = ReshardingSplitPolicy::make(
+                        opCtx, nss, shardKey, numInitialChunks, rsIds, collation, existingUUID);
+
+                    const SplitPolicyParams splitPolicyParams{tempReshardingNss, *rsIds.begin()};
+                    auto shardCollectionConfig =
+                        reshardPolicy.createFirstChunks(opCtx, shardKey, splitPolicyParams);
+
+                    initialChunks = std::move(shardCollectionConfig.chunks);
+                }
+
+                // Construct the lists of donor and recipient shard entries, where each ShardEntry
+                // is in state kUnused.
+                std::vector<DonorShardEntry> donorShards;
+                std::transform(donorShardIds.begin(),
+                               donorShardIds.end(),
+                               std::back_inserter(donorShards),
+                               [](const ShardId& shardId) -> DonorShardEntry {
+                                   DonorShardEntry entry{shardId};
+                                   entry.setState(DonorStateEnum::kUnused);
+                                   return entry;
+                               });
+                std::vector<RecipientShardEntry> recipientShards;
+                std::transform(recipientShardIds.begin(),
+                               recipientShardIds.end(),
+                               std::back_inserter(recipientShards),
+                               [](const ShardId& shardId) -> RecipientShardEntry {
+                                   RecipientShardEntry entry{shardId};
+                                   entry.setState(RecipientStateEnum::kUnused);
+                                   return entry;
+                               });
+
+                auto coordinatorDoc =
+                    ReshardingCoordinatorDocument(std::move(tempReshardingNss),
+                                                  std::move(CoordinatorStateEnum::kInitializing),
+                                                  std::move(donorShards),
+                                                  std::move(recipientShards));
+
+                // Generate the resharding metadata for the ReshardingCoordinatorDocument.
+                auto commonMetadata = CommonReshardingMetadata(
+                    std::move(reshardingUUID), ns(), std::move(existingUUID), cmdRequest.getKey());
+
+                coordinatorDoc.setCommonReshardingMetadata(std::move(commonMetadata));
+                _initialOperation(opCtx, coordinatorDoc, initialChunks, newZones);
             }
+        }
 
-            // Construct the lists of donor and recipient shard entries, where each ShardEntry is
-            // in state kUnused.
-            std::vector<DonorShardEntry> donorShards;
-            std::transform(donorShardIds.begin(),
-                           donorShardIds.end(),
-                           std::back_inserter(donorShards),
-                           [](const ShardId& shardId) -> DonorShardEntry {
-                               DonorShardEntry entry{shardId};
-                               entry.setState(DonorStateEnum::kUnused);
-                               return entry;
-                           });
-            std::vector<RecipientShardEntry> recipientShards;
-            std::transform(recipientShardIds.begin(),
-                           recipientShardIds.end(),
-                           std::back_inserter(recipientShards),
-                           [](const ShardId& shardId) -> RecipientShardEntry {
-                               RecipientShardEntry entry{shardId};
-                               entry.setState(RecipientStateEnum::kUnused);
-                               return entry;
-                           });
-
-            auto coordinatorDoc =
-                ReshardingCoordinatorDocument(std::move(tempReshardingNss),
-                                              std::move(CoordinatorStateEnum::kInitializing),
-                                              std::move(donorShards),
-                                              std::move(recipientShards));
-
-            // Generate the resharding metadata for the ReshardingCoordinatorDocument.
-            auto commonMetadata = CommonReshardingMetadata(
-                std::move(reshardingUUID), ns(), std::move(existingUUID), cmdRequest.getKey());
-
-            coordinatorDoc.setCommonReshardingMetadata(std::move(commonMetadata));
-	    _initialOperation(opCtx, coordinatorDoc, initialChunks, newZones);
-	}
-	}
-	
-	void _initialOperation(OperationContext* opCtx, const ReshardingCoordinatorDocument& coordinatorDoc, std::vector<ChunkType> initialChunks, std::vector<TagsType> newZones) {
+        void _initialOperation(OperationContext* opCtx,
+                               const ReshardingCoordinatorDocument& coordinatorDoc,
+                               std::vector<ChunkType> initialChunks,
+                               std::vector<TagsType> newZones) {
             auto instance = ReshardingCoordinatorService::ReshardingCoordinator::getOrCreate(
                 opCtx, getCoordinatorService(opCtx), coordinatorDoc.toBSON());
-			    
-            instance->setInitialChunksAndZones(std::move(initialChunks), std::move(newZones));
-	    _finishOperation(opCtx, instance.get());
-	}
 
-	void _finishOperation(OperationContext* opCtx, ReshardingCoordinatorService::ReshardingCoordinator* instance) {
+            instance->setInitialChunksAndZones(std::move(initialChunks), std::move(newZones));
+            _finishOperation(opCtx, instance.get());
+        }
+
+        void _finishOperation(OperationContext* opCtx,
+                              ReshardingCoordinatorService::ReshardingCoordinator* instance) {
             instance->getObserver()->awaitAllDonorsReadyToDonate().wait(opCtx);
             // This promise is currently automatically filled by recipient shards after creating
             // the temporary resharding collection.
@@ -247,11 +253,11 @@ public:
         bool supportsWriteConcern() const override {
             return true;
         }
-	
-	repl::PrimaryOnlyService* getCoordinatorService(OperationContext* opCtx) {
+
+        repl::PrimaryOnlyService* getCoordinatorService(OperationContext* opCtx) {
             auto registry = repl::PrimaryOnlyServiceRegistry::get(opCtx->getServiceContext());
             return registry->lookupServiceByName(kReshardingCoordinatorServiceName);
-	}
+        }
 
         void doCheckAuthorization(OperationContext* opCtx) const override {
             uassert(ErrorCodes::Unauthorized,
