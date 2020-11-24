@@ -758,10 +758,9 @@ ReshardingSplitPolicy::createChunksFromPresetReshardedChunks(
     OperationContext* opCtx, const NamespaceString& nss, std::vector<ReshardedChunk> presetChunks) {
     std::vector<ChunkType> chunks;
     ChunkVersion version(1, 0, OID::gen());
+
+    auto currentTime = VectorClock::get(opCtx)->getTime();
     for (auto&& chunk : presetChunks) {
-        // TODO: do we need to get new cluster time each time? ie does appendChunk change cluster
-        // time?
-        auto currentTime = VectorClock::get(opCtx)->getTime();
         appendChunk(nss,
                     chunk.getMin(),
                     chunk.getMax(),
