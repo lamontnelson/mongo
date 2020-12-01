@@ -105,6 +105,8 @@ public:
 
     void interrupt(Status status) override;
 
+    SharedSemiFuture<void> getInitializedFuture();
+
     /**
      * Returns a Future that will be resolved when all work associated with this Instance has
      * completed running.
@@ -246,6 +248,8 @@ private:
     // not a part of the state document, so must be set by configsvrReshardCollection after
     // construction.
     SharedPromise<ChunksAndZones> _initialChunksAndZonesPromise;
+
+    SharedPromise<void> _initializedPromise;
 
     // Promise that is resolved when the chain of work kicked off by run() has completed.
     SharedPromise<void> _completionPromise;

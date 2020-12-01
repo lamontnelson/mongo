@@ -17,8 +17,10 @@ const kDbName = 'db';
 const collName = 'foo';
 const ns = kDbName + '.' + collName;
 const mongos = st.s0;
+const config = st.config0;
 const mongosConfig = mongos.getDB('config');
 const db = mongos.getDB(kDbName);
+const numDocs = 1000;
 
 let shardToRSMap = {};
 shardToRSMap[st.shard0.shardName] = st.rs0;
@@ -85,7 +87,8 @@ let verifyTemporaryReshardingChunksMatchExpected = (numExpectedChunks, presetExp
         let shards = Object.keys(shardChunkCounts);
         for (let i = 0; i < shards.length; i++) {
             for (let j = 0; j < shards.length; j++) {
-                let diff = Math.max(shards[i], shards[j]) - Math.min(shards[i], shards[j]);
+                let diff =
+                    Math.abs(Math.max(shards[i], shards[j]) - Math.min(shards[i], shards[j]));
                 maxDiff = (diff > maxDiff) ? diff : maxDiff;
             }
         }
@@ -120,9 +123,11 @@ let verifyTemporaryReshardingCollectionExistsWithCorrectOptions = (expectedRecip
 let removeAllReshardingCollections = () => {
     const tempReshardingCollName = constructTemporaryReshardingCollName(kDbName, collName);
     mongos.getDB(kDbName).getCollection(collName).drop();
-    mongos.getDB(kDbName)[tempReshardingCollName].drop();
+    mongos.getDB(kDbName).getCollection(tempReshardingCollName).drop();
+    mongosConfig.chunks.remove({ns: ns});
     mongosConfig.reshardingOperations.remove({nss: ns});
     mongosConfig.collections.remove({reshardingFields: {$exists: true}});
+
     st.rs0.getPrimary().getDB('config').localReshardingOperations.donor.remove({nss: ns});
     st.rs0.getPrimary().getDB('config').localReshardingOperations.recipient.remove({nss: ns});
     st.rs1.getPrimary().getDB('config').localReshardingOperations.donor.remove({nss: ns});
@@ -130,9 +135,10 @@ let removeAllReshardingCollections = () => {
 };
 
 let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
-    let numInitialChunks = commandObj['numInitialChunks'] || numShards;
-
     assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
+    assert.commandWorked(st.s.adminCommand({split: ns, middle: {_id: numDocs / 2}}));
+
+    let numInitialChunks = commandObj['numInitialChunks'] || numShards;
 
     if (presetReshardedChunks)
         commandObj._presetReshardedChunks = presetReshardedChunks;
@@ -158,22 +164,15 @@ const existingZoneName = 'x1';
 let resetPersistedData =
     () => {
         removeAllReshardingCollections();
-
-        assert(mongos.getDB(kDbName)[collName].drop());
         insertData();
     }
 
 let insertData = (numDocs) => {
-    numDocs = numDocs || 1000;
-
     let bulk = db.getCollection(collName).initializeOrderedBulkOp();
     Array.from(Array(numDocs).keys()).map((i) => {
         bulk.insert({_id: i});
     });
     assert.commandWorked(bulk.execute());
-
-    assert.commandWorked(st.s.adminCommand({shardCollection: ns, key: {_id: 1}}));
-    assert.commandWorked(st.s.adminCommand({split: ns, middle: {_id: numDocs / 2}}));
 };
 
 /**

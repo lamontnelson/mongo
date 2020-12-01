@@ -52,6 +52,7 @@
 
 namespace mongo {
 namespace {
+MONGO_FAIL_POINT_DEFINE(reshardFailWithRetryableAfterInitialPersist);
 
 BatchedCommandRequest buildInsertOp(const NamespaceString& nss, std::vector<BSONObj> docs) {
     BatchedCommandRequest request([&] {
@@ -676,13 +677,21 @@ SemiFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::run(
                 opCtx.get(), donorIds, _coordinatorDoc.getTempReshardingNss(), **executor);
         })
         .then([this, executor] { _tellAllDonorsToRefresh(executor); })
-        .then([this, executor] { return _awaitAllDonorsReadyToDonate(executor); })
+        .then([this, executor] {
+            return _awaitAllDonorsReadyToDonate(executor);
+        })
         .then([this, executor] { _tellAllRecipientsToRefresh(executor); })
-        .then([this, executor] { return _awaitAllRecipientsFinishedCloning(executor); })
+        .then([this, executor] {
+            return _awaitAllRecipientsFinishedCloning(executor);
+        })
         .then([this, executor] { _tellAllDonorsToRefresh(executor); })
-        .then([this, executor] { return _awaitAllRecipientsFinishedApplying(executor); })
+        .then([this, executor] {
+            return _awaitAllRecipientsFinishedApplying(executor);
+        })
         .then([this, executor] { _tellAllDonorsToRefresh(executor); })
-        .then([this, executor] { return _awaitAllRecipientsInStrictConsistency(executor); })
+        .then([this, executor] {
+            return _awaitAllRecipientsInStrictConsistency(executor);
+        })
         .then([this](const ReshardingCoordinatorDocument& updatedCoordinatorDoc) {
             return _commit(updatedCoordinatorDoc);
         })
@@ -699,33 +708,44 @@ SemiFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::run(
         .then([this, executor] {
             return _awaitAllParticipantShardsRenamedOrDroppedOriginalCollection(executor);
         })
-        .onError([this, executor](Status status) {
+        .onError([this, executor, token](Status status) -> SemiFuture<void> {
             stdx::lock_guard<Latch> lg(_mutex);
             if (_completionPromise.getFuture().isReady()) {
                 // interrupt() was called before we got here.
                 return status;
             }
 
-            _updateCoordinatorDocStateAndCatalogEntries(CoordinatorStateEnum::kError,
-                                                        _coordinatorDoc);
+            if (!ErrorCodes::isRetriableError(status.code())) {
+                _updateCoordinatorDocStateAndCatalogEntries(CoordinatorStateEnum::kError,
+                                                            _coordinatorDoc);
 
-            LOGV2(4956902,
-                  "Resharding failed",
-                  "namespace"_attr = _coordinatorDoc.getNss().ns(),
-                  "newShardKeyPattern"_attr = _coordinatorDoc.getReshardingKey(),
-                  "error"_attr = status);
+                LOGV2(4956902,
+                      "Resharding failed",
+                      "namespace"_attr = _coordinatorDoc.getNss().ns(),
+                      "newShardKeyPattern"_attr = _coordinatorDoc.getReshardingKey(),
+                      "error"_attr = status);
 
-            // TODO wait for donors and recipients to abort the operation and clean up state
-            _tellAllRecipientsToRefresh(executor);
-            _tellAllParticipantsToRefresh(executor);
+                // TODO wait for donors and recipients to abort the operation and clean up state
+                _tellAllRecipientsToRefresh(executor);
+                _tellAllParticipantsToRefresh(executor);
+
+            } else {
+                LOGV2(4952603,
+                      "Resharding failed with retryable error",
+                      "namespace"_attr = _coordinatorDoc.getNss().ns(),
+                      "newShardKeyPattern"_attr = _coordinatorDoc.getReshardingKey(),
+                      "error"_attr = status);
+            }
 
             return status;
         })
         .onCompletion([this](Status status) {
-            stdx::lock_guard<Latch> lg(_mutex);
-            if (_completionPromise.getFuture().isReady()) {
-                // interrupt() was called before we got here.
-                return;
+            {
+                stdx::lock_guard<Latch> lg(_mutex);
+                if (_completionPromise.getFuture().isReady()) {
+                    // interrupt() was called before we got here.
+                    return;
+                }
             }
 
             if (status.isOK()) {
@@ -771,12 +791,13 @@ ReshardingCoordinatorService::ReshardingCoordinator::getObserver() {
 ExecutorFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::_init(
     const std::shared_ptr<executor::ScopedTaskExecutor>& executor) {
     if (_coordinatorDoc.getState() > CoordinatorStateEnum::kInitializing) {
+        _initializedPromise.emplaceValue();
         return ExecutorFuture<void>(**executor, Status::OK());
     }
 
     return _initialChunksAndZonesPromise.getFuture()
         .thenRunOn(**executor)
-        .then([this](ChunksAndZones initialChunksAndZones) {
+        .then([this, executor](ChunksAndZones initialChunksAndZones) {
             auto initialChunks = std::move(initialChunksAndZones.initialChunks);
             auto newZones = std::move(initialChunksAndZones.newZones);
 
@@ -788,10 +809,23 @@ ExecutorFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::_init(
             auto opCtx = cc().makeOperationContext();
             resharding::persistInitialStateAndCatalogUpdates(
                 opCtx.get(), updatedCoordinatorDoc, std::move(initialChunks), std::move(newZones));
-
             invariant(_coordinatorDoc.getState() == CoordinatorStateEnum::kInitializing);
             _coordinatorDoc = updatedCoordinatorDoc;
+
+            return Status::OK();
+        })
+        .onCompletion([this](Status status) {
+            if (status.isOK()) {
+                _initializedPromise.emplaceValue();
+            } else {
+                _initializedPromise.setError(status);
+            }
+            return status;
         });
+}
+
+SharedSemiFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::getInitializedFuture() {
+    return _initializedPromise.getFuture();
 }
 
 ExecutorFuture<void>

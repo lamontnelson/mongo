@@ -126,15 +126,16 @@ public:
                     "Must specify only one of _presetReshardedChunks or numInitialChunks",
                     !(presetReshardedChunksSpecified && numInitialChunksSpecified));
 
+            // TODO: this seems unnecessary
             auto reshardingUUID = *cmdRequest.getReshardUUID();
+            BSONObjBuilder lookupId;
+            reshardingUUID.appendToBuilder(&lookupId, "_id");
 
             if (auto serviceInstance = ReshardingCoordinatorService::ReshardingCoordinator::lookup(
-                    opCtx, getCoordinatorService(opCtx), reshardingUUID.toBSON())) {
-                // resume previously persisted operation
+                    opCtx, getCoordinatorService(opCtx), lookupId.obj())) {
                 _finishOperation(opCtx, *serviceInstance);
 
             } else {
-                // start new operation
                 std::set<ShardId> donorShardIds;
                 cm.getAllShardIds(&donorShardIds);
 
@@ -168,6 +169,7 @@ public:
                         version.incMinor();
                     }
                 } else {
+                    // Generate initial chunks from a random sample.
                     const auto& collation =
                         cmdRequest.getCollation() ? cmdRequest.getCollation().get() : BSONObj();
 
@@ -183,7 +185,7 @@ public:
                     auto reshardPolicy = ReshardingSplitPolicy::make(
                         opCtx, nss, shardKey, numInitialChunks, rsIds, collation, existingUUID);
 
-                    const SplitPolicyParams splitPolicyParams{tempReshardingNss, *rsIds.begin()};
+                    const SplitPolicyParams splitPolicyParams{tempReshardingNss, boost::none, rsIds.front()};
                     auto shardCollectionConfig =
                         reshardPolicy.createFirstChunks(opCtx, shardKey, splitPolicyParams);
 
@@ -232,18 +234,19 @@ public:
                                std::vector<TagsType> newZones) {
             auto instance = ReshardingCoordinatorService::ReshardingCoordinator::getOrCreate(
                 opCtx, getCoordinatorService(opCtx), coordinatorDoc.toBSON());
-
             instance->setInitialChunksAndZones(std::move(initialChunks), std::move(newZones));
+            instance->getInitializedFuture().get(opCtx);
             _finishOperation(opCtx, instance);
         }
 
         void _finishOperation(
             OperationContext* opCtx,
             const std::shared_ptr<ReshardingCoordinatorService::ReshardingCoordinator>& instance) {
-            instance->getObserver()->awaitAllDonorsReadyToDonate().wait(opCtx);
+            instance->getObserver()->awaitAllDonorsReadyToDonate().get(opCtx);
+
             // This promise is currently automatically filled by recipient shards after creating
             // the temporary resharding collection.
-            instance->getObserver()->awaitAllRecipientsFinishedApplying().wait(opCtx);
+            instance->getObserver()->awaitAllRecipientsFinishedApplying().get(opCtx);
 
             instance->interrupt(
                 {ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});

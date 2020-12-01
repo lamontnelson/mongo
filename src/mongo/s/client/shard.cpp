@@ -172,7 +172,8 @@ StatusWith<Shard::CommandResponse> Shard::runCommandWithFixedRetryAttempts(
                         "by {error}",
                         "Command failed with retryable error and will be retried",
                         "command"_attr = redact(cmdObj),
-                        "error"_attr = redact(status));
+                        "error"_attr = redact(status),
+                        "attempts"_attr = retry);
             continue;
         }
 

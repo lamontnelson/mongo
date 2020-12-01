@@ -310,11 +310,6 @@ public:
                                                   int numSplitPoints,
                                                   int samplingRatio);
 
-    static ShardCollectionConfig createChunksFromPresetReshardedChunks(
-        OperationContext* opCtx,
-        const NamespaceString& nss,
-        std::vector<ReshardedChunk> presetChunks);
-
 private:
     std::vector<BSONObj> _splitPoints;
     std::vector<ShardId> _recipientShardIds;

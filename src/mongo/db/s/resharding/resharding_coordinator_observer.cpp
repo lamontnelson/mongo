@@ -154,8 +154,8 @@ ReshardingCoordinatorObserver::~ReshardingCoordinatorObserver() {
 
 void ReshardingCoordinatorObserver::onReshardingParticipantTransition(
     const ReshardingCoordinatorDocument& updatedStateDoc) {
-
     stdx::lock_guard<Latch> lk(_mutex);
+    LOGV2_DEBUG(4952601, 1, "resharding participant transition", "state"_attr = updatedStateDoc);
 
     if (stateTransitionIncomplete(lk,
                                   _allDonorsReportedMinFetchTimestamp,

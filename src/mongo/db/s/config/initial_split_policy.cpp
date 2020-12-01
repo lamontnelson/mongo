@@ -752,25 +752,4 @@ InitialSplitPolicy::ShardCollectionConfig ReshardingSplitPolicy::createFirstChun
                         _splitPoints,
                         currentTime.clusterTime().asTimestamp());
 }
-
-InitialSplitPolicy::ShardCollectionConfig
-ReshardingSplitPolicy::createChunksFromPresetReshardedChunks(
-    OperationContext* opCtx, const NamespaceString& nss, std::vector<ReshardedChunk> presetChunks) {
-    std::vector<ChunkType> chunks;
-    ChunkVersion version(1, 0, OID::gen());
-
-    auto currentTime = VectorClock::get(opCtx)->getTime();
-    for (auto&& chunk : presetChunks) {
-        appendChunk(nss,
-                    chunk.getMin(),
-                    chunk.getMax(),
-                    &version,
-                    currentTime.clusterTime().asTimestamp(),
-                    chunk.getRecipientShardId(),
-                    &chunks);
-    }
-
-    return {chunks};
-}
-
 }  // namespace mongo
