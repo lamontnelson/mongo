@@ -105,13 +105,17 @@ public:
 
     void interrupt(Status status) override;
 
-    SharedSemiFuture<void> getInitializedFuture();
+    SharedSemiFuture<void> getInitializedFuture() const {
+        stdx::lock_guard<Latch> lg(_mutex);
+        return _initializedPromise.getFuture();
+    }
 
     /**
      * Returns a Future that will be resolved when all work associated with this Instance has
      * completed running.
      */
     SharedSemiFuture<void> getCompletionFuture() const {
+        stdx::lock_guard<Latch> lg(_mutex);
         return _completionPromise.getFuture();
     }
 
@@ -249,6 +253,7 @@ private:
     // construction.
     SharedPromise<ChunksAndZones> _initialChunksAndZonesPromise;
 
+    // Promise that is resolved after the initial coordinator document is written.
     SharedPromise<void> _initializedPromise;
 
     // Promise that is resolved when the chain of work kicked off by run() has completed.

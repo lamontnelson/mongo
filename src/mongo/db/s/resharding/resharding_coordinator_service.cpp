@@ -677,21 +677,13 @@ SemiFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::run(
                 opCtx.get(), donorIds, _coordinatorDoc.getTempReshardingNss(), **executor);
         })
         .then([this, executor] { _tellAllDonorsToRefresh(executor); })
-        .then([this, executor] {
-            return _awaitAllDonorsReadyToDonate(executor);
-        })
+        .then([this, executor] { return _awaitAllDonorsReadyToDonate(executor); })
         .then([this, executor] { _tellAllRecipientsToRefresh(executor); })
-        .then([this, executor] {
-            return _awaitAllRecipientsFinishedCloning(executor);
-        })
+        .then([this, executor] { return _awaitAllRecipientsFinishedCloning(executor); })
         .then([this, executor] { _tellAllDonorsToRefresh(executor); })
-        .then([this, executor] {
-            return _awaitAllRecipientsFinishedApplying(executor);
-        })
+        .then([this, executor] { return _awaitAllRecipientsFinishedApplying(executor); })
         .then([this, executor] { _tellAllDonorsToRefresh(executor); })
-        .then([this, executor] {
-            return _awaitAllRecipientsInStrictConsistency(executor);
-        })
+        .then([this, executor] { return _awaitAllRecipientsInStrictConsistency(executor); })
         .then([this](const ReshardingCoordinatorDocument& updatedCoordinatorDoc) {
             return _commit(updatedCoordinatorDoc);
         })
@@ -716,6 +708,7 @@ SemiFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::run(
             }
 
             if (!ErrorCodes::isRetriableError(status.code())) {
+                // If not a retriable error then persist the terminal error state.
                 _updateCoordinatorDocStateAndCatalogEntries(CoordinatorStateEnum::kError,
                                                             _coordinatorDoc);
 
@@ -740,12 +733,14 @@ SemiFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::run(
             return status;
         })
         .onCompletion([this](Status status) {
-            {
-                stdx::lock_guard<Latch> lg(_mutex);
-                if (_completionPromise.getFuture().isReady()) {
-                    // interrupt() was called before we got here.
-                    return;
-                }
+            // We shouldn't get retriable errors here since setting the completion promise would
+            // result in any retries having the same error.
+            invariant(!ErrorCodes::isRetriableError(status));
+
+            stdx::lock_guard<Latch> lg(_mutex);
+            if (_completionPromise.getFuture().isReady()) {
+                // interrupt() was called before we got here.
+                return;
             }
 
             if (status.isOK()) {
@@ -818,14 +813,12 @@ ExecutorFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::_init(
             if (status.isOK()) {
                 _initializedPromise.emplaceValue();
             } else {
-                _initializedPromise.setError(status);
+                if (!ErrorCodes::isRetriableError(status)) {
+                    _initializedPromise.setError(status);
+                }
             }
             return status;
         });
-}
-
-SharedSemiFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::getInitializedFuture() {
-    return _initializedPromise.getFuture();
 }
 
 ExecutorFuture<void>

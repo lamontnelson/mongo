@@ -721,6 +721,5 @@ TEST_F(ReshardingCoordinatorPersistenceTest,
                        AssertionException,
                        ErrorCodes::NamespaceNotFound);
 }
-
 }  // namespace
 }  // namespace mongo
