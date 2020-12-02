@@ -11,20 +11,23 @@ load("jstests/libs/uuid_util.js");
 (function() {
 'use strict';
 
-const numShards = 2;
+const numShards = 3;
 const st = new ShardingTest({mongos: 1, shards: numShards});
 const kDbName = 'db';
 const collName = 'foo';
 const ns = kDbName + '.' + collName;
+const numCollDocs = 1000;
+const numCollChunks = 5;
 const mongos = st.s0;
 const config = st.config0;
 const mongosConfig = mongos.getDB('config');
 const db = mongos.getDB(kDbName);
-const numDocs = 1000;
+const existingZoneName = 'x1';
 
 let shardToRSMap = {};
-shardToRSMap[st.shard0.shardName] = st.rs0;
-shardToRSMap[st.shard1.shardName] = st.rs1;
+Array.from(Array(numShards).keys()).forEach(i => {
+    shardToRSMap[st['shard' + i].shardName] = st['rs' + i];
+});
 
 let getUUIDFromCollectionInfo = (dbName, collName, collInfo) => {
     if (collInfo) {
@@ -58,11 +61,10 @@ let verifyTemporaryReshardingChunksMatchExpected = (numExpectedChunks, presetExp
     }
 
     tempReshardingChunks.sort();
-
     assert.eq(numExpectedChunks, tempReshardingChunks.length);
 
     let shardChunkCounts = {};
-    let shardChunkCountsIncrement = key => {
+    let incChunkCount = key => {
         if (shardChunkCounts.hasOwnProperty(key)) {
             shardChunkCounts[key]++;
         } else {
@@ -71,8 +73,9 @@ let verifyTemporaryReshardingChunksMatchExpected = (numExpectedChunks, presetExp
     };
 
     for (let i = 0; i < numExpectedChunks; i++) {
-        shardChunkCountsIncrement(tempReshardingChunks[i].shard);
+        incChunkCount(tempReshardingChunks[i].shard);
 
+        // match exact chunk boundaries for presetExpectedChunks
         if (presetExpectedChunks) {
             assert.eq(presetExpectedChunks[i].recipientShardId, tempReshardingChunks[i].shard);
             assert.eq(presetExpectedChunks[i].min, tempReshardingChunks[i].min);
@@ -80,18 +83,16 @@ let verifyTemporaryReshardingChunksMatchExpected = (numExpectedChunks, presetExp
         }
     }
 
-    // if presetChunks not specified, do not match exactly partition boundaries.
-    // assert chunks counts balanced across shards
+    // if presetChunks not specified, we only assert that chunks counts are balanced across shards
     if (!presetExpectedChunks) {
         let maxDiff = 0;
         let shards = Object.keys(shardChunkCounts);
-        for (let i = 0; i < shards.length; i++) {
-            for (let j = 0; j < shards.length; j++) {
-                let diff =
-                    Math.abs(Math.max(shards[i], shards[j]) - Math.min(shards[i], shards[j]));
+        shards.forEach(shard1 => {
+            shards.forEach(shard2 => {
+                let diff = Math.abs(shardChunkCounts[shard1] - shardChunkCounts[shard2]);
                 maxDiff = (diff > maxDiff) ? diff : maxDiff;
-            }
-        }
+            });
+        });
         assert.lte(maxDiff, 1);
     }
 };
@@ -135,9 +136,6 @@ let removeAllReshardingCollections = () => {
 };
 
 let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
-    assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
-    assert.commandWorked(st.s.adminCommand({split: ns, middle: {_id: numDocs / 2}}));
-
     let numInitialChunks = commandObj['numInitialChunks'] || numShards;
 
     if (presetReshardedChunks)
@@ -159,17 +157,34 @@ let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
 
 let presetReshardedChunks =
     [{recipientShardId: st.shard1.shardName, min: {_id: MinKey}, max: {_id: MaxKey}}];
-const existingZoneName = 'x1';
 
 let resetPersistedData =
     () => {
         removeAllReshardingCollections();
-        insertData();
+        insertData(numCollDocs);
+        shardCollection(ns, numCollChunks, numCollDocs);
     }
 
-let insertData = (numDocs) => {
+let shardCollection = (ns, numChunks, numCollDocs) => {
+    numChunks = numChunks || 1;
+    numCollDocs = numCollDocs || 1000;
+
+    assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
+
+    let cur = 0;
+    Array.from(Array(numChunks - 1).keys()).forEach(i => {
+        assert.commandWorked(mongos.adminCommand({split: ns, middle: {_id: cur}}));
+        cur += (numCollDocs / numCollChunks)
+    });
+
+    Object.values(shardToRSMap).forEach(rs => {
+        rs.awaitReplication();
+    });
+};
+
+let insertData = (count) => {
     let bulk = db.getCollection(collName).initializeOrderedBulkOp();
-    Array.from(Array(numDocs).keys()).map((i) => {
+    Array.from(Array(count).keys()).forEach(i => {
         bulk.insert({_id: i});
     });
     assert.commandWorked(bulk.execute());
@@ -272,7 +287,7 @@ assertSuccessfulReshardCollection({
     key: {_id: 1},
     unique: false,
     collation: {locale: 'simple'},
-    numInitialChunks: 2,
+    numInitialChunks: 5,
 });
 
 jsTest.log(
