@@ -206,6 +206,8 @@ assert.commandFailedWithCode(mongos.adminCommand({reshardCollection: ns, key: {_
 
 assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
 
+resetPersistedData();
+
 jsTest.log("Fail if missing required key.");
 assert.commandFailedWithCode(mongos.adminCommand({reshardCollection: ns}), 40414);
 

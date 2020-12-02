@@ -38,6 +38,7 @@
 #include "mongo/db/pipeline/lite_parsed_pipeline.h"
 #include "mongo/db/pipeline/sharded_agg_helpers.h"
 #include "mongo/db/vector_clock.h"
+#include "mongo/logv2/log.h"
 #include "mongo/s/balancer_configuration.h"
 #include "mongo/s/catalog/type_shard.h"
 #include "mongo/s/grid.h"
@@ -650,7 +651,6 @@ std::vector<BSONObj> ReshardingSplitPolicy::createRawPipeline(const ShardKeyPatt
     res.push_back(BSON("$sample" << BSON("size" << numSplitPoints * samplingRatio)));
     res.push_back(BSON("$project" << projectValBuilder.obj()));
     res.push_back(BSON("$sort" << sortValBuilder.obj()));
-
     return res;
 }
 
@@ -685,7 +685,6 @@ ReshardingSplitPolicy::ReshardingSplitPolicy(OperationContext* opCtx,
                                              const std::vector<ShardId>& recipientShardIds,
                                              const boost::intrusive_ptr<ExpressionContext>& expCtx,
                                              int samplingRatio) {
-
     auto pipelineCursor = sharded_agg_helpers::attachCursorToPipeline(
         Pipeline::parse(rawPipeline, expCtx).release(), true);
 
@@ -695,21 +694,26 @@ ReshardingSplitPolicy::ReshardingSplitPolicy(OperationContext* opCtx,
         sampledDocs.push_back(sampledDocument.get().toBson());
         sampledDocument = pipelineCursor->getNext();
     }
+
+    LOGV2_DEBUG(4952610,
+                0,
+                "sampled documents for resharding operation",
+                "numDocs"_attr = sampledDocs.size(),
+                "ns"_attr = nss);
     size_t numSplitPointsNeeded = numInitialChunks - 1;
-    int actualSamplingRatio = samplingRatio;
+    uassert(ErrorCodes::BadValue,
+            "Must not have less than (numInitialChunks - 1) documents in sharded collection.",
+            sampledDocs.size() >= numSplitPointsNeeded);
 
     // Check if it is possible to make numInitialChunks split points given the samplingRatio and
     // number of docs.
+    int actualSamplingRatio = samplingRatio;
     if (sampledDocs.size() < (numSplitPointsNeeded * samplingRatio)) {
         // If not, pick a new sampling ratio.
         double res =
             static_cast<double>(sampledDocs.size()) / static_cast<double>(numSplitPointsNeeded);
         actualSamplingRatio = ceil(res);
     }
-
-    uassert(ErrorCodes::BadValue,
-            "Must not have less than (numInitialChunks - 1) documents in sharded collection.",
-            actualSamplingRatio != 0);
 
     BSONObj lastSplitPoint = BSONObj();
     size_t i = 0;
