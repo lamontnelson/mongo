@@ -158,12 +158,11 @@ let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
 let presetReshardedChunks =
     [{recipientShardId: st.shard1.shardName, min: {_id: MinKey}, max: {_id: MaxKey}}];
 
-let resetPersistedData =
-    () => {
-        removeAllReshardingCollections();
-        insertData(numCollDocs);
-        shardCollection(ns, numCollChunks, numCollDocs);
-    };
+let resetPersistedData = () => {
+    removeAllReshardingCollections();
+    insertData(numCollDocs);
+    shardCollection(ns, numCollChunks, numCollDocs);
+};
 
 let shardCollection = (ns, numChunks, numCollDocs) => {
     numChunks = numChunks || 1;
