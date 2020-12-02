@@ -174,7 +174,7 @@ let shardCollection = (ns, numChunks, numCollDocs) => {
     let cur = 0;
     Array.from(Array(numChunks - 1).keys()).forEach(i => {
         assert.commandWorked(mongos.adminCommand({split: ns, middle: {_id: cur}}));
-        cur += (numCollDocs / numCollChunks)
+        cur += (numCollDocs / numCollChunks);
     });
 
     Object.values(shardToRSMap).forEach(rs => {
