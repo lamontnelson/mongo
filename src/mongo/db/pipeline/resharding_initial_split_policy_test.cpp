@@ -160,9 +160,9 @@ TEST_F(ReshardingSplitPolicyTest, CompoundShardKeyWithDottedHashedFieldSucceeds)
 TEST_F(ReshardingSplitPolicyTest, SamplingSuceeds) {
     auto shards = setupNShards(2);
     loadRoutingTableWithTwoChunksAndTwoShards(kTestAggregateNss);
+
     // We add a $sortKey field since AsyncResultsMerger expects it in order to merge the batches
     // from different shards.
-    //
     std::vector<BSONObj> firstShardChunks;
     for (int a = 0; a < 11; a++) {
         firstShardChunks.emplace_back(BSON("a" << a << "$sortKey" << BSON_ARRAY(a)));
