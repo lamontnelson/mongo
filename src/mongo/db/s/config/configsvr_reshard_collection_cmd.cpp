@@ -185,7 +185,8 @@ public:
                     auto reshardPolicy = ReshardingSplitPolicy::make(
                         opCtx, nss, shardKey, numInitialChunks, rsIds, collation, existingUUID);
 
-                    const SplitPolicyParams splitPolicyParams{tempReshardingNss, boost::none, rsIds.front()};
+                    const SplitPolicyParams splitPolicyParams{
+                        tempReshardingNss, boost::none, rsIds.front()};
                     auto shardCollectionConfig =
                         reshardPolicy.createFirstChunks(opCtx, shardKey, splitPolicyParams);
 

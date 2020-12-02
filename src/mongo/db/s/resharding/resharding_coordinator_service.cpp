@@ -707,36 +707,22 @@ SemiFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::run(
                 return status;
             }
 
-            if (!ErrorCodes::isRetriableError(status.code())) {
-                // If not a retriable error then persist the terminal error state.
-                _updateCoordinatorDocStateAndCatalogEntries(CoordinatorStateEnum::kError,
-                                                            _coordinatorDoc);
+            _updateCoordinatorDocStateAndCatalogEntries(CoordinatorStateEnum::kError,
+                                                        _coordinatorDoc);
 
-                LOGV2(4956902,
-                      "Resharding failed",
-                      "namespace"_attr = _coordinatorDoc.getNss().ns(),
-                      "newShardKeyPattern"_attr = _coordinatorDoc.getReshardingKey(),
-                      "error"_attr = status);
+            LOGV2(4956902,
+                  "Resharding failed",
+                  "namespace"_attr = _coordinatorDoc.getNss().ns(),
+                  "newShardKeyPattern"_attr = _coordinatorDoc.getReshardingKey(),
+                  "error"_attr = status);
 
-                // TODO wait for donors and recipients to abort the operation and clean up state
-                _tellAllRecipientsToRefresh(executor);
-                _tellAllParticipantsToRefresh(executor);
-
-            } else {
-                LOGV2(4952603,
-                      "Resharding failed with retryable error",
-                      "namespace"_attr = _coordinatorDoc.getNss().ns(),
-                      "newShardKeyPattern"_attr = _coordinatorDoc.getReshardingKey(),
-                      "error"_attr = status);
-            }
+            // TODO wait for donors and recipients to abort the operation and clean up state
+            _tellAllRecipientsToRefresh(executor);
+            _tellAllParticipantsToRefresh(executor);
 
             return status;
         })
         .onCompletion([this](Status status) {
-            // We shouldn't get retriable errors here since setting the completion promise would
-            // result in any retries having the same error.
-            invariant(!ErrorCodes::isRetriableError(status));
-
             stdx::lock_guard<Latch> lg(_mutex);
             if (_completionPromise.getFuture().isReady()) {
                 // interrupt() was called before we got here.
@@ -813,9 +799,7 @@ ExecutorFuture<void> ReshardingCoordinatorService::ReshardingCoordinator::_init(
             if (status.isOK()) {
                 _initializedPromise.emplaceValue();
             } else {
-                if (!ErrorCodes::isRetriableError(status)) {
-                    _initializedPromise.setError(status);
-                }
+                _initializedPromise.setError(status);
             }
             return status;
         });

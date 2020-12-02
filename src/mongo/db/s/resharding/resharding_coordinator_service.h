@@ -106,7 +106,6 @@ public:
     void interrupt(Status status) override;
 
     SharedSemiFuture<void> getInitializedFuture() const {
-        stdx::lock_guard<Latch> lg(_mutex);
         return _initializedPromise.getFuture();
     }
 
@@ -115,7 +114,6 @@ public:
      * completed running.
      */
     SharedSemiFuture<void> getCompletionFuture() const {
-        stdx::lock_guard<Latch> lg(_mutex);
         return _completionPromise.getFuture();
     }
 
