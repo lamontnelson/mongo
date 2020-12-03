@@ -662,7 +662,9 @@ ReshardingSplitPolicy ReshardingSplitPolicy::make(OperationContext* opCtx,
                                                   BSONObj collationObj,
                                                   boost::optional<UUID> collUUID,
                                                   int samplingRatio) {
-    invariant(!recipientShardIds.empty());
+    invariant(recipientShardIds.size());
+    invariant(numInitialChunks >= 1);
+    invariant(samplingRatio > 0);
 
     auto rawPipeline = createRawPipeline(shardKey, numInitialChunks - 1, samplingRatio);
     const auto aggRequest = AggregationRequest(nss, rawPipeline);
