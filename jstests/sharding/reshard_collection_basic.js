@@ -123,18 +123,19 @@ let verifyTemporaryReshardingCollectionExistsWithCorrectOptions = (expectedRecip
 
 let removeAllReshardingCollections = () => {
     const tempReshardingCollName = constructTemporaryReshardingCollName(kDbName, collName);
+
     assert.commandWorked(mongos.getDB(kDbName).dropDatabase());
-    assert.commandWorked(mongos.adminCommand({enableSharding: kDbName}));
+
     mongosConfig.reshardingOperations.remove({nss: ns});
     mongosConfig.collections.remove({reshardingFields: {$exists: true}});
 
-    st.rs0.getPrimary().getDB('config').localReshardingOperations.donor.remove({nss: ns});
-    st.rs0.getPrimary().getDB('config').localReshardingOperations.recipient.remove({nss: ns});
-    st.rs1.getPrimary().getDB('config').localReshardingOperations.donor.remove({nss: ns});
-    st.rs1.getPrimary().getDB('config').localReshardingOperations.recipient.remove({nss: ns});
+    Object.values(shardToRSMap).forEach(rs => {
+        rs.getPrimary().getDB('config').localReshardingOperations.donor.remove({nss: ns});
+        rs.getPrimary().getDB('config').localReshardingOperations.recipient.remove({nss: ns});
+    });
 };
 
-let coordinatorDoc = (ns) => {
+let coordinatorDocForNs = (ns) => {
     return mongosConfig.reshardingOperations.find({nss: ns}).readPref("primary").toArray();
 };
 
@@ -145,7 +146,7 @@ let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
         commandObj._presetReshardedChunks = presetReshardedChunks;
 
     assert.commandWorked(mongos.adminCommand(commandObj));
-    print("coordinator document after reshard operation: " + tojson(coordinatorDoc(ns)));
+    print("coordinator document after reshard operation: " + tojson(coordinatorDocForNs(ns)));
 
     if (presetReshardedChunks) {
         verifyTemporaryReshardingChunksMatchExpected(presetReshardedChunks.length,
@@ -164,7 +165,7 @@ let presetReshardedChunks =
 
 let resetPersistedData = () => {
     removeAllReshardingCollections();
-    insertData(numCollDocs);
+    insertSeedData(numCollDocs);
     shardCollection(ns, numCollChunks, numCollDocs);
 };
 
@@ -173,6 +174,8 @@ let shardCollection = (ns, numChunks, numCollDocs) => {
     numCollDocs = numCollDocs || 1000;
 
     mongos.adminCommand({flushRouterConfig: ns});
+
+    assert.commandWorked(mongos.adminCommand({enableSharding: kDbName}));
     assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
 
     let cur = 0;
@@ -182,7 +185,7 @@ let shardCollection = (ns, numChunks, numCollDocs) => {
     });
 };
 
-let insertData = (count) => {
+let insertSeedData = (count) => {
     let bulk = db.getCollection(collName).initializeOrderedBulkOp();
     Array.from(Array(count).keys()).forEach(i => {
         bulk.insert({_id: i});
@@ -193,7 +196,6 @@ let insertData = (count) => {
 /**
  * Fail cases
  */
-
 jsTest.log("Fail if sharding is disabled.");
 assert.commandFailedWithCode(mongos.adminCommand({reshardCollection: ns, key: {_id: 1}}),
                              ErrorCodes.NamespaceNotFound);
@@ -205,7 +207,6 @@ assert.commandFailedWithCode(mongos.adminCommand({reshardCollection: ns, key: {_
                              ErrorCodes.NamespaceNotSharded);
 
 assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
-
 resetPersistedData();
 
 jsTest.log("Fail if missing required key.");
