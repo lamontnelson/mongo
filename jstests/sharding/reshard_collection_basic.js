@@ -123,9 +123,8 @@ let verifyTemporaryReshardingCollectionExistsWithCorrectOptions = (expectedRecip
 
 let removeAllReshardingCollections = () => {
     const tempReshardingCollName = constructTemporaryReshardingCollName(kDbName, collName);
-    mongos.getDB(kDbName).getCollection(collName).drop();
-    mongos.getDB(kDbName).getCollection(tempReshardingCollName).drop();
-    mongosConfig.chunks.remove({ns: ns});
+    assert.commandWorked(mongos.getDB(kDbName).dropDatabase());
+    assert.commandWorked(mongos.adminCommand({enableSharding: kDbName}));
     mongosConfig.reshardingOperations.remove({nss: ns});
     mongosConfig.collections.remove({reshardingFields: {$exists: true}});
 
@@ -135,12 +134,18 @@ let removeAllReshardingCollections = () => {
     st.rs1.getPrimary().getDB('config').localReshardingOperations.recipient.remove({nss: ns});
 };
 
+let coordinatorDoc = (ns) => {
+    return mongosConfig.reshardingOperations.find({nss: ns}).readPref("primary").toArray();
+};
+
 let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
     let numInitialChunks = commandObj['numInitialChunks'] || numShards;
 
     if (presetReshardedChunks)
         commandObj._presetReshardedChunks = presetReshardedChunks;
+
     assert.commandWorked(mongos.adminCommand(commandObj));
+    print("coordinator document after reshard operation: " + tojson(coordinatorDoc(ns)));
 
     if (presetReshardedChunks) {
         verifyTemporaryReshardingChunksMatchExpected(presetReshardedChunks.length,
@@ -148,7 +153,6 @@ let assertSuccessfulReshardCollection = (commandObj, presetReshardedChunks) => {
         verifyTemporaryReshardingCollectionExistsWithCorrectOptions(
             getAllShardIdsFromExpectedChunks(presetReshardedChunks));
     } else {
-        const configChunksArray = mongosConfig.chunks.find({'ns': ns});
         verifyTemporaryReshardingChunksMatchExpected(numInitialChunks);
     }
 
@@ -168,16 +172,13 @@ let shardCollection = (ns, numChunks, numCollDocs) => {
     numChunks = numChunks || 1;
     numCollDocs = numCollDocs || 1000;
 
+    mongos.adminCommand({flushRouterConfig: ns});
     assert.commandWorked(mongos.adminCommand({shardCollection: ns, key: {_id: 1}}));
 
     let cur = 0;
     Array.from(Array(numChunks - 1).keys()).forEach(i => {
         assert.commandWorked(mongos.adminCommand({split: ns, middle: {_id: cur}}));
         cur += (numCollDocs / numCollChunks);
-    });
-
-    Object.values(shardToRSMap).forEach(rs => {
-        rs.awaitReplication();
     });
 };
 

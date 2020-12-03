@@ -177,6 +177,8 @@ public:
 
                     std::vector<ShardId> rsIds;
                     Grid::get(opCtx)->shardRegistry()->getAllShardIds(opCtx, &rsIds);
+                    invariant(rsIds.size());
+                    recipientShardIds = std::set<ShardId>(rsIds.begin(), rsIds.end());
 
                     numInitialChunks = (numInitialChunksSpecified)
                         ? *cmdRequest.getNumInitialChunks()
