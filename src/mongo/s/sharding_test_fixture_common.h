@@ -129,7 +129,7 @@ protected:
                                       const std::string& ns,
                                       const BSONObj& detail);
 
-	
+
     /**
      * Raises an assertion error if f does not return true within the given timeout.
      */
