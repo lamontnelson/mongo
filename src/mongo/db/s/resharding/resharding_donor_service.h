@@ -60,6 +60,9 @@ public:
 
     std::shared_ptr<PrimaryOnlyService::Instance> constructInstance(
         BSONObj initialState) const override;
+
+private:
+    static constexpr auto kOplogNs = "local.oplog.rs";
 };
 
 /**

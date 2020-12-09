@@ -296,6 +296,68 @@ void ReshardingDonorService::DonorStateMachine::
         return;
     }
 
+    {
+        const auto& nss = _donorDoc.getNss();
+        const auto& nssUUID = _donorDoc.getExistingUUID();
+        const auto& reshardingUUID = _donorDoc.get_id();
+        auto opCtx = cc().makeOperationContext();
+        auto rawOpCtx = opCtx.get();
+
+        auto generateOplogEntry = [&](ShardId destinedRecipient) {
+            repl::MutableOplogEntry oplog;
+            oplog.setNss(nss);
+            oplog.setOpType(repl::OpTypeEnum::kNoop);
+            oplog.setUuid(nssUUID);
+            oplog.setDestinedRecipient(destinedRecipient);
+            oplog.setObject(
+                BSON("msg" << fmt::format("Writes to {} are temporarily blocked for resharding.",
+                                          nss.toString())));
+            oplog.setObject2(
+                BSON("type" << kReshardFinalOpLogType << "reshardingUUID" << reshardingUUID));
+            oplog.setWallClockTime(opCtx->getServiceContext()->getFastClockSource()->now());
+            return oplog;
+        };
+
+        // TODO: remove hardcoded db
+	const auto db = _donorDoc.getNss().db();
+        const auto chunks = uassertStatusOK(Grid::get(rawOpCtx)->catalogClient()->getChunks(
+            rawOpCtx,
+            BSON("ns" << fmt::format("{}.system.resharding.{}", db, nssUUID.toString())),
+            {},
+            boost::none,
+            nullptr,
+            repl::ReadConcernLevel::kMajorityReadConcern));
+
+        std::set<ShardId> recipients;
+        std::for_each(chunks.begin(), chunks.end(), [&recipients](const auto& chunk) {
+            recipients.insert(chunk.getShard());
+        });
+	logd("xxx reshard recipients: {}", recipients);
+
+        for (const auto& recipient : recipients) {
+            auto oplog = generateOplogEntry(recipient);
+            writeConflictRetry(rawOpCtx, "ReshardingBlockWritesOplog", kOplogNs, [&] {
+                AutoGetOplog oplogWrite(rawOpCtx, OplogAccessMode::kWrite);
+                WriteUnitOfWork wunit(rawOpCtx);
+                const auto& oplogOpTime = repl::logOp(rawOpCtx, &oplog);
+	    	logd("xxx oplog to write: {}", oplog.toBSON());
+                uassert(5279507,
+                        str::stream()
+                            << "Failed to create new oplog entry for oplog with opTime: "
+                            << oplog.getOpTime().toString() << ": " << redact(oplog.toBSON()),
+                        !oplogOpTime.isNull());
+                wunit.commit();
+            });
+        }
+
+        LOGV2_DEBUG(5279504,
+                    0,
+                    "Committed opLog entries to temporarily blocking writes for resharding",
+                    "ns"_attr = nss,
+                    "reshardingUUID"_attr = reshardingUUID,
+                    "numRecipients"_attr = recipients.size());
+    }
+
     _transitionState(DonorStateEnum::kMirroring);
 }
 
@@ -354,6 +416,13 @@ void ReshardingDonorService::DonorStateMachine::_transitionState(
     ReshardingDonorDocument replacementDoc(_donorDoc);
     replacementDoc.setState(endState);
     emplaceMinFetchTimestampIfExists(replacementDoc, minFetchTimestamp);
+
+    LOGV2_INFO(5279505,
+               "Transition resharding donor state",
+               "newState"_attr = DonorState_serializer(replacementDoc.getState()),
+               "oldState"_attr = DonorState_serializer(_donorDoc.getState()),
+               "reshardingUUID"_attr = _donorDoc.get_id());
+
     _updateDonorDocument(std::move(replacementDoc));
 }
 
