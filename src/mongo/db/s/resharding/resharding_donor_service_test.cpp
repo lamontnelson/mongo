@@ -96,7 +96,9 @@ TEST_F(ReshardingDonorServiceTest, ShouldWriteFinalOpLogEntryAfterTransitionToPr
         const auto maybeOplog = getOpLogWriteForDonorDocument(doc);
         if (!maybeOplog)
             return false;
+
         const auto& oplog = *maybeOplog;
+	LOGV2_INFO(5279502, "retrieved oplog document", "document"_attr=oplog);
 
         ASSERT(oplog.hasField("ns"));
         auto actualNs = oplog.getStringField("ns");

@@ -27,10 +27,13 @@
  *    it in the license file.
  */
 
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kDefault
+
 #include "mongo/platform/basic.h"
 
 #include "mongo/s/sharding_test_fixture_common.h"
 
+#include "mongo/logv2/log.h"
 #include "mongo/s/catalog/type_changelog.h"
 #include "mongo/s/write_ops/batched_command_request.h"
 #include "mongo/s/write_ops/batched_command_response.h"
@@ -167,17 +170,20 @@ std::unique_ptr<ShardingCatalogClient> ShardingTestFixtureCommon::makeShardingCa
     return nullptr;
 }
 
-void ShardingTestFixtureCommon::assertSoon(std::function<bool()> f, Milliseconds timeout) {
-    auto res = false;
+void ShardingTestFixtureCommon::assertSoon(std::function<bool()> f,
+                                           Milliseconds timeout,
+                                           Milliseconds interval) {
     Timer t;
-    while (!res) {
-        if (t.elapsed() > timeout)
+    auto result = false;
+
+    while (t.elapsed() < timeout) {
+        if ((result = f()))
             break;
-        res = f();
-        sleepmillis(1);
+        sleepmillis(durationCount<Milliseconds>(interval));
     }
-    if (!res) {
-        logd("assert soon failed.");
+
+    if (!result) {
+        LOGV2_ERROR(5279501, "Assert soon failed.", "timeout"_attr = timeout);
         ASSERT(false);
     }
 }

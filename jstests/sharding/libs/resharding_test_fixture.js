@@ -49,9 +49,6 @@ var ReshardingTest = class {
             rs: {nodes: 2},
             rsOptions: {
                 setParameter: {
-                    // TODO SERVER-52795: Remove once the donor shards write the final oplog entry
-                    // themselves.
-                    "failpoint.allowDirectWritesToLiveOplog": tojson({mode: "alwaysOn"}),
                     "failpoint.WTPreserveSnapshotHistoryIndefinitely": tojson({mode: "alwaysOn"}),
                     "reshardingTempInterruptBeforeOplogApplication": false,
                 }
@@ -218,9 +215,6 @@ var ReshardingTest = class {
         const pauseCoordinatorBeforeCommitFailpoint =
             configureFailPoint(this._pauseCoordinatorInSteadyStateFailpoint.conn,
                                "reshardingPauseCoordinatorBeforeCommit");
-
-        // TODO SERVER-52795: Remove once the donor shards write the final oplog entry themselves.
-        this._writeFinalOplogEntry();
 
         this._pauseCoordinatorInSteadyStateFailpoint.off();
         pauseCoordinatorBeforeCommitFailpoint.wait();

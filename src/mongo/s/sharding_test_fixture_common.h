@@ -133,7 +133,9 @@ protected:
     /**
      * Raises an assertion error if f does not return true within the given timeout.
      */
-    void assertSoon(std::function<bool()> f, Milliseconds timeout = Milliseconds{10 * 1000});
+    void assertSoon(std::function<bool()> f,
+                    Milliseconds timeout = Milliseconds{5000},
+                    Milliseconds interval = Milliseconds{10});
 
     /**
      * Base class returns nullptr.

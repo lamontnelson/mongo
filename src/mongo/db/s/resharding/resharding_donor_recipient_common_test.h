@@ -244,7 +244,6 @@ public:
             repl::OpTimeAndWallTime(repl::OpTime(Timestamp(1, 1), _term), Date_t()));
 
         _registry->onStepUpComplete(operationContext(), _term);
-	printf("xxx stepUp complete\n");
     }
 
 protected:
