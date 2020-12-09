@@ -83,11 +83,12 @@ protected:
 
 TEST_F(ReshardingDonorServiceTest, ShouldWriteFinalOpLogEntryAfterTransitionToPreparingToMirror) {
     ReshardingDonorDocument doc(DonorStateEnum::kPreparingToMirror);
-    CommonReshardingMetadata metadata(
-        UUID::gen(), mongo::NamespaceString(kReshardNs), UUID::gen(), KeyPattern(BSON("foo" << 1)));
+    CommonReshardingMetadata metadata(UUID::gen(),
+                                      mongo::NamespaceString(kReshardNs),
+                                      UUID::gen(),
+                                      KeyPattern(kReshardingKeyPattern));
     doc.setCommonReshardingMetadata(metadata);
-    auto ts = Timestamp{0xf00};
-    doc.getMinFetchTimestampStruct().setMinFetchTimestamp(ts);
+    doc.getMinFetchTimestampStruct().setMinFetchTimestamp(Timestamp{0xf00});
 
     auto donorStateMachine = getStateMachineInstace(operationContext(), doc);
     ASSERT(donorStateMachine);
@@ -98,7 +99,7 @@ TEST_F(ReshardingDonorServiceTest, ShouldWriteFinalOpLogEntryAfterTransitionToPr
             return false;
 
         const auto& oplog = *maybeOplog;
-        LOGV2_INFO(5279502, "retrieved oplog document", "document"_attr = oplog);
+        LOGV2_INFO(5279502, "verify retrieved oplog document", "document"_attr = oplog);
 
         ASSERT(oplog.hasField("ns"));
         auto actualNs = oplog.getStringField("ns");

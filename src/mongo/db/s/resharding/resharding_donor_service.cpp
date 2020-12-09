@@ -262,23 +262,31 @@ void ReshardingDonorService::DonorStateMachine::
 
     {
         const auto& nss = _donorDoc.getNss();
+        const auto& nssUUID = _donorDoc.getExistingUUID();
+        const auto& reshardingUUID = _donorDoc.get_id();
+
         auto opCtx = cc().makeOperationContext();
+
         AutoGetCollection dataColl(opCtx.get(), nss, LockMode::MODE_IX);
         WriteUnitOfWork wuow(opCtx.get());
         opCtx->getServiceContext()->getOpObserver()->onInternalOpMessage(
             opCtx.get(),
             nss,
-            _donorDoc.getExistingUUID(),
+            nssUUID,
             BSON("msg" << fmt::format("Writes to {} converted to distributed transactions.",
                                       nss.toString())),
-            BSON("type"
-                 << "reshardFinalOp"
-                 << "reshardingUUID" << _donorDoc.get_id()),
+            BSON("type" << kReshardFinalOpLogType << "reshardingUUID" << reshardingUUID),
             boost::none,
             boost::none,
             boost::none,
             boost::none);
         wuow.commit();
+
+        LOGV2_DEBUG(5279504,
+                    0,
+                    "Done writing resharding oplog entry initiating distributed transactions",
+                    "ns"_attr = nss,
+                    "reshardingUUID"_attr = reshardingUUID);
     }
 
     _transitionState(DonorStateEnum::kMirroring);
@@ -339,6 +347,13 @@ void ReshardingDonorService::DonorStateMachine::_transitionState(
     DonorStateEnum endState, boost::optional<Timestamp> minFetchTimestamp) {
     ReshardingDonorDocument replacementDoc(_donorDoc);
     replacementDoc.setState(endState);
+
+    LOGV2_INFO(5279505,
+               "Transition resharding state from {} to {}",
+               "originalState"_attr = DonorState_serializer(_donorDoc.getState()),
+               "newState"_attr = DonorState_serializer(replacementDoc.getState()),
+               "reshardingUUID"_attr = _donorDoc.get_id());
+
     if (minFetchTimestamp) {
         auto& minFetchTimestampStruct = replacementDoc.getMinFetchTimestampStruct();
         if (minFetchTimestampStruct.getMinFetchTimestamp())

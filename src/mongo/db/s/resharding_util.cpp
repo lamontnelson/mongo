@@ -580,7 +580,7 @@ bool isFinalOplog(const repl::OplogEntry& oplog) {
         return false;
     }
 
-    return o2Field->getField("type").valueStringDataSafe() == "reshardFinalOp"_sd;
+    return o2Field->getField("type").valueStringDataSafe() == kReshardFinalOpLogType;
 }
 
 bool isFinalOplog(const repl::OplogEntry& oplog, UUID reshardingUUID) {
