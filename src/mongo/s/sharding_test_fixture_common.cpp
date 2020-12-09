@@ -167,4 +167,19 @@ std::unique_ptr<ShardingCatalogClient> ShardingTestFixtureCommon::makeShardingCa
     return nullptr;
 }
 
+void ShardingTestFixtureCommon::assertSoon(std::function<bool()> f, Milliseconds timeout) {
+    auto res = false;
+    Timer t;
+    while (!res) {
+        if (t.elapsed() > timeout)
+            break;
+        res = f();
+        sleepmillis(1);
+    }
+    if (!res) {
+        logd("assert soon failed.");
+        ASSERT(false);
+    }
+}
+
 }  // namespace mongo

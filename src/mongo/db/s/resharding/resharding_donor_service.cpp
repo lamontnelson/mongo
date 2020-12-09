@@ -259,6 +259,24 @@ void ReshardingDonorService::DonorStateMachine::
     if (_donorDoc.getState() > DonorStateEnum::kPreparingToMirror) {
         return;
     }
+	
+    {
+    const auto& nss = _donorDoc.getNss();
+	auto opCtx = cc().makeOperationContext();
+	AutoGetCollection dataColl(opCtx.get(), nss, LockMode::MODE_IX);
+	WriteUnitOfWork wuow(opCtx.get());
+	opCtx->getServiceContext()->getOpObserver()->onInternalOpMessage(
+		opCtx.get(),
+		nss,
+		_donorDoc.getExistingUUID(),
+		BSON("msg" << fmt::format("Writes to {} converted to distributed transactions.", nss.toString())),
+		BSON("type" << "reshardFinalOp" << "reshardingUUID" << _donorDoc.get_id()),
+		boost::none,
+		boost::none,
+		boost::none,
+		boost::none);
+	wuow.commit();
+    }
 
     _transitionState(DonorStateEnum::kMirroring);
     interrupt({ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
