@@ -454,6 +454,13 @@ void ReshardingRecipientService::RecipientStateMachine::_transitionState(
     RecipientStateEnum endState, boost::optional<Timestamp> fetchTimestamp) {
     ReshardingRecipientDocument replacementDoc(_recipientDoc);
     replacementDoc.setState(endState);
+
+    LOGV2_INFO(5279506,
+               "Transition resharding recipient state",
+               "newState"_attr = RecipientState_serializer(replacementDoc.getState()),
+               "oldState"_attr = RecipientState_serializer(_recipientDoc.getState()),
+               "reshardingUUID"_attr = _recipientDoc.get_id());
+
     if (endState == RecipientStateEnum::kCreatingCollection) {
         _insertRecipientDocument(replacementDoc);
         return;

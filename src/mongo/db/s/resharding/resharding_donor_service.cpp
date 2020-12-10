@@ -267,14 +267,17 @@ void ReshardingDonorService::DonorStateMachine::
 
         auto opCtx = cc().makeOperationContext();
 
-        AutoGetCollection dataColl(opCtx.get(), nss, LockMode::MODE_IX);
+	AutoGetOplog oplogWrite(opCtx.get(), OplogAccessMode::kWrite);
         WriteUnitOfWork wuow(opCtx.get());
+
+	// TODO: onInternalOpMessage() will need to be called in a loop, once per recipient shard
+	// with the "destinedRecipient" field in the oplog entry being filled in with the
+	// recipient shard's ID.
         opCtx->getServiceContext()->getOpObserver()->onInternalOpMessage(
             opCtx.get(),
             nss,
             nssUUID,
-            BSON("msg" << fmt::format("Writes to {} converted to distributed transactions.",
-                                      nss.toString())),
+            BSON("msg" << fmt::format("Writes to {} are temporarily blocked for resharding.", nss.toString())),
             BSON("type" << kReshardFinalOpLogType << "reshardingUUID" << reshardingUUID),
             boost::none,
             boost::none,
@@ -282,11 +285,7 @@ void ReshardingDonorService::DonorStateMachine::
             boost::none);
         wuow.commit();
 
-        LOGV2_DEBUG(5279504,
-                    0,
-                    "Done writing resharding oplog entry initiating distributed transactions",
-                    "ns"_attr = nss,
-                    "reshardingUUID"_attr = reshardingUUID);
+        LOGV2_DEBUG(5279504, 0, "Done writing opLog entries temporarily blocking writes for resharding", "ns"_attr=nss, "reshardingUUID"_attr = reshardingUUID, "shardCount"_attr=0);
     }
 
     _transitionState(DonorStateEnum::kMirroring);
@@ -349,9 +348,9 @@ void ReshardingDonorService::DonorStateMachine::_transitionState(
     replacementDoc.setState(endState);
 
     LOGV2_INFO(5279505,
-               "Transition resharding state from {} to {}",
-               "originalState"_attr = DonorState_serializer(_donorDoc.getState()),
+               "Transition resharding donor state",
                "newState"_attr = DonorState_serializer(replacementDoc.getState()),
+               "oldState"_attr = DonorState_serializer(_donorDoc.getState()),
                "reshardingUUID"_attr = _donorDoc.get_id());
 
     if (minFetchTimestamp) {
