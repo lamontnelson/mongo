@@ -171,45 +171,6 @@ var ReshardingTest = class {
         });
     }
 
-    _writeFinalOplogEntry() {
-        const sourceCollection = this._st.s.getCollection(this._ns);
-        const sourceCollectionUUID =
-            getUUIDFromListCollections(sourceCollection.getDB(), sourceCollection.getName());
-
-        const tempCollection =
-            this._recipientShards()[0].rs.getPrimary().getCollection(this._tempNs);
-        const reshardingUUID =
-            getUUIDFromListCollections(tempCollection.getDB(), tempCollection.getName());
-
-        for (let donor of this._donorShards()) {
-            const shardPrimary = donor.rs.getPrimary();
-            assert.commandWorked(
-                shardPrimary.getDB("local").oplog.rs.insert(this._recipientShards().map(
-                    recipient => ({
-                        op: "n",
-                        ns: this._ns,
-                        ui: sourceCollectionUUID,
-                        o: {
-                            msg: `Writes to ${
-                                this._ns} are temporarily blocked for resharding (via mongo shell)`
-                        },
-                        o2: {type: "reshardFinalOp", reshardingUUID: reshardingUUID},
-                        destinedRecipient: recipient.shardName,
-                        // fixDocumentForInsert() in the server will replace the Timestamp(0, 0)
-                        // value with a cluster time generated from the logical clock.
-                        ts: Timestamp(0, 0),
-                        t: NumberLong(1),
-                        wall: new Date(),
-                        v: NumberLong(2),
-                    }))));
-
-            // We follow up the direct writes to the oplog with a write to a replicated collection
-            // because otherwise the majority-commit point won't advance and the
-            // ReshardingOplogFetcher would never see the no-op oplog entries that were inserted.
-            assert.commandWorked(shardPrimary.getDB("dummydb").dummycoll.insert({}));
-        }
-    }
-
     teardown() {
         this._pauseCoordinatorInSteadyStateFailpoint.wait();
         const pauseCoordinatorBeforeCommitFailpoint =
