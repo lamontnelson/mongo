@@ -264,16 +264,58 @@ void ReshardingDonorService::DonorStateMachine::
         const auto& nss = _donorDoc.getNss();
         const auto& nssUUID = _donorDoc.getExistingUUID();
         const auto& reshardingUUID = _donorDoc.get_id();
+        const auto o = BSON("msg" << fmt::format("Writes to {} are temporarily blocked for resharding.", nss.toString()));
+        const auto o2 = BSON("type" << kReshardFinalOpLogType << "reshardingUUID" << reshardingUUID);
+	static constexpr auto kOplogNs = "local.oplog.rs";
 
         auto opCtx = cc().makeOperationContext();
 
-	AutoGetOplog oplogWrite(opCtx.get(), OplogAccessMode::kWrite);
-        WriteUnitOfWork wuow(opCtx.get());
+	auto generateOplogEntry = [&](ShardId destinedRecipient) {
+		// TODO: check all fields are set -- same as onInternalOpMessage
+		auto oplog = repl::MutableOplogEntry();
+		oplog.setNss(nss);
+		oplog.setUuid(nssUUID);
+		oplog.setDestinedRecipient(destinedRecipient);
+		oplog.setObject(o);
+		oplog.setObject2(o2);
+		return oplog;
+	};
+
+	//ReshardingRecipientMetadata recipientMetaData(reshardingUUID);
+	//const auto recipients = recipientMetaData.getRecipientShards();
+	const auto recipients = std::vector<ShardId>{ShardId("shard1"), ShardId("shard2")};
+	for (const auto& recipient : recipients) {
+	    auto oplog = generateOplogEntry(recipient);
+    	writeConflictRetry(
+        opCtx.get(),
+        "ReshardingBlockWritesOplog",
+	kOplogNs,
+        [&] {
+            // Need to take global lock here so repl::logOp will not unlock it and trigger the
+            // invariant that disallows unlocking global lock while inside a WUOW. 
+	    AutoGetOplog oplogWrite(opCtx.get(), OplogAccessMode::kWrite);
+            WriteUnitOfWork wunit(opCtx.get());
+		
+            const auto& oplogOpTime = repl::logOp(opCtx.get(), &oplog);
+		
+	    // TODO: ticket #
+            uassert(1234567,
+                    str::stream() << "Failed to create new oplog entry for oplog with opTime: "
+                                  << oplog.getOpTime().toString() << ": "
+                                  << redact(oplog.toBSON()),
+                    !oplogOpTime.isNull());
+
+            wunit.commit();
+        });
+		
+	}
 
 	// TODO: onInternalOpMessage() will need to be called in a loop, once per recipient shard
 	// with the "destinedRecipient" field in the oplog entry being filled in with the
 	// recipient shard's ID.
-        opCtx->getServiceContext()->getOpObserver()->onInternalOpMessage(
+	//
+	// TODO: instead create op log entry and log it
+        /*opCtx->getServiceContext()->getOpObserver()->onInternalOpMessage(
             opCtx.get(),
             nss,
             nssUUID,
@@ -283,9 +325,9 @@ void ReshardingDonorService::DonorStateMachine::
             boost::none,
             boost::none,
             boost::none);
-        wuow.commit();
+        wuow.commit();*/
 
-        LOGV2_DEBUG(5279504, 0, "Done writing opLog entries temporarily blocking writes for resharding", "ns"_attr=nss, "reshardingUUID"_attr = reshardingUUID, "shardCount"_attr=0);
+        LOGV2_DEBUG(5279504, 0, "Committed opLog entries temporarily blocking writes for resharding", "ns"_attr=nss, "reshardingUUID"_attr = reshardingUUID, "shardCount"_attr=0);
     }
 
     _transitionState(DonorStateEnum::kMirroring);

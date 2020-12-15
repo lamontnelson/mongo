@@ -69,7 +69,7 @@ protected:
             opCtx, service, initialState.toBSON());
     }
 
-    boost::optional<BSONObj> getOpLogWriteForDonorDocument(const ReshardingDonorDocument& doc) {
+    boost::optional<BSONObj> getOplogWriteForDonorDocument(const ReshardingDonorDocument& doc) {
         auto reshardNs = doc.getNss().toString();
         DBDirectClient client(operationContext());
         auto result = client.findOne(kOplogNs, BSON("ns" << reshardNs));
@@ -94,7 +94,7 @@ TEST_F(ReshardingDonorServiceTest, ShouldWriteFinalOpLogEntryAfterTransitionToPr
     ASSERT(donorStateMachine);
 
     assertSoon([&]() {
-        const auto maybeOplog = getOpLogWriteForDonorDocument(doc);
+        const auto maybeOplog = getOplogWriteForDonorDocument(doc);
         if (!maybeOplog)
             return false;
 
