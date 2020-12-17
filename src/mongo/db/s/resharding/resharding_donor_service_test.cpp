@@ -97,7 +97,7 @@ protected:
         }
 
         UUID* _existingUUID;
-        ChunkVersion maxCollVersion{0, 0, OID::gen()};
+        ChunkVersion maxCollVersion = ChunkVersion(0, 0, OID::gen(), boost::none);
 
         static const inline auto kRecipientShards =
             std::vector<ShardId>{ShardId("shard1"), ShardId("shard2"), ShardId("shard3")};
