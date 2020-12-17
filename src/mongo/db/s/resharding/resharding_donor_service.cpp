@@ -273,7 +273,7 @@ ExecutorFuture<void> ReshardingDonorService::DonorStateMachine::
         //
         // TODO SERVER-53372: Remove this interrupt altogether.
         if (resharding::gReshardingTempInterruptBeforeOplogApplication) {
-            interrupt({ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
+            //interrupt({ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
         }
     });
 }
@@ -314,6 +314,7 @@ void ReshardingDonorService::DonorStateMachine::
                                           nss.toString())));
             oplog.setObject2(
                 BSON("type" << kReshardFinalOpLogType << "reshardingUUID" << reshardingUUID));
+    	    oplog.setOpTime(OplogSlot());
             oplog.setWallClockTime(opCtx->getServiceContext()->getFastClockSource()->now());
             return oplog;
         };
