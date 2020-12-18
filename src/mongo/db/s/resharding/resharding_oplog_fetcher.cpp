@@ -303,7 +303,6 @@ bool ReshardingOplogFetcher::consume(Client* client, Shard* shard) {
                 }
 
                 if (isFinalOplog(nextOplog, _reshardingUUID)) {
-                    logd("xxx got final oplog: {}", nextOplog.toBSON());
                     moreToCome = false;
                     return false;
                 }

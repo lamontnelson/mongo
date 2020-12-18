@@ -259,29 +259,12 @@ void ReshardingDonorService::DonorStateMachine::
 ExecutorFuture<void> ReshardingDonorService::DonorStateMachine::
     _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries(
         const std::shared_ptr<executor::ScopedTaskExecutor>& executor) {
-    logd("xxx in _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries");
     if (_donorDoc.getState() > DonorStateEnum::kDonatingInitialData) {
-        logd(
-            "xxx _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries: exit status "
-            "ok");
         return ExecutorFuture<void>(**executor, Status::OK());
     }
 
-    logd(
-        "xxx _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries: "
-        "_allRecipientsDoneCloning.getFuture()");
     return _allRecipientsDoneCloning.getFuture().thenRunOn(**executor).then([this]() {
         _transitionState(DonorStateEnum::kDonatingOplogEntries);
-
-        // Unless a test is willing to leak the contents of the
-        // config.localReshardingOperations.donor collection, without this interrupt(), an invariant
-        // would be hit from _allRecipientsDoneCloning not being ready when this DonorStateMachine
-        // is being destructed.
-        //
-        // TODO SERVER-53372: Remove this interrupt altogether.
-        if (resharding::gReshardingTempInterruptBeforeOplogApplication) {
-            // interrupt({ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
-        }
     });
 }
 
@@ -326,11 +309,9 @@ void ReshardingDonorService::DonorStateMachine::
             return oplog;
         };
 
-        // TODO: remove hardcoded db
-        const auto db = _donorDoc.getNss().db();
         const auto chunks = uassertStatusOK(Grid::get(rawOpCtx)->catalogClient()->getChunks(
             rawOpCtx,
-            BSON("ns" << fmt::format("{}.system.resharding.{}", db, nssUUID.toString())),
+            BSON("ns" << fmt::format("{}.system.resharding.{}", _donorDoc.getNss().db(), nssUUID.toString())),
             {},
             boost::none,
             nullptr,
@@ -340,7 +321,6 @@ void ReshardingDonorService::DonorStateMachine::
         std::for_each(chunks.begin(), chunks.end(), [&recipients](const auto& chunk) {
             recipients.insert(chunk.getShard());
         });
-        logd("xxx reshard recipients: {}", recipients);
 
         for (const auto& recipient : recipients) {
             auto oplog = generateOplogEntry(recipient);
@@ -348,7 +328,6 @@ void ReshardingDonorService::DonorStateMachine::
                 AutoGetOplog oplogWrite(rawOpCtx, OplogAccessMode::kWrite);
                 WriteUnitOfWork wunit(rawOpCtx);
                 const auto& oplogOpTime = repl::logOp(rawOpCtx, &oplog);
-                logd("xxx oplog to write: {}", oplog.toBSON());
                 uassert(5279507,
                         str::stream()
                             << "Failed to create new oplog entry for oplog with opTime: "
