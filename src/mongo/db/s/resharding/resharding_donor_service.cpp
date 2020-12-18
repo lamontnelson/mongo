@@ -261,11 +261,15 @@ ExecutorFuture<void> ReshardingDonorService::DonorStateMachine::
         const std::shared_ptr<executor::ScopedTaskExecutor>& executor) {
     logd("xxx in _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries");
     if (_donorDoc.getState() > DonorStateEnum::kDonatingInitialData) {
-    	logd("xxx _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries: exit status ok");
+        logd(
+            "xxx _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries: exit status "
+            "ok");
         return ExecutorFuture<void>(**executor, Status::OK());
     }
 
-    logd("xxx _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries: _allRecipientsDoneCloning.getFuture()");
+    logd(
+        "xxx _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries: "
+        "_allRecipientsDoneCloning.getFuture()");
     return _allRecipientsDoneCloning.getFuture().thenRunOn(**executor).then([this]() {
         _transitionState(DonorStateEnum::kDonatingOplogEntries);
 
@@ -276,7 +280,7 @@ ExecutorFuture<void> ReshardingDonorService::DonorStateMachine::
         //
         // TODO SERVER-53372: Remove this interrupt altogether.
         if (resharding::gReshardingTempInterruptBeforeOplogApplication) {
-            //interrupt({ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
+            // interrupt({ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
         }
     });
 }
@@ -317,13 +321,13 @@ void ReshardingDonorService::DonorStateMachine::
                                           nss.toString())));
             oplog.setObject2(
                 BSON("type" << kReshardFinalOpLogType << "reshardingUUID" << reshardingUUID));
-    	    oplog.setOpTime(OplogSlot());
+            oplog.setOpTime(OplogSlot());
             oplog.setWallClockTime(opCtx->getServiceContext()->getFastClockSource()->now());
             return oplog;
         };
 
         // TODO: remove hardcoded db
-	const auto db = _donorDoc.getNss().db();
+        const auto db = _donorDoc.getNss().db();
         const auto chunks = uassertStatusOK(Grid::get(rawOpCtx)->catalogClient()->getChunks(
             rawOpCtx,
             BSON("ns" << fmt::format("{}.system.resharding.{}", db, nssUUID.toString())),
@@ -336,7 +340,7 @@ void ReshardingDonorService::DonorStateMachine::
         std::for_each(chunks.begin(), chunks.end(), [&recipients](const auto& chunk) {
             recipients.insert(chunk.getShard());
         });
-	logd("xxx reshard recipients: {}", recipients);
+        logd("xxx reshard recipients: {}", recipients);
 
         for (const auto& recipient : recipients) {
             auto oplog = generateOplogEntry(recipient);
@@ -344,7 +348,7 @@ void ReshardingDonorService::DonorStateMachine::
                 AutoGetOplog oplogWrite(rawOpCtx, OplogAccessMode::kWrite);
                 WriteUnitOfWork wunit(rawOpCtx);
                 const auto& oplogOpTime = repl::logOp(rawOpCtx, &oplog);
-	    	logd("xxx oplog to write: {}", oplog.toBSON());
+                logd("xxx oplog to write: {}", oplog.toBSON());
                 uassert(5279507,
                         str::stream()
                             << "Failed to create new oplog entry for oplog with opTime: "

@@ -356,7 +356,12 @@ std::unique_ptr<Pipeline, PipelineDeleter> createOplogFetchingPipelineForReshard
     UUID collUUID,
     const ShardId& recipientShard,
     bool doesDonorOwnMinKeyChunk) {
-    LOGV2_INFO(1234567, "xxx createOplogFetchingPipelineForResharding", "collUUID"_attr=collUUID, "startAfter"_attr=startAfter, "recipientShard"_attr=recipientShard, "doesDonorOwnMinKeyChunk"_attr=doesDonorOwnMinKeyChunk);
+    LOGV2_INFO(1234567,
+               "xxx createOplogFetchingPipelineForResharding",
+               "collUUID"_attr = collUUID,
+               "startAfter"_attr = startAfter,
+               "recipientShard"_attr = recipientShard,
+               "doesDonorOwnMinKeyChunk"_attr = doesDonorOwnMinKeyChunk);
 
     using Doc = Document;
     using Arr = std::vector<Value>;

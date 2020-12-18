@@ -202,7 +202,8 @@ assert.commandFailedWithCode(mongos.adminCommand({
 }),
                              ErrorCodes.BadValue);
 
-jsTest.log("Fail if authoritative tags exist in config.tags collection and zones are not provided.");
+jsTest.log(
+    "Fail if authoritative tags exist in config.tags collection and zones are not provided.");
 assert.commandWorked(
     st.s.adminCommand({addShardToZone: st.shard1.shardName, zone: existingZoneName}));
 assert.commandWorked(st.s.adminCommand(
@@ -217,7 +218,8 @@ assert.commandFailedWithCode(mongos.adminCommand({
 }),
                              ErrorCodes.BadValue);
 
-jsTest.log("Fail if authoritative tags exist in config.tags collection and zones are provided and use a name which does not exist in authoritative tags.");
+jsTest.log(
+    "Fail if authoritative tags exist in config.tags collection and zones are provided and use a name which does not exist in authoritative tags.");
 assert.commandFailedWithCode(mongos.adminCommand({
     reshardCollection: ns,
     key: {newKey: 1},
@@ -244,7 +246,8 @@ assertSuccessfulReshardCollection({reshardCollection: ns, key: {newKey: 1}});
 jsTest.log("Succeed if unique is specified and is false.");
 assertSuccessfulReshardCollection({reshardCollection: ns, key: {newKey: 1}, unique: false});
 
-jsTest.log("Succeed if _presetReshardedChunks is provided and test commands are enabled (default).");
+jsTest.log(
+    "Succeed if _presetReshardedChunks is provided and test commands are enabled (default).");
 assertSuccessfulReshardCollection({reshardCollection: ns, key: {newKey: 1}}, presetReshardedChunks);
 
 presetReshardedChunks = [
@@ -261,12 +264,14 @@ assertSuccessfulReshardCollection({
     numInitialChunks: 2,
 });
 
-jsTest.log("Succeed if all optional fields and _presetReshardedChunks are provided with correct values and test commands are enabled (default).");
+jsTest.log(
+    "Succeed if all optional fields and _presetReshardedChunks are provided with correct values and test commands are enabled (default).");
 assertSuccessfulReshardCollection(
     {reshardCollection: ns, key: {newKey: 1}, unique: false, collation: {locale: 'simple'}},
     presetReshardedChunks);
 
-jsTest.log("Succeed if authoritative tags exist in config.tags collection and zones are provided and use an existing zone's name.");
+jsTest.log(
+    "Succeed if authoritative tags exist in config.tags collection and zones are provided and use an existing zone's name.");
 assertSuccessfulReshardCollection({
     reshardCollection: ns,
     key: {newKey: 1},

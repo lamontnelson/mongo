@@ -94,7 +94,8 @@ protected:
                                            const UUID& uuid,
                                            const OID& epoch) {
         auto range = ChunkRange(BSON(shardKey << MINKEY), BSON(shardKey << MAXKEY));
-        auto chunk = ChunkType(nss, std::move(range), ChunkVersion(1, 0, epoch, boost::none), kShardTwo);
+        auto chunk =
+            ChunkType(nss, std::move(range), ChunkVersion(1, 0, epoch, boost::none), kShardTwo);
         ChunkManager cm(
             kShardOne,
             DatabaseVersion(uuid),
@@ -104,7 +105,7 @@ protected:
                                                                            nullptr,
                                                                            false,
                                                                            epoch,
-									   boost::none,
+                                                                           boost::none,
                                                                            boost::none,
                                                                            true,
                                                                            {std::move(chunk)})),
