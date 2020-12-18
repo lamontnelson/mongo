@@ -259,10 +259,13 @@ void ReshardingDonorService::DonorStateMachine::
 ExecutorFuture<void> ReshardingDonorService::DonorStateMachine::
     _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries(
         const std::shared_ptr<executor::ScopedTaskExecutor>& executor) {
+    logd("xxx in _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries");
     if (_donorDoc.getState() > DonorStateEnum::kDonatingInitialData) {
+    	logd("xxx _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries: exit status ok");
         return ExecutorFuture<void>(**executor, Status::OK());
     }
 
+    logd("xxx _awaitAllRecipientsDoneCloningThenTransitionToDonatingOplogEntries: _allRecipientsDoneCloning.getFuture()");
     return _allRecipientsDoneCloning.getFuture().thenRunOn(**executor).then([this]() {
         _transitionState(DonorStateEnum::kDonatingOplogEntries);
 
