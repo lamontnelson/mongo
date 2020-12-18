@@ -66,8 +66,8 @@ class ReshardingDonorServiceTest : public ReshardingDonorRecipientCommonTest {
 protected:
     class ThreeRecipientsCatalogClient final : public ShardingCatalogClientMock {
     public:
-        ThreeRecipientsCatalogClient(UUID* existingUUID)
-            : ShardingCatalogClientMock(nullptr), _existingUUID(existingUUID) {}
+        ThreeRecipientsCatalogClient(UUID existingUUID)
+            : ShardingCatalogClientMock(nullptr), _existingUUID(std::move(existingUUID)) {}
 
         // Makes one chunk object per shard
         std::vector<ChunkType> makeChunks(const NamespaceString& nss,
@@ -93,10 +93,10 @@ protected:
                                                      boost::optional<int> limit,
                                                      repl::OpTime* opTime,
                                                      repl::ReadConcernLevel readConcern) override {
-            return makeChunks(reshardingTempNss(*_existingUUID), kRecipientShards);
+            return makeChunks(reshardingTempNss(_existingUUID), kRecipientShards);
         }
 
-        UUID* _existingUUID;
+        UUID _existingUUID;
         ChunkVersion maxCollVersion = ChunkVersion(0, 0, OID::gen(), boost::none);
 
         static const inline auto kRecipientShards =
@@ -105,13 +105,12 @@ protected:
 
     void setUp() override {
         _reshardingUUID = UUID::gen();
-        _existingUUID = UUID::gen();
         ReshardingDonorRecipientCommonTest::setUp();
     }
 
     std::unique_ptr<ShardingCatalogClient> makeShardingCatalogClient(
         std::unique_ptr<DistLockManager> distLockManager) {
-        auto mockClient = std::make_unique<ThreeRecipientsCatalogClient>(_existingUUID.get_ptr());
+        auto mockClient = std::make_unique<ThreeRecipientsCatalogClient>(uassertStatusOK(UUID::parse(kExistingUUID.toString())));
         return mockClient;
     }
 
@@ -181,6 +180,11 @@ TEST_F(ReshardingDonorServiceTest, ShouldWriteFinalOpLogEntryAfterTransitionToPr
             auto actualReshardingUUIDBson = o2.getField("reshardingUUID");
             auto actualReshardingUUID = UUID::parse(actualReshardingUUIDBson);
             ASSERT_EQUALS(doc.get_id(), actualReshardingUUID);
+
+	    ASSERT(oplog.hasField("ui"));
+	    auto actualUiBson = oplog.getField("ui");
+	    auto actualUi = UUID::parse(actualUiBson);
+	    ASSERT_EQUALS(kExistingUUID, actualUi);
 
             ASSERT(oplog.hasField("destinedRecipient"));
             auto actualRecipient = oplog.getStringField("destinedRecipient");
