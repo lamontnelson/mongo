@@ -110,7 +110,8 @@ protected:
 
     std::unique_ptr<ShardingCatalogClient> makeShardingCatalogClient(
         std::unique_ptr<DistLockManager> distLockManager) {
-        auto mockClient = std::make_unique<ThreeRecipientsCatalogClient>(uassertStatusOK(UUID::parse(kExistingUUID.toString())));
+        auto mockClient = std::make_unique<ThreeRecipientsCatalogClient>(
+            uassertStatusOK(UUID::parse(kExistingUUID.toString())));
         return mockClient;
     }
 
@@ -181,10 +182,10 @@ TEST_F(ReshardingDonorServiceTest, ShouldWriteFinalOpLogEntryAfterTransitionToPr
             auto actualReshardingUUID = UUID::parse(actualReshardingUUIDBson);
             ASSERT_EQUALS(doc.get_id(), actualReshardingUUID);
 
-	    ASSERT(oplog.hasField("ui"));
-	    auto actualUiBson = oplog.getField("ui");
-	    auto actualUi = UUID::parse(actualUiBson);
-	    ASSERT_EQUALS(kExistingUUID, actualUi);
+            ASSERT(oplog.hasField("ui"));
+            auto actualUiBson = oplog.getField("ui");
+            auto actualUi = UUID::parse(actualUiBson);
+            ASSERT_EQUALS(kExistingUUID, actualUi);
 
             ASSERT(oplog.hasField("destinedRecipient"));
             auto actualRecipient = oplog.getStringField("destinedRecipient");

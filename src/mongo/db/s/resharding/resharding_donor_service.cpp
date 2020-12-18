@@ -311,7 +311,8 @@ void ReshardingDonorService::DonorStateMachine::
 
         const auto chunks = uassertStatusOK(Grid::get(rawOpCtx)->catalogClient()->getChunks(
             rawOpCtx,
-            BSON("ns" << fmt::format("{}.system.resharding.{}", _donorDoc.getNss().db(), nssUUID.toString())),
+            BSON("ns" << fmt::format(
+                     "{}.system.resharding.{}", _donorDoc.getNss().db(), nssUUID.toString())),
             {},
             boost::none,
             nullptr,
