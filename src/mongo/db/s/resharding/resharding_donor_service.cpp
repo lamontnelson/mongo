@@ -265,6 +265,16 @@ ExecutorFuture<void> ReshardingDonorService::DonorStateMachine::
 
     return _allRecipientsDoneCloning.getFuture().thenRunOn(**executor).then([this]() {
         _transitionState(DonorStateEnum::kDonatingOplogEntries);
+
+        // Unless a test is willing to leak the contents of the
+        // config.localReshardingOperations.donor collection, without this interrupt(), an invariant
+        // would be hit from _allRecipientsDoneCloning not being ready when this DonorStateMachine
+        // is being destructed.
+        //
+        // TODO SERVER-53372: Remove this interrupt altogether.
+        if (resharding::gReshardingTempInterruptBeforeOplogApplication) {
+            interrupt({ErrorCodes::InternalError, "Artificial interruption to enable jsTests"});
+        }
     });
 }
 
@@ -311,8 +321,7 @@ void ReshardingDonorService::DonorStateMachine::
 
         const auto chunks = uassertStatusOK(Grid::get(rawOpCtx)->catalogClient()->getChunks(
             rawOpCtx,
-            BSON("ns" << fmt::format(
-                     "{}.system.resharding.{}", _donorDoc.getNss().db(), nssUUID.toString())),
+            BSON("ns" << fmt::format("{}.system.resharding.{}", nss.db(), nssUUID.toString())),
             {},
             boost::none,
             nullptr,

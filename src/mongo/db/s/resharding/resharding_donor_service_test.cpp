@@ -161,7 +161,7 @@ TEST_F(ReshardingDonorServiceTest, ShouldWriteFinalOpLogEntryAfterTransitionToPr
 
     assertSoon([&]() {
         const auto oplogs = getOplogWritesForDonorDocument(doc);
-        if (oplogs.empty() || oplogs.size() < exepectedRecipients.size())
+        if (oplogs.size() < exepectedRecipients.size())
             return false;
 
         std::set<ShardId> actualRecipients;
