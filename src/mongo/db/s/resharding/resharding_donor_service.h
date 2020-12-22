@@ -62,7 +62,6 @@ public:
         BSONObj initialState) const override;
 
 private:
-    static constexpr auto kOplogNs = "local.oplog.rs";
 };
 
 /**

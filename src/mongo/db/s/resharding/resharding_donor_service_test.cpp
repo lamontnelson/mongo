@@ -96,6 +96,20 @@ protected:
             return makeChunks(reshardingTempNss(_existingUUID), kRecipientShards);
         }
 
+        StatusWith<repl::OpTimeWith<std::vector<ShardType>>> getAllShards(
+            OperationContext* opCtx, repl::ReadConcernLevel readConcern) override {
+            auto shardTypes = [this]() {
+                std::vector<ShardType> result;
+                std::transform(
+                    kRecipientShards.begin(),
+                    kRecipientShards.end(),
+                    std::back_inserter(result),
+                    [&](const ShardId& id) { return ShardType(id.toString(), id.toString()); });
+                return result;
+            };
+            return repl::OpTimeWith<std::vector<ShardType>>(shardTypes());
+        }
+
         UUID _existingUUID;
         ChunkVersion maxCollVersion = ChunkVersion(0, 0, OID::gen(), boost::none);
 
@@ -105,7 +119,31 @@ protected:
 
     void setUp() override {
         _reshardingUUID = UUID::gen();
+
+        auto mockLoader = std::make_unique<CatalogCacheLoaderMock>();
+        _mockCatalogCacheLoader = mockLoader.get();
+	// Must be called prior to setUp.
+        setCatalogCacheLoader(std::move(mockLoader));
+
         ReshardingDonorRecipientCommonTest::setUp();
+    }
+
+    // Makes one chunk object per shard
+    std::vector<ChunkType> makeChunks(const NamespaceString& nss,
+                                      const std::vector<ShardId> shards,
+                                      const ChunkVersion& chunkVersion) {
+        std::vector<ChunkType> chunks;
+        constexpr auto kKeyDelta = 1000;
+
+        int curKey = 0;
+        for (size_t i = 0; i < shards.size(); ++i, curKey += kKeyDelta) {
+            const auto min = (i == 0) ? BSON("a" << MINKEY) : BSON("a" << curKey);
+            const auto max =
+                (i == shards.size() - 1) ? BSON("a" << MAXKEY) : BSON("a" << curKey + kKeyDelta);
+            chunks.push_back(ChunkType(nss, ChunkRange(min, max), chunkVersion, shards[i]));
+        }
+
+        return chunks;
     }
 
     std::unique_ptr<ShardingCatalogClient> makeShardingCatalogClient(
@@ -127,7 +165,8 @@ protected:
     std::vector<BSONObj> getOplogWritesForDonorDocument(const ReshardingDonorDocument& doc) {
         auto reshardNs = doc.getNss().toString();
         DBDirectClient client(operationContext());
-        auto result = client.query(NamespaceString(kOplogNs), BSON("ns" << reshardNs));
+        auto result = client.query(NamespaceString(NamespaceString::kRsOplogNamespace.ns()),
+                                   BSON("ns" << reshardNs));
         std::vector<BSONObj> results;
         while (result->more()) {
             results.push_back(result->next());
@@ -137,8 +176,10 @@ protected:
 
     boost::optional<UUID> _reshardingUUID;
     boost::optional<UUID> _existingUUID;
+    CatalogCacheLoaderMock* _mockCatalogCacheLoader;
 
-    static constexpr auto kOplogNs = "local.oplog.rs";
+    static const inline auto kRecipientShards =
+        std::vector<ShardId>{ShardId("shard1"), ShardId("shard2"), ShardId("shard3")};
     static constexpr auto kExpectedO2Type = "reshardFinalOp"_sd;
     static constexpr auto kReshardNs = "db.foo"_sd;
 };
@@ -152,12 +193,28 @@ TEST_F(ReshardingDonorServiceTest, ShouldWriteFinalOpLogEntryAfterTransitionToPr
     doc.setCommonReshardingMetadata(metadata);
     doc.getMinFetchTimestampStruct().setMinFetchTimestamp(Timestamp{0xf00});
 
+    const auto& reshardNs = NamespaceString(kReshardNs);
+    const auto& tempReshardingNss = reshardingTempNss(kExistingUUID);
+
+    auto version = ChunkVersion(1, 0, OID::gen(), boost::none /* timestamp */);
+    CollectionType coll(reshardNs, version.epoch(), Date_t::now(), UUID::gen());
+    coll.setKeyPattern(BSON("y" << 1));
+    coll.setUnique(false);
+    coll.setAllowMigrations(false);
+
+    _mockCatalogCacheLoader->setDatabaseRefreshReturnValue(DatabaseType(
+        kReshardNs.toString(), kRecipientShards.front(), true, DatabaseVersion(UUID::gen())));
+    _mockCatalogCacheLoader->setCollectionRefreshValues(
+        kTemporaryReshardingNss,
+        coll,
+        makeChunks(tempReshardingNss, kRecipientShards, version),
+        boost::none);
+
     auto donorStateMachine = getStateMachineInstace(operationContext(), doc);
     ASSERT(donorStateMachine);
 
     const auto exepectedRecipients =
-        std::set<ShardId>(ThreeRecipientsCatalogClient::kRecipientShards.begin(),
-                          ThreeRecipientsCatalogClient::kRecipientShards.end());
+        std::set<ShardId>(kRecipientShards.begin(), kRecipientShards.end());
 
     assertSoon([&]() {
         const auto oplogs = getOplogWritesForDonorDocument(doc);

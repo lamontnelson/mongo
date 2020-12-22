@@ -227,7 +227,7 @@ public:
     }
 
     const NamespaceString& oplogNs() {
-        return kOplogNs;
+        return NamespaceString::kRsOplogNamespace;
     }
 
     const NamespaceString& crudNs() {
@@ -268,7 +268,8 @@ protected:
     const NamespaceString kCrudNs{"foo.bar"};
     const UUID kCrudUUID = UUID::gen();
     const NamespaceString kAppliedToNs{"foo", "system.resharding.{}"_format(kCrudUUID.toString())};
-    const NamespaceString kStashNs{"foo", "{}.{}"_format(kCrudNs.coll(), kOplogNs.coll())};
+    const NamespaceString kStashNs{
+        "foo", "{}.{}"_format(kCrudNs.coll(), NamespaceString::kRsOplogNamespace.coll())};
     const NamespaceString kOtherDonorStashNs{"foo", "{}.{}"_format("otherstash", "otheroplog")};
     const std::vector<NamespaceString> kStashCollections{kStashNs, kOtherDonorStashNs};
     const ShardId kMyShardId{"shard1"};

@@ -319,38 +319,41 @@ void ReshardingDonorService::DonorStateMachine::
             return oplog;
         };
 
-        const auto chunks = uassertStatusOK(Grid::get(rawOpCtx)->catalogClient()->getChunks(
-            rawOpCtx,
-            BSON("ns" << fmt::format("{}.system.resharding.{}", nss.db(), nssUUID.toString())),
-            {},
-            boost::none,
-            nullptr,
-            repl::ReadConcernLevel::kMajorityReadConcern));
+        const auto& tempNss =
+            constructTemporaryReshardingNss(_donorDoc.getNss().db(), _donorDoc.getExistingUUID());
+        auto* catalogCache = Grid::get(rawOpCtx)->catalogCache();
+        auto cm = uassertStatusOK(catalogCache->getCollectionRoutingInfo(rawOpCtx, tempNss));
+
+        uassert(ErrorCodes::NamespaceNotSharded,
+                str::stream() << "Expected collection " << tempNss << " to be sharded",
+                cm.isSharded());
 
         std::set<ShardId> recipients;
-        std::for_each(chunks.begin(), chunks.end(), [&recipients](const auto& chunk) {
-            recipients.insert(chunk.getShard());
-        });
+        cm.getAllShardIds(&recipients);
 
         for (const auto& recipient : recipients) {
             auto oplog = generateOplogEntry(recipient);
-            writeConflictRetry(rawOpCtx, "ReshardingBlockWritesOplog", kOplogNs, [&] {
-                AutoGetOplog oplogWrite(rawOpCtx, OplogAccessMode::kWrite);
-                WriteUnitOfWork wunit(rawOpCtx);
-                const auto& oplogOpTime = repl::logOp(rawOpCtx, &oplog);
-                uassert(5279507,
-                        str::stream()
-                            << "Failed to create new oplog entry for oplog with opTime: "
-                            << oplog.getOpTime().toString() << ": " << redact(oplog.toBSON()),
-                        !oplogOpTime.isNull());
-                wunit.commit();
-            });
+            writeConflictRetry(
+                rawOpCtx,
+                "ReshardingBlockWritesOplog",
+                NamespaceString::kRsOplogNamespace.ns(),
+                [&] {
+                    AutoGetOplog oplogWrite(rawOpCtx, OplogAccessMode::kWrite);
+                    WriteUnitOfWork wunit(rawOpCtx);
+                    const auto& oplogOpTime = repl::logOp(rawOpCtx, &oplog);
+                    uassert(5279507,
+                            str::stream()
+                                << "Failed to create new oplog entry for oplog with opTime: "
+                                << oplog.getOpTime().toString() << ": " << redact(oplog.toBSON()),
+                            !oplogOpTime.isNull());
+                    wunit.commit();
+                });
         }
 
         LOGV2_DEBUG(5279504,
                     0,
-                    "Committed opLog entries to temporarily blocking writes for resharding",
-                    "ns"_attr = nss,
+                    "Committed oplog entries to temporarily block writes for resharding",
+                    "namespace"_attr = nss,
                     "reshardingUUID"_attr = reshardingUUID,
                     "numRecipients"_attr = recipients.size());
     }
