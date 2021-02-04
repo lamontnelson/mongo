@@ -123,7 +123,8 @@ private:
     void _transitionStateAndUpdateCoordinator(
         DonorStateEnum endState,
         boost::optional<Timestamp> minFetchTimestamp = boost::none,
-        boost::optional<Status> abortReason = boost::none);
+        boost::optional<Status> abortReason = boost::none,
+        boost::optional<ReshardingCloneSize> cloneSizeEstimate = boost::none);
 
     // Inserts 'doc' on-disk and sets '_donorDoc' in-memory.
     void _insertDonorDocument(const ReshardingDonorDocument& doc);
@@ -133,6 +134,9 @@ private:
 
     // Removes the local donor document from disk and clears the in-memory state.
     void _removeDonorDocument();
+
+    // Get the recipient shard ids
+    std::set<ShardId> _getRecipientShards(OperationContext* opCtx);
 
     // The in-memory representation of the underlying document in
     // config.localReshardingOperations.donor.

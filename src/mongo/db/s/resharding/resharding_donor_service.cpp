@@ -266,11 +266,39 @@ void ReshardingDonorService::DonorStateMachine::
 
     _insertDonorDocument(_donorDoc);
 
+    ReshardingCloneSize cloneSizeEstimate;
     {
         auto opCtx = cc().makeOperationContext();
-        AutoGetCollectionForRead coll(opCtx.get(), _donorDoc.getNss());
-        IndexBuildsCoordinator::get(opCtx.get())
-            ->assertNoIndexBuildInProgForCollection(_donorDoc.getExistingUUID());
+        auto rawOpCtx = opCtx.get();
+
+        const auto numRecipients = _getRecipientShards(rawOpCtx).size();
+        uassert(5390703,
+                "Could not calculate the estimated number of documents and bytes to clone. The "
+                "number of resharding recipient shards should be greater than 0.",
+                numRecipients > 0);
+
+        AutoGetCollectionForRead coll(rawOpCtx, _donorDoc.getNss());
+        if (!coll) {
+            LOGV2_DEBUG(5390701,
+                        1,
+                        "Could not get collection info for resharding donor",
+                        "ns"_attr = _donorDoc.getNss());
+            cloneSizeEstimate.setBytesToClone(0);
+            cloneSizeEstimate.setDocumentsToClone(0);
+        } else {
+            cloneSizeEstimate.setBytesToClone(coll->dataSize(rawOpCtx) / numRecipients);
+            cloneSizeEstimate.setDocumentsToClone(coll->numRecords(rawOpCtx) / numRecipients);
+
+            const auto shardId = ShardingState::get(rawOpCtx)->shardId();
+            LOGV2_INFO(5390702,
+                       "Resharding donor collection size",
+                       "shardId"_attr = shardId,
+                       "ns"_attr = _donorDoc.getNss(),
+                       "sizeInfo"_attr = cloneSizeEstimate.toBSON());
+        }
+
+        IndexBuildsCoordinator::get(rawOpCtx)->assertNoIndexBuildInProgForCollection(
+            _donorDoc.getExistingUUID());
     }
 
     // Recipient shards expect to read from the donor shard's existing sharded collection
@@ -282,7 +310,10 @@ void ReshardingDonorService::DonorStateMachine::
     refreshTemporaryReshardingCollection(_donorDoc);
 
     auto minFetchTimestamp = generateMinFetchTimestamp(_donorDoc);
-    _transitionStateAndUpdateCoordinator(DonorStateEnum::kDonatingInitialData, minFetchTimestamp);
+    _transitionStateAndUpdateCoordinator(DonorStateEnum::kDonatingInitialData,
+                                         minFetchTimestamp,
+                                         boost::none,
+                                         std::move(cloneSizeEstimate));
 }
 
 ExecutorFuture<void> ReshardingDonorService::DonorStateMachine::
@@ -340,17 +371,8 @@ void ReshardingDonorService::DonorStateMachine::
 
         try {
             Timer latency;
-            const auto& tempNss = constructTemporaryReshardingNss(_donorDoc.getNss().db(),
-                                                                  _donorDoc.getExistingUUID());
-            auto* catalogCache = Grid::get(rawOpCtx)->catalogCache();
-            auto cm = uassertStatusOK(catalogCache->getCollectionRoutingInfo(rawOpCtx, tempNss));
 
-            uassert(ErrorCodes::NamespaceNotSharded,
-                    str::stream() << "Expected collection " << tempNss << " to be sharded",
-                    cm.isSharded());
-
-            std::set<ShardId> recipients;
-            cm.getAllShardIds(&recipients);
+            auto recipients = _getRecipientShards(rawOpCtx);
 
             for (const auto& recipient : recipients) {
                 auto oplog = generateOplogEntry(recipient);
@@ -453,7 +475,8 @@ void ReshardingDonorService::DonorStateMachine::_transitionState(
 void ReshardingDonorService::DonorStateMachine::_transitionStateAndUpdateCoordinator(
     DonorStateEnum endState,
     boost::optional<Timestamp> minFetchTimestamp,
-    boost::optional<Status> abortReason) {
+    boost::optional<Status> abortReason,
+    boost::optional<ReshardingCloneSize> cloneSizeEstimate) {
     _transitionState(endState, minFetchTimestamp, abortReason);
 
     auto opCtx = cc().makeOperationContext();
@@ -470,6 +493,10 @@ void ReshardingDonorService::DonorStateMachine::_transitionStateAndUpdateCoordin
         BSONObjBuilder abortReasonBuilder;
         abortReason.get().serializeErrorToBSON(&abortReasonBuilder);
         updateBuilder.append("donorShards.$.abortReason", abortReasonBuilder.obj());
+    }
+
+    if (cloneSizeEstimate) {
+        updateBuilder.append("donorShards.$.cloneSizeInfo", cloneSizeEstimate.get().toBSON());
     }
 
     uassertStatusOK(
@@ -514,6 +541,22 @@ void ReshardingDonorService::DonorStateMachine::_removeDonorDocument() {
                  BSON(ReshardingDonorDocument::k_idFieldName << _id),
                  WriteConcerns::kMajorityWriteConcern);
     _donorDoc = {};
+}
+
+std::set<ShardId> ReshardingDonorService::DonorStateMachine::_getRecipientShards(
+    OperationContext* opCtx) {
+    const auto& tempNss =
+        constructTemporaryReshardingNss(_donorDoc.getNss().db(), _donorDoc.getExistingUUID());
+    auto* catalogCache = Grid::get(opCtx)->catalogCache();
+    auto cm = uassertStatusOK(catalogCache->getCollectionRoutingInfo(opCtx, tempNss));
+
+    uassert(ErrorCodes::NamespaceNotSharded,
+            str::stream() << "Expected collection " << tempNss << " to be sharded",
+            cm.isSharded());
+
+    std::set<ShardId> recipients;
+    cm.getAllShardIds(&recipients);
+    return recipients;
 }
 
 }  // namespace mongo
