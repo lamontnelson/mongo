@@ -271,10 +271,12 @@ void ReshardingDonorService::DonorStateMachine::
         auto opCtx = cc().makeOperationContext();
         auto rawOpCtx = opCtx.get();
         const auto shardId = ShardingState::get(rawOpCtx)->shardId();
+
         const auto& nss = _donorDoc.getNss();
+        const auto& nssUUID = _donorDoc.getExistingUUID();
         const auto& reshardingUUID = _donorDoc.get_id();
 
-        const auto numRecipients = getRecipientShards(rawOpCtx, nss, reshardingUUID).size();
+        const auto numRecipients = getRecipientShards(rawOpCtx, nss, nssUUID).size();
         uassert(
             5390703,
             str::stream() << "The number of resharding recipient shards should be greater than 0."
@@ -298,8 +300,7 @@ void ReshardingDonorService::DonorStateMachine::
                    "donorShardId"_attr = shardId,
                    "sizeInfo"_attr = cloneSizeEstimate);
 
-        IndexBuildsCoordinator::get(rawOpCtx)->assertNoIndexBuildInProgForCollection(
-            _donorDoc.getExistingUUID());
+        IndexBuildsCoordinator::get(rawOpCtx)->assertNoIndexBuildInProgForCollection(nssUUID);
     }
 
     // Recipient shards expect to read from the donor shard's existing sharded collection
@@ -371,7 +372,7 @@ void ReshardingDonorService::DonorStateMachine::
         try {
             Timer latency;
 
-            const auto recipients = getRecipientShards(rawOpCtx, nss, reshardingUUID);
+            const auto recipients = getRecipientShards(rawOpCtx, nss, nssUUID);
 
             for (const auto& recipient : recipients) {
                 auto oplog = generateOplogEntry(recipient);
