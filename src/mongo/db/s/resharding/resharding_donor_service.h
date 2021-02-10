@@ -135,9 +135,6 @@ private:
     // Removes the local donor document from disk and clears the in-memory state.
     void _removeDonorDocument();
 
-    // Get the recipient shard ids
-    std::set<ShardId> _getRecipientShards(OperationContext* opCtx);
-
     // The in-memory representation of the underlying document in
     // config.localReshardingOperations.donor.
     ReshardingDonorDocument _donorDoc;

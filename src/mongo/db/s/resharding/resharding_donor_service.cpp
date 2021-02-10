@@ -270,32 +270,33 @@ void ReshardingDonorService::DonorStateMachine::
     {
         auto opCtx = cc().makeOperationContext();
         auto rawOpCtx = opCtx.get();
+        const auto shardId = ShardingState::get(rawOpCtx)->shardId();
+        const auto& nss = _donorDoc.getNss();
+        const auto& reshardingUUID = _donorDoc.get_id();
 
-        const auto numRecipients = _getRecipientShards(rawOpCtx).size();
-        uassert(5390703,
-                "Could not calculate the estimated number of documents and bytes to clone. The "
-                "number of resharding recipient shards should be greater than 0.",
-                numRecipients > 0);
+        const auto numRecipients = getRecipientShards(rawOpCtx, nss, reshardingUUID).size();
+        uassert(
+            5390703,
+            str::stream() << "The number of resharding recipient shards should be greater than 0."
+                          << "Could not calculate the estimated number of documents and bytes to "
+                             "clone for resharding operation "
+                          << reshardingUUID << ".",
+            numRecipients > 0);
 
         AutoGetCollectionForRead coll(rawOpCtx, _donorDoc.getNss());
         if (!coll) {
-            LOGV2_DEBUG(5390701,
-                        1,
-                        "Could not get collection info for resharding donor",
-                        "ns"_attr = _donorDoc.getNss());
             cloneSizeEstimate.setBytesToClone(0);
             cloneSizeEstimate.setDocumentsToClone(0);
         } else {
             cloneSizeEstimate.setBytesToClone(coll->dataSize(rawOpCtx) / numRecipients);
             cloneSizeEstimate.setDocumentsToClone(coll->numRecords(rawOpCtx) / numRecipients);
-
-            const auto shardId = ShardingState::get(rawOpCtx)->shardId();
-            LOGV2_INFO(5390702,
-                       "Resharding donor collection size",
-                       "shardId"_attr = shardId,
-                       "ns"_attr = _donorDoc.getNss(),
-                       "sizeInfo"_attr = cloneSizeEstimate.toBSON());
         }
+        LOGV2_INFO(5390702,
+                   "Resharding estimated size",
+                   "reshardingUUID"_attr = reshardingUUID,
+                   "namespace"_attr = nss,
+                   "donorShardId"_attr = shardId,
+                   "sizeInfo"_attr = cloneSizeEstimate);
 
         IndexBuildsCoordinator::get(rawOpCtx)->assertNoIndexBuildInProgForCollection(
             _donorDoc.getExistingUUID());
@@ -310,10 +311,8 @@ void ReshardingDonorService::DonorStateMachine::
     refreshTemporaryReshardingCollection(_donorDoc);
 
     auto minFetchTimestamp = generateMinFetchTimestamp(_donorDoc);
-    _transitionStateAndUpdateCoordinator(DonorStateEnum::kDonatingInitialData,
-                                         minFetchTimestamp,
-                                         boost::none,
-                                         std::move(cloneSizeEstimate));
+    _transitionStateAndUpdateCoordinator(
+        DonorStateEnum::kDonatingInitialData, minFetchTimestamp, boost::none, cloneSizeEstimate);
 }
 
 ExecutorFuture<void> ReshardingDonorService::DonorStateMachine::
@@ -372,7 +371,7 @@ void ReshardingDonorService::DonorStateMachine::
         try {
             Timer latency;
 
-            auto recipients = _getRecipientShards(rawOpCtx);
+            const auto recipients = getRecipientShards(rawOpCtx, nss, reshardingUUID);
 
             for (const auto& recipient : recipients) {
                 auto oplog = generateOplogEntry(recipient);
@@ -541,22 +540,6 @@ void ReshardingDonorService::DonorStateMachine::_removeDonorDocument() {
                  BSON(ReshardingDonorDocument::k_idFieldName << _id),
                  WriteConcerns::kMajorityWriteConcern);
     _donorDoc = {};
-}
-
-std::set<ShardId> ReshardingDonorService::DonorStateMachine::_getRecipientShards(
-    OperationContext* opCtx) {
-    const auto& tempNss =
-        constructTemporaryReshardingNss(_donorDoc.getNss().db(), _donorDoc.getExistingUUID());
-    auto* catalogCache = Grid::get(opCtx)->catalogCache();
-    auto cm = uassertStatusOK(catalogCache->getCollectionRoutingInfo(opCtx, tempNss));
-
-    uassert(ErrorCodes::NamespaceNotSharded,
-            str::stream() << "Expected collection " << tempNss << " to be sharded",
-            cm.isSharded());
-
-    std::set<ShardId> recipients;
-    cm.getAllShardIds(&recipients);
-    return recipients;
 }
 
 }  // namespace mongo
